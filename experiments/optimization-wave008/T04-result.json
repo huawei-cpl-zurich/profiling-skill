@@ -1,0 +1,814 @@
+{
+  "schema_version": 1,
+  "study_id": "T04",
+  "status": "failed-resource-screen-unqualified",
+  "publication": "DRAFT failed study; default numeric workflows disabled",
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "pinned_full_source_sha256": "786d6bcce46e49cd485f310da096df2075907f3454875a82ed08bd89e6ab1b01",
+  "matrix_sha256": "0c674c68cb93a6d599b3eb893c788714185563ca5d9d9858457ac2daa014e5b0",
+  "history": {
+    "v1_observer_handle": "remote:gz-a3:job:f71e4766-4fe3-449a-a793-57ab24b174e6",
+    "v1_observer_state": "cancelled",
+    "v1_exit": null,
+    "v1_cancellation_reason": "unknown",
+    "v1_execution_observed": false,
+    "v1_source_output_absence_audit": "remote:gz-a3:job:42a5c167-c1b7-485d-9176-a519f8b5d5c8",
+    "v1_bundle_sha256": "3742c05bffafe9c1d36bd4ed1a1d372e6d697614e2da36b0d5b2e7f468805796",
+    "v2": "first observed execution; same kernel/provider/matrix/math/flags, prospective host prototype fix only"
+  },
+  "handles": {
+    "first_observed_execution": "remote:gz-a3:job:84152f7f-a241-45c3-a543-3095f2ddf0a9",
+    "read_only_compact_release": "remote:gz-a3:job:733f928d-3492-4df5-9eb0-d707e35a8d9b",
+    "download": "remote:gz-a3:transfer:e6df6cd4-8efd-404a-af8a-6f922c2c424f",
+    "cpu_only_publication": "remote:gz-a3:job:d059470f-7417-4bd1-9f35-d2fab0fbdf2d"
+  },
+  "terminal": {
+    "state": "failed",
+    "exit_code": 1,
+    "type": "MLIRCompilationError",
+    "phase": {
+      "phase": "input-only-compile",
+      "stage_count": 4,
+      "case": "W008-T04-01",
+      "arm": "after"
+    },
+    "watchdog_fired": false,
+    "cause": "Fixed-config candidate UB resource qualification failure; not infrastructure attribution or general technique impossibility.",
+    "compiler_error": "ub overflow, requires 1712128 bits while 1572864 bits available",
+    "compiler_automatic_fallback": "Backend automatically disabled code motion and compilation still failed; no user source/flag/shape repair or resubmission."
+  },
+  "counts": {
+    "terminal": "resource-compilation-failed",
+    "first_baseline_compiled": 1,
+    "first_candidate_compile_failed": 1,
+    "remaining_compile_cells_unattempted": 10,
+    "remaining_cases_unattempted": 5,
+    "scientific_cpu_oracles": 0,
+    "scientific_correctness_calls": 0,
+    "scientific_profile_calls": 0,
+    "captures": 0,
+    "required_UB_bits": 1712128,
+    "available_UB_bits": 1572864,
+    "required_UB_bytes": 214016,
+    "available_UB_bytes": 196608,
+    "requested_configuration": {
+      "BLOCK_M": 4,
+      "BLOCK_K": 1024
+    },
+    "new_readout_oracles": 0,
+    "new_readout_compiles": 0,
+    "new_readout_npu_forwards": 0,
+    "new_readout_profiles": 0
+  },
+  "cases": [
+    {
+      "case_id": "W008-T04-01",
+      "role": "gallery",
+      "before_compile": "linked",
+      "after_compile": "resource-failed",
+      "numeric_status": "unattempted",
+      "scientific_oracles": 0,
+      "correctness_calls": 0,
+      "profile_calls": 0,
+      "captures": 0
+    },
+    {
+      "case_id": "W008-T04-02",
+      "role": "gallery",
+      "before_compile": "unattempted",
+      "after_compile": "unattempted",
+      "numeric_status": "unattempted",
+      "scientific_oracles": 0,
+      "correctness_calls": 0,
+      "profile_calls": 0,
+      "captures": 0
+    },
+    {
+      "case_id": "W008-T04-03",
+      "role": "heldout",
+      "before_compile": "unattempted",
+      "after_compile": "unattempted",
+      "numeric_status": "unattempted",
+      "scientific_oracles": 0,
+      "correctness_calls": 0,
+      "profile_calls": 0,
+      "captures": 0
+    },
+    {
+      "case_id": "W008-T04-04",
+      "role": "heldout",
+      "before_compile": "unattempted",
+      "after_compile": "unattempted",
+      "numeric_status": "unattempted",
+      "scientific_oracles": 0,
+      "correctness_calls": 0,
+      "profile_calls": 0,
+      "captures": 0
+    },
+    {
+      "case_id": "W008-T04-GA",
+      "role": "guard",
+      "before_compile": "unattempted",
+      "after_compile": "unattempted",
+      "numeric_status": "unattempted",
+      "scientific_oracles": 0,
+      "correctness_calls": 0,
+      "profile_calls": 0,
+      "captures": 0
+    },
+    {
+      "case_id": "W008-T04-GB",
+      "role": "guard",
+      "before_compile": "unattempted",
+      "after_compile": "unattempted",
+      "numeric_status": "unattempted",
+      "scientific_oracles": 0,
+      "correctness_calls": 0,
+      "profile_calls": 0,
+      "captures": 0
+    }
+  ],
+  "resource": {
+    "required_UB_bits": 1712128,
+    "available_UB_bits": 1572864,
+    "required_UB_bytes": 214016,
+    "available_UB_bytes": 196608,
+    "BLOCK_M": 4,
+    "BLOCK_K": 1024,
+    "evidence": "Actual compiler diagnostic, retained raw IR/error; no capacity inferred from source comments or driver max_shared_mem field."
+  },
+  "measured_source_sha256": {
+    "examples/optimization-library/triton/clipped_backward.py": "ff4ab2ba886073236166e7003efc913026b5dc9ccfa5b57873d414ed78e3326d",
+    "examples/optimization-library/triton/clipped_backward_LICENSE": "bf917707c1e0ffdfe653d63aebc188a48f738f3faad9acc188c346d3618694af",
+    "examples/optimization-library/triton/clipped_backward_contract.py": "18991105c47959e656f70c901a45b02f405e6cfd85ac0ad01e7e0209c3c98251",
+    "examples/optimization-library/triton/clipped_backward_kernels.py": "3245ba3db0f1a605809e13edd788cbf6b917b6b8111fef85660de4d040a8872c",
+    "examples/optimization-library/triton/clipped_backward_tiles.py": "cab829272f209abc0a5ce9f0d87b6b2493b9855a54094e6727b6b3b66752bc8b",
+    "tests/test_optimization_clipped_backward.py": "3f413cd880a3889dc7b0f913a5dc75afbc5dfb820874251a5967a03bb1fe688c"
+  },
+  "prospective_host_binding": {
+    "original_cancelled_handle": "remote:gz-a3:job:f71e4766-4fe3-449a-a793-57ab24b174e6",
+    "original_bundle_sha256": "3742c05bffafe9c1d36bd4ed1a1d372e6d697614e2da36b0d5b2e7f468805796",
+    "original_unexecuted_source_sha256": {
+      "examples/optimization-library/triton/clipped_backward.py": "205f12a9147a8f71c94ee1e7973e1d0b4856cab57eaf6c9fbdf209059a389b81",
+      "examples/optimization-library/triton/clipped_backward_tiles.py": "cab829272f209abc0a5ce9f0d87b6b2493b9855a54094e6727b6b3b66752bc8b",
+      "examples/optimization-library/triton/clipped_backward_kernels.py": "3245ba3db0f1a605809e13edd788cbf6b917b6b8111fef85660de4d040a8872c",
+      "examples/optimization-library/triton/clipped_backward_LICENSE": "bf917707c1e0ffdfe653d63aebc188a48f738f3faad9acc188c346d3618694af",
+      "examples/optimization-library/triton/clipped_backward_contract.py": "18991105c47959e656f70c901a45b02f405e6cfd85ac0ad01e7e0209c3c98251",
+      "tests/test_optimization_clipped_backward.py": "f0b929cca249331b856000f10a44a0f26ef859aa3465ff9e890df582524d502d",
+      "docs/optimization-clipped-backward.md": "8201c6fd00480d393e7d692f7c89a28109235fcf4a92e2b193c544d27067c3a7"
+    },
+    "new_measured_host_sha256": {
+      "examples/optimization-library/triton/clipped_backward.py": "ff4ab2ba886073236166e7003efc913026b5dc9ccfa5b57873d414ed78e3326d",
+      "tests/test_optimization_clipped_backward.py": "3f413cd880a3889dc7b0f913a5dc75afbc5dfb820874251a5967a03bb1fe688c"
+    },
+    "unchanged_source_sha256": {
+      "examples/optimization-library/triton/clipped_backward_tiles.py": "cab829272f209abc0a5ce9f0d87b6b2493b9855a54094e6727b6b3b66752bc8b",
+      "examples/optimization-library/triton/clipped_backward_kernels.py": "3245ba3db0f1a605809e13edd788cbf6b917b6b8111fef85660de4d040a8872c",
+      "examples/optimization-library/triton/clipped_backward_LICENSE": "bf917707c1e0ffdfe653d63aebc188a48f738f3faad9acc188c346d3618694af",
+      "examples/optimization-library/triton/clipped_backward_contract.py": "18991105c47959e656f70c901a45b02f405e6cfd85ac0ad01e7e0209c3c98251",
+      "docs/optimization-clipped-backward.md": "8201c6fd00480d393e7d692f7c89a28109235fcf4a92e2b193c544d27067c3a7"
+    },
+    "scientific_JIT_provider_math_flags_unchanged": true,
+    "changes": [
+      "input-only probe run rejects before compilation/launch and leaves numeric pair state unchanged",
+      "host pair state resets on a different case",
+      "explicit FP32 host probe tensors and output allocation preserve required ABI independently of global dtype",
+      "NONFROZEN prototype no-launch/compile-fail-retry/default-dtype/state regression"
+    ]
+  },
+  "publication_host_sha256": {
+    "examples/optimization-library/triton/clipped_backward.py": "14db2995800038cfe98d4115ea10ef260a5200207f3bee9a4ed4108077b0efec",
+    "tests/test_optimization_clipped_backward.py": "6d805183cdc9dfdfb596d5ee471cc79fa0dcd927b8311b527376688bee6f8045"
+  },
+  "scientific_JIT_provider_matrix_math_flags_unchanged": true,
+  "common_flags": {
+    "num_stages": 1,
+    "multibuffer": false,
+    "enable_fp_fusion": false
+  },
+  "baseline_compilation": [
+    {
+      "case_id": "W008-T04-01",
+      "arm": "before",
+      "compilation": [
+        {
+          "hash": "586c8eba29ce97472cb38bc23ebe18cc725e3bc40515b0d01d920f45ccdc4a3d",
+          "name": "_clipped_swiglu_bwd_kernel",
+          "binaries": {
+            "ttir": "3869f5beb5ee48149a2456a3d71e1105c655f6e033d18f148b28a1f029d80a9f",
+            "ttadapter": "f0321c6b15c92126fec824c32e039396771259597dbb4e205c074164a9921bc9",
+            "npubin": "44f1ed9a3bec81ce838850222bfc0f452f857a6acea317f98b6c7d023a1a2286"
+          }
+        }
+      ],
+      "metadata": {
+        "component": "complete clipped SwiGLU backward",
+        "configuration": {
+          "BLOCK_M": 4,
+          "BLOCK_K": 1024
+        },
+        "grid": [
+          32,
+          1
+        ],
+        "device_kernel_calls": 1,
+        "reused_output": true,
+        "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+        "allocator_limit": "no allocation or complete model latency claim",
+        "input_strides": {
+          "gup": [
+            2048,
+            1
+          ],
+          "dy": [
+            1024,
+            1
+          ]
+        }
+      }
+    }
+  ],
+  "baseline_linked_ELF": {
+    "sha256": "44f1ed9a3bec81ce838850222bfc0f452f857a6acea317f98b6c7d023a1a2286",
+    "sections": [
+      {
+        "index": 0,
+        "name": "",
+        "type": 0,
+        "flags": 0,
+        "bytes": 0,
+        "info": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "index": 1,
+        "name": ".text",
+        "type": 1,
+        "flags": 6,
+        "bytes": 4648,
+        "info": 0,
+        "sha256": "4f2ccf82f39ce799c70c67fc07f4bd63bd09c37229f845e95cc3fe109d7496da"
+      },
+      {
+        "index": 2,
+        "name": ".ascend.stack.size.record",
+        "type": 7,
+        "flags": 0,
+        "bytes": 8,
+        "info": 0,
+        "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+      },
+      {
+        "index": 3,
+        "name": "__CCE_KernelArgSize",
+        "type": 7,
+        "flags": 0,
+        "bytes": 4,
+        "info": 0,
+        "sha256": "97f3f29734d22b764958054cf0fcce9cb81a679be081fb982af63bf246237d49"
+      },
+      {
+        "index": 4,
+        "name": ".comment",
+        "type": 1,
+        "flags": 48,
+        "bytes": 107,
+        "info": 0,
+        "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+      },
+      {
+        "index": 5,
+        "name": ".symtab",
+        "type": 2,
+        "flags": 0,
+        "bytes": 1296,
+        "info": 52,
+        "sha256": "8f9abe2a6061b15ab7ec14490ee8a0d1d3c01ad27f424f55c1890997579fcbcd"
+      },
+      {
+        "index": 6,
+        "name": ".shstrtab",
+        "type": 3,
+        "flags": 0,
+        "bytes": 88,
+        "info": 0,
+        "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+      },
+      {
+        "index": 7,
+        "name": ".strtab",
+        "type": 3,
+        "flags": 0,
+        "bytes": 368,
+        "info": 0,
+        "sha256": "68c700f08805e63ebcce4e9f499599fd45b279d10b5fd3eeea7e516995b84d5e"
+      }
+    ],
+    "numerical_status": "unattempted; binary is not correctness evidence"
+  },
+  "candidate_linked_ELF": null,
+  "failed_candidate_cache": {
+    "key": "MbFoxh-mybssWFiJ27gmBt2F3kah2lfwv_UnBBVDDwY",
+    "exists": true,
+    "artifacts": [
+      {
+        "path": "_saturated_clipped_bwd_kernel.ttadapter",
+        "bytes": 29440,
+        "sha256": "05bad7adcb7a1034d20e6a0ef0bdb469c35715a19d0a46eef864a466ccf44152"
+      },
+      {
+        "path": "_saturated_clipped_bwd_kernel.ttir",
+        "bytes": 24089,
+        "sha256": "2982cbb0b5485a0658e8fa3ef9240fea08ff1757525b9c3af9db3a0cf3cd5eba"
+      }
+    ]
+  },
+  "runtime": {
+    "driver_properties": {
+      "max_shared_mem": 1,
+      "num_aicore": 20,
+      "num_vectorcore": 40
+    },
+    "product": "Ascend910B4-1",
+    "physical_npu": 0,
+    "chip": 0,
+    "application_logical_device": 0,
+    "packages": {
+      "torch": "2.10.0",
+      "torch-npu": "2.10.0",
+      "triton": "3.5.0",
+      "triton-ascend": "3.2.2"
+    },
+    "imported_triton": "3.2.0",
+    "default_dtype": "torch.float32",
+    "tools": {
+      "msprof": {
+        "path": "<runtime-path>",
+        "sha256": "75541a2535f1dc9b39484b833b0454a002d0eabd68d7673006f52cb00e73dc82",
+        "command": [
+          "<runtime-path>",
+          "--version"
+        ],
+        "exit": 255,
+        "stdout": "\nUsage:\n      msprof [--options]\n\nThis is subcommand for operator optimization situation:\n      op                                Use binary msopprof to operator optimization (msprof op ...)\n\nOptions:\n      --output                          <Optional> Specify the directory that is used for storing data results.\n      --application                     <Optional> Specify application path, considering the risk of privilege escalation, please pay attention to\n\t\t\t\t\t\t   the group of the application and confirm whether it is the same as the user currently.\n\t\t\t\t\t\t   [Note] This option will be discarded in later versions.\n\t\t\t\t\t\t   you can try to use: msprof [msprof arguments] <app> [app arguments]\n      --ascendcl                        <Optional> Show acl profiling data, the default value is on.\n      --ge-api                          <Optional> Specify if report GE event, the default value is off. The possible parameters are 'l0', 'l1' or 'off'.\n      --runtime-api                     <Optional> Show runtime api profiling data, the default value is off.\n      --task-time                       <Optional> Show task profiling data, the default value is on. The possible parameters are 'l0', 'l1', 'l2', 'l3', 'on' or 'off'.\n      --task-memory                     <Optional> Show the memory usage of the operator, the default value is off. The possible parameters are 'on' or 'off'.\n      --ai-core                         <Optional> Turn on / off the ai core profiling, the default value is on when collecting app Profiling.\n      --aic-mode                        <Optional> Set the aic profiling mode to task-based or sample-based.\n\t\t\t\t\t\t   In task-based mode, profiling data will be collected by tasks.\n\t\t\t\t\t\t   In sample-based mode, profiling data will be collected in a specific interval.\n\t\t\t\t\t\t   The default value is task-based in AI task mode, sample-based in system mode.\n      --aic-freq                        <Optional> The aic sampling frequency in hertz, the default value is 100 Hz, the range is 1 to 100 Hz.\n      --environment                     <Optional> User app custom environment variable configuration.\n      --sys-period                      <Optional> Set total sampling period of system profiling in seconds.\n      --sys-devices                     <Optional> Specify the profiling scope by device ID when collect sys profiling.The value is all or ID list (split with ',').\n      --msproftx                        <Optional> Show msproftx and mstx data, the default value is off.\n      --mstx-domain-include             <Optional> Choose to only include mstx events from a comma separated list of domains;\n\t\t\t\t\t\t   `default` filters the mstx default domain;\n\t\t\t\t\t\t   The switch is only applicable when parameter msproftx is set to on;\n\t\t\t\t\t\t   The switch cannot be set with mstx-domain-exclude at the same time.\n      --mstx-domain-exclude             <Optional> Choose to exclude mstx events from a comma separated list of domains;\n\t\t\t\t\t\t   `default` excludes the mstx default domain;\n\t\t\t\t\t\t   The switch is only applicable when parameter msproftx is set to on;\n\t\t\t\t\t\t   The switch cannot be set with mstx-domain-include at the same time.\n      --storage-limit                   <Optional> Specify the output directory volume. range 200MB ~ 4294967295MB.\n      --hccl                            <Optional> Show hccl profiling data, the default value is off. [Note] This option will be discarded in later versions.\n      --model-execution                 <Optional> Show ge model execution profiling data, the default value is off. [Note] This option will be discarded in later versions.\n      --aic-metrics                     <Optional> The aic metrics groups, include ArithmeticUtilization, PipeUtilization, Memory, MemoryL0, ResourceConflictRatio, MemoryUB, L2Cache, MemoryAccess.\n\t\t\t\t\t\t   the default value is PipeUtilization.\n      --python-path                     <Optional> Specify the python interpreter path that is used for analysis, please ensure the python version is 3.7.5 or later.\n      --parse                           <Optional> Switch for using msprof to parse collecting data, the default value is off.\n      --query                           <Optional> Switch for using msprof to query collecting data, the default value is off.\n      --export                          <Optional> Switch for using msprof to export collecting data, the default value is off.\n      --clear                           <Optional> Switch for using msprof to analyze or export data in clear mode, the default value is off.\n      --analyze                         <Optional> Switch for using msprof to analyze collecting data, the default value is off.\n      --rule                            <Optional> Switch specified rule for using msprof to analyze collecting data, include communication, communication_matrix.\n\t\t\t\t\t\t   the default value is communication,communication_matrix.\n      --iteration-id                    <Optional> The export iteration id, only used when argument export is on, the default value is 1.\n      --model-id                        <Optional> The export model id, only used when argument export is on, msprof will export minium accessible model by default.\n      --summary-format                  <Optional> The export summary file format, only used when argument export is on, include csv, json, the default value is csv.\n      --type                            <Optional> The export type, only used when argument `export` is on \n\t\t\t\t\t\t   or when collecting data, include text, db.\n\t\t\t\t\t\t   the default value is text(which will also export the database).\n      --reports                         <Optional> Specify the path that is used for controlling the export scope of collecting results\n      --aicpu                           <Optional> Show aicpu profiling data, the default value is off.\n      --sys-hardware-mem                <Optional> LLC, DDR, HBM acquisition switch, optional on / off, the default value is off.\n      --sys-hardware-mem-freq           <Optional> LLC, DDR, HBM acquisition frequency, range 1 ~ 100, the default value is 50, unit Hz.\n      --llc-profiling                   <Optional> The llc profiling groups, include read, write. the default value is read.\n      --sys-cpu-profiling               <Optional> The CPU acquisition switch, optional on / off,the default value is off.\n      --sys-cpu-freq                    <Optional> The cpu sampling frequency in hertz. the default value is 50 Hz, the range is 1 to 50 Hz.\n      --sys-profiling                   <Optional> The System CPU usage and system memory acquisition switch,the default value is off.\n      --sys-sampling-freq               <Optional> The sys sampling frequency in hertz. the default value is 10 Hz, the range is 1 to 10 Hz.\n      --sys-pid-profiling               <Optional> The CPU usage of the process and the memory acquisition switch of the process,the default value is off.\n      --sys-pid-sampling-freq           <Optional> The pid sampling frequency in hertz. the default value is 10 Hz, the range is 1 to 10 Hz.\n      --sys-io-profiling                <Optional> NIC, ROCE acquisition switch, the default value is off.\n      --sys-io-sampling-freq            <Optional> NIC, ROCE acquisition frequency, range 1 ~ 100, the default value is 100, unit Hz.\n      --instr-profiling                 <Optional> Show instr profiling data, the default value is off.\n      --instr-profiling-freq            <Optional> The instr profiling sampling period in clock-cycle, the default value is 1000 cycle, the range is 300 to 30000 cycle.\n      --sys-interconnection-profiling   <Optional> PCIE, HCCS acquisition switch, the default value is off.\n      --sys-interconnection-freq        <Optional> PCIE, HCCS acquisition frequency, range 1 ~ 50, the default value is 50, unit Hz.\n      --dvpp-profiling                  <Optional> DVPP acquisition switch, the default value is off.\n      --dvpp-freq                       <Optional> DVPP acquisition frequency, range 1 ~ 100, the default value is 50, unit Hz.\n      --l2                              <Optional> L2 Cache and SMMU acquisition switch. The default value is off.\n      --host-sys                        <Optional> The host-sys data type, include cpu, mem, disk, network, osrt, numa\n      --host-sys-pid                    <Optional> Set the PID of the app process for which you want to collect performance data.\n      --host-sys-usage                  <Optional> The host-sys-usage data type, include cpu, mem.(full-platform)\n      --host-sys-usage-freq             <Optional> The sampling frequency in hertz. the default value is 50 Hz the range is 1 to 50 Hz.\n      --dynamic                         <Optional> Dynamic profiling switch, the default value is off.\n      --pid                             <Optional> Dynamic profiling pids of the target processes\n      --delay                           <Optional> Collect start delay time in seconds, range 1 ~ 4294967295s.\n      --duration                        <Optional> Collection duration in seconds, range 1 ~ 4294967295s.\n      --help                            <Optional> help message.\n",
+        "stderr": "<runtime-path>: unrecognized option '--version'\n"
+      },
+      "msopprof": {
+        "path": "<runtime-path>",
+        "sha256": "24e3eb4ad3c440b823a606b372860501a45dda905b20afe82f8c248c4f5e36c1",
+        "command": [
+          "<runtime-path>",
+          "--version"
+        ],
+        "exit": 0,
+        "stdout": "msopprof is part of MindStudio Operator-dev Tools.\nmsopprof vesion is 26.1.0-56632dc4a944410c791538451dc2156a151bd105\nmsopscommon version is b4ffdb3d6ba7acdb7bbfcf359f6e4dd5b587a4f4\n",
+        "stderr": ""
+      },
+      "bishengir-compile": {
+        "path": "<runtime-path>",
+        "sha256": "4f5b28a5dd3b64724299c8ef220f4c27e02668237b93fe2aab04675d32ca2f62",
+        "command": [
+          "<runtime-path>",
+          "--version"
+        ],
+        "exit": 0,
+        "stdout": "bishengir-compile 1.2.0 (<runtime-path> 8796a8ac1508 2026-07-31) \nllvm 19.1.7 2430ab069eb1\nRelease build\n\n",
+        "stderr": ""
+      },
+      "hivmc": {
+        "path": "<runtime-path>",
+        "sha256": "d7ff8fd34f20535c9d4ad3d19855c52ab71ea1eaba7b5109a1f16dcd7e3bd3d1",
+        "command": [
+          "<runtime-path>",
+          "--version"
+        ],
+        "exit": 0,
+        "stdout": "hivmc 0.3.0 (4ace068b0b12 2026-07-31)\nRelease build\n\n",
+        "stderr": ""
+      },
+      "bisheng": {
+        "path": "<runtime-path>",
+        "sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a",
+        "command": [
+          "<runtime-path>",
+          "--version"
+        ],
+        "exit": 0,
+        "stdout": "2026-07-30T20:53:21+08:00 clang version 15.0.5 (clang-5c68a1cb1231 flang-5c68a1cb1231)\nTarget: aarch64-unknown-linux-gnu\nThread model: posix\nInstalledDir: <runtime-path>\n",
+        "stderr": ""
+      },
+      "ccec": {
+        "path": "<runtime-path>",
+        "sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a",
+        "command": [
+          "<runtime-path>",
+          "--version"
+        ],
+        "exit": 0,
+        "stdout": "2026-07-30T20:53:21+08:00 clang version 15.0.5 (clang-5c68a1cb1231 flang-5c68a1cb1231)\nTarget: aarch64-unknown-linux-gnu\nThread model: posix\nInstalledDir: <runtime-path>\n",
+        "stderr": ""
+      }
+    },
+    "version_files": {
+      "share/info/acl_extend/version.info": {
+        "sha256": "d4c8387d7ac99d052f26d976751514ea689858a79d9c3691a4a219a9b89ac7a1",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/aoe/version.info": {
+        "sha256": "6aa6e27a760e76653922dbdbb748fd993a1d35592a88b3e365fac210ab075c9c",
+        "text": "Version=9.1.0\nversion_dir=cann\ntimestamp=20260730_231653901\nrequired_package_acl-extend_version=\"9.1\"\nrequired_package_ge-compiler_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_ncs_version=\"9.1\"\nrequired_package_opbase_version=\"9.1\"\nrequired_package_runtime_version=\"9.1\"\nrequired_package_tbe-tik_version=\"9.1\"\n"
+      },
+      "share/info/asc-devkit/version.info": {
+        "sha256": "f20359296d5a7127f841aa35f4a788137f444dc36d72641e948cb9e39e47e4f4",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_bisheng-compiler_version=\"9.1\"\nrequired_package_tbe-tik_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/asc-tools/version.info": {
+        "sha256": "fb73e36cd4bd525381b5c04224de3688efe68d3f7ea2573a022107e2123919aa",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_asc-devkit_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/ascendnpu-ir/version.info": {
+        "sha256": "caa72d84cac4d3245cd99e5a0b4c57a5529dfeba4cbf17b9aa0d82c467e44296",
+        "text": "Version=1.2.0\n"
+      },
+      "share/info/bisheng-compiler/version.info": {
+        "sha256": "b60c90526474b29ccb5f9077fcfbb5c1f739d57987f8d3bdab5a3599c33aa365",
+        "text": "Version=9.1.0\nversion_dir=cann\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/dflow-executor/version.info": {
+        "sha256": "fc001e57591b485e65267b13b36de6d1f23057bb26073b69cc8e2acbbd90afb3",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_hcomm_version=\"9.1\"\nrequired_package_bisheng-compiler_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/dvpp/version.info": {
+        "sha256": "537afe68699020cf5da7afb85a02dd00a8834971c8b36aac845bf7ab73ad5431",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_opbase_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/ge-compiler/version.info": {
+        "sha256": "2f6f9fd4d54bb0c089317d31cac302e6fe25abfdd851591d8c900cb19ff9111d",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_hcomm_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/ge-executor/version.info": {
+        "sha256": "9e8b00e5e330e15ebf823de28775c6e83f4ab351fdabf1d08625f0cd1916300c",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_hcomm_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/graph_autofusion/version.info": {
+        "sha256": "2aace96d1aa0efbfdeda8ed895ad85eebe09e864d7fa349bc9768b5cb2cc455c",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_asc-devkit_version=\"9.1\"\nrequired_package_ge-compiler_version=\"9.1\"\nrequired_package_bisheng-compiler_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/hccl/version.info": {
+        "sha256": "01dc95fa1d7268bfd942e739e7f05ddf39797c9221ceb1535ccccce31751379c",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_hcomm_version=\">=8.5\"\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\ntimestamp=20260730_231653901\nhost_only=false\n"
+      },
+      "share/info/hcomm/version.info": {
+        "sha256": "01f293673967a73c382d222e129c8f742001a9a4c0adca051cea442d4280b107",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\ntimestamp=20260730_231653901\nhost_only=true\n"
+      },
+      "share/info/hixl/version.info": {
+        "sha256": "4e0ae747eabe1609abce41b4b718436f3d5229fa479aa289f4a84831cf069dcc",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_hcomm_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/metadef/version.info": {
+        "sha256": "d4c8387d7ac99d052f26d976751514ea689858a79d9c3691a4a219a9b89ac7a1",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/mindstudio-debugger/version.info": {
+        "sha256": "40b39b3409ccaa31c57336d479f0fab9e7a82d4183386fa26e4f64f2dcb0b537",
+        "text": "[PACKAGE]\nName=mindstudio-debugger\nVersion=26.1.0\n"
+      },
+      "share/info/mindstudio-operator-tools/version.info": {
+        "sha256": "71dae3dd28bd0fd883b93fbc54258a7e9d3ac7b6f30ab5ce7e9971a5ec54d1e7",
+        "text": "[PACKAGE]\nName=mindstudio-operator-tools\nVersion=26.1.0"
+      },
+      "share/info/mindstudio-opprof/version.info": {
+        "sha256": "e58246d2990f588686644a09b4de5f08eb08fb271a4ce8966be9807185d4888d",
+        "text": "[PACKAGE]\nName=mindstudio-opprof\nVersion=26.1.0"
+      },
+      "share/info/mindstudio-sanitizer/version.info": {
+        "sha256": "649f8c33384aeecaf22bc277951ea7131db5125bf173b62b42fae33dbef8f186",
+        "text": "[PACKAGE]\nName=mindstudio-sanitizer\nVersion=26.1.0"
+      },
+      "share/info/ms_fmk_transplt/version.info": {
+        "sha256": "e6e6cb8773363ef5e86f72695471d7c5e795fa802cbc6bc32f34b93793d43b59",
+        "text": "[PACKAGE]\nName=mindstudio-transplt\nVersion=26.1.0"
+      },
+      "share/info/msboost/version.info": {
+        "sha256": "f4646c2d489a3047bb36303d8624ebc7fefcfada61175e052c7ccf7ed0ba4cc3",
+        "text": "[PACKAGE]\nName=mindstudio-boost\nVersion=26.1.0\n"
+      },
+      "share/info/msmemscope/version.info": {
+        "sha256": "4038fd57daffa7803a900aed3483061f2a20422db325ec8a48862803195d4426",
+        "text": "[PACKAGE]\nName=mindstudio-memscope\nVersion=26.1.0\n"
+      },
+      "share/info/msprof/version.info": {
+        "sha256": "1e47dcaec6c10bc8bf6350602aac82cc7a490c6730c17100d053268be08af26a",
+        "text": "[PACKAGE]\nName=mindstudio-profiler\nVersion=26.1.0"
+      },
+      "share/info/mspti/version.info": {
+        "sha256": "d54aa86ee69d17a35f4244f48bafd3f7f12de3aa54b9d3ad416f39d49b30e188",
+        "text": "[PACKAGE]\nName=mindstudio-profiler-tools-interface\nVersion=26.1.0"
+      },
+      "share/info/msserviceprofiler/version.info": {
+        "sha256": "a3d8eb32bfb7841d07666b265f98eba461fce9d750c23f8eb851faac765471b4",
+        "text": "[PACKAGE]\nName=mindstudio-serviceprofiler\nVersion=26.1.0"
+      },
+      "share/info/mstx/version.info": {
+        "sha256": "bc0d04744ff96ba34e6ceecf7f790e68cd0401983f5c251bc8b62ce622a660c9",
+        "text": "[PACKAGE]\nName=mindstudio-TX\nVersion=26.1.0\n"
+      },
+      "share/info/ncs/version.info": {
+        "sha256": "5f301ae1b23f145a3c37217c70be5f7e956aa3b3ecf848b8025a164458898ee5",
+        "text": "Version=9.1.0\nversion_dir=cann\ntimestamp=20260730_231653901\nrequired_package_acl-extend_version=\"9.1\"\nrequired_package_aoe_version=\"9.1\"\nrequired_package_ge-compiler_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_opbase_version=\"9.1\"\nrequired_package_runtime_version=\"9.1\"\nrequired_package_tbe-tik_version=\"9.1\"\n"
+      },
+      "share/info/oam_tools/version.info": {
+        "sha256": "9ce0ebf7645f85b4e51dc9f6a0cb6cf2ff85e88e50e091f63c1ae41ae413caa7",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=9.0\"\nrequired_package_metadef_version=\">=9.0\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/opbase/version.info": {
+        "sha256": "841279757459d4eabc1c8cfea69d3e1dc0fc9db3eb0c18100294cd5c1301b9e6",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_asc-devkit_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/operator_cmp/version.info": {
+        "sha256": "0f87f0ae0ac0d9a0dac90f02f4117290205541dcb80d114ff3d502c588cf82b1",
+        "text": "[PACKAGE]\nName=mindstudio-accucmp\nVersion=26.1.0"
+      },
+      "share/info/ops_cv/version.info": {
+        "sha256": "d6ec180e5a9abe7c95d798ff72a8d7278e8801855264fe11135ccd78cc3df5c2",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_opbase_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\nrequired_package_asc-devkit_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_asc-tools_version=\">=8.5\"\nrequired_package_ops-legacy_version=\">=8.5\"\nrequired_package_ops-math_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/ops_legacy/version.info": {
+        "sha256": "249468544b7aaa03376b8a25879a72fc2f8ba45171176c242c6764c7b3e48795",
+        "text": "Version=9.1.0\nversion_dir=cann\ntimestamp=20260730_231653901\nops_version=9.1.0\nadk_version=9.1.0\n"
+      },
+      "share/info/ops_math/version.info": {
+        "sha256": "b185b4e2091bc53cad880f61a693350065653ce55d06a54c26f50575ad14ea7a",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_opbase_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\nrequired_package_asc-devkit_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_asc-tools_version=\">=8.5\"\nrequired_package_ops-legacy_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/ops_nn/version.info": {
+        "sha256": "fa1a5dd13201b51d62d1cfc77f6eda0460208157c43f897121773ea1f8a7b468",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_opbase_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\nrequired_package_asc-devkit_version=\">=8.5\"\nrequired_package_asc-tools_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_ops_legacy_version=\">=8.5\"\nrequired_package_ops_math_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/ops_ras/version.info": {
+        "sha256": "f810262471c9b6aa10c66e4fc37b743253d92d50cbb554bb366216960bab25b1",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_opbase_version=\">=8.5\"\nrequired_package_asc-devkit_version=\">=8.5\"\nrequired_package_ge-compiler_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\nrequired_package_tbe-tik_version=\">=8.5\"\nrequired_package_asc-tools_version=\">=8.5\""
+      },
+      "share/info/ops_transformer/version.info": {
+        "sha256": "9e8aad0762d909d660a2887a7d69a3b3f1b3b4d6fc2280ff73ec4f00a414089c",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_opbase_version=\">=8.5\"\nrequired_package_hcomm_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_ge-compiler_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\nrequired_package_asc-tools_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\nrequired_package_ops-nn_version=\">=8.5\"\nrequired_package_hccl_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/platform_profiler/version.info": {
+        "sha256": "913d79c156a9b3214b4989e8bc66c97f3e4eecd6242899ba84630dc30aa27011",
+        "text": "[PACKAGE]\nName=platform-profiler\nVersion=1.0.0"
+      },
+      "share/info/pto_isa/version.info": {
+        "sha256": "e0b8f4ea2317db19dc3600014df1ddb73b29f37be35588bddb92b1d95ab4156a",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_opbase_version=\"9.1\"\nrequired_package_asc-devkit_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\nrequired_package_bisheng-compiler_version=\"9.1\"\nrequired_package_asc-tools_version=\"9.1\"\nrequired_package_ge-compiler_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/pyACL/version.info": {
+        "sha256": "b0a5b3a5ba03b6af335a9b957211bbce4da3e7cc180d667f6ab8d792fbe60577",
+        "text": "Version=9.1.0\n"
+      },
+      "share/info/pypto/version.info": {
+        "sha256": "982f55f43d36c46b5a351d80e414ea3862551f014a6a49476eab6052d9ebfa9e",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_driver_version=\">=25.5.0\"\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/runtime/version.info": {
+        "sha256": "b60c90526474b29ccb5f9077fcfbb5c1f739d57987f8d3bdab5a3599c33aa365",
+        "text": "Version=9.1.0\nversion_dir=cann\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/simulator/version.info": {
+        "sha256": "b60c90526474b29ccb5f9077fcfbb5c1f739d57987f8d3bdab5a3599c33aa365",
+        "text": "Version=9.1.0\nversion_dir=cann\ntimestamp=20260730_231653901\n"
+      },
+      "share/info/tbe-tik/version.info": {
+        "sha256": "ad59b9ddab61bbfc414d0a27ce5fc84315aba1735a7275f58bce8f557d6c3cc1",
+        "text": "Version=9.1.0\nversion_dir=cann\ntimestamp=20260730_231653901\nrequired_opp_abi_version=tbe-tik\nrequired_package_ge-compiler_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_runtime_version=\"9.1\"\n"
+      },
+      "share/info/test-ops/version.info": {
+        "sha256": "b0a5b3a5ba03b6af335a9b957211bbce4da3e7cc180d667f6ab8d792fbe60577",
+        "text": "Version=9.1.0\n"
+      }
+    },
+    "torch_npu_metric": "'ACL_AICORE_PIPE_UTILIZATION'",
+    "before_any_scientific_oracle_or_forward": true
+  },
+  "coverage": {
+    "cases": [
+      {
+        "name": "W008-T04-01",
+        "performance": true,
+        "scenario": [
+          "gallery",
+          "fixed-source-tile",
+          "unqualified"
+        ],
+        "route": "unattempted",
+        "correct": false,
+        "compile_probe": false,
+        "status": "candidate-resource-compilation-failed",
+        "numeric_status": "unattempted",
+        "baseline_compile": "complete",
+        "candidate_compile": "failed",
+        "scientific_oracles": 0,
+        "scientific_forwards": 0,
+        "profiles": 0,
+        "branch_execution_observed": false,
+        "cpu_inferred_branch_counts": "unavailable: no scientific fixture generated"
+      },
+      {
+        "name": "W008-T04-02",
+        "performance": true,
+        "scenario": [
+          "gallery",
+          "fixed-source-tile",
+          "unqualified"
+        ],
+        "route": "unattempted",
+        "correct": false,
+        "compile_probe": false,
+        "status": "unattempted-after-first-failure",
+        "numeric_status": "unattempted",
+        "baseline_compile": "unattempted",
+        "candidate_compile": "unattempted",
+        "scientific_oracles": 0,
+        "scientific_forwards": 0,
+        "profiles": 0,
+        "branch_execution_observed": false,
+        "cpu_inferred_branch_counts": "unavailable: no scientific fixture generated"
+      },
+      {
+        "name": "W008-T04-03",
+        "performance": true,
+        "scenario": [
+          "heldout",
+          "fixed-source-tile",
+          "unqualified"
+        ],
+        "route": "unattempted",
+        "correct": false,
+        "compile_probe": false,
+        "status": "unattempted-after-first-failure",
+        "numeric_status": "unattempted",
+        "baseline_compile": "unattempted",
+        "candidate_compile": "unattempted",
+        "scientific_oracles": 0,
+        "scientific_forwards": 0,
+        "profiles": 0,
+        "branch_execution_observed": false,
+        "cpu_inferred_branch_counts": "unavailable: no scientific fixture generated"
+      },
+      {
+        "name": "W008-T04-04",
+        "performance": true,
+        "scenario": [
+          "heldout",
+          "fixed-source-tile",
+          "unqualified"
+        ],
+        "route": "unattempted",
+        "correct": false,
+        "compile_probe": false,
+        "status": "unattempted-after-first-failure",
+        "numeric_status": "unattempted",
+        "baseline_compile": "unattempted",
+        "candidate_compile": "unattempted",
+        "scientific_oracles": 0,
+        "scientific_forwards": 0,
+        "profiles": 0,
+        "branch_execution_observed": false,
+        "cpu_inferred_branch_counts": "unavailable: no scientific fixture generated"
+      },
+      {
+        "name": "W008-T04-GA",
+        "performance": false,
+        "scenario": [
+          "guard",
+          "fixed-source-tile",
+          "unqualified"
+        ],
+        "route": "unattempted",
+        "correct": false,
+        "compile_probe": false,
+        "status": "unattempted-after-first-failure",
+        "numeric_status": "unattempted",
+        "baseline_compile": "unattempted",
+        "candidate_compile": "unattempted",
+        "scientific_oracles": 0,
+        "scientific_forwards": 0,
+        "profiles": 0,
+        "branch_execution_observed": false,
+        "cpu_inferred_branch_counts": "unavailable: no scientific fixture generated"
+      },
+      {
+        "name": "W008-T04-GB",
+        "performance": false,
+        "scenario": [
+          "guard",
+          "fixed-source-tile",
+          "unqualified"
+        ],
+        "route": "unattempted",
+        "correct": false,
+        "compile_probe": false,
+        "status": "unattempted-after-first-failure",
+        "numeric_status": "unattempted",
+        "baseline_compile": "unattempted",
+        "candidate_compile": "unattempted",
+        "scientific_oracles": 0,
+        "scientific_forwards": 0,
+        "profiles": 0,
+        "branch_execution_observed": false,
+        "cpu_inferred_branch_counts": "unavailable: no scientific fixture generated"
+      }
+    ]
+  },
+  "coverage_inventory": {
+    "file": "T04-inventory.json",
+    "sha256": "bc3d890ac63f24114dc2484e72b41f5e0235988f4ac1d2994e1ad9f889201437"
+  },
+  "coverage_audit": {
+    "expected_result": "FAIL",
+    "actual_exit": 1,
+    "status": "expected-failure-not-qualified",
+    "stdout": "",
+    "stderr": "contract audit failed:\n- case 'W008-T04-01' lacks a passing correctness result\n- case 'W008-T04-01' route must be optimized or reference\n- case 'W008-T04-02' lacks a passing correctness result\n- case 'W008-T04-02' route must be optimized or reference\n- case 'W008-T04-03' lacks a passing correctness result\n- case 'W008-T04-03' route must be optimized or reference\n- case 'W008-T04-04' lacks a passing correctness result\n- case 'W008-T04-04' route must be optimized or reference\n- case 'W008-T04-GA' lacks a passing correctness result\n- case 'W008-T04-GA' route must be optimized or reference\n- case 'W008-T04-GB' lacks a passing correctness result\n- case 'W008-T04-GB' route must be optimized or reference\n",
+    "reason": "No candidate resource/numerical qualification; no complete inventory coverage claimed."
+  },
+  "branch_coverage": {
+    "candidate_selector_observed": false,
+    "internal_branch_execution_observed": false,
+    "cpu_inferred_counts": "unavailable: no frozen CPU payload generated"
+  },
+  "measurements": {
+    "status": "unattempted",
+    "event_samples": [],
+    "PMU_rows": [],
+    "correctness": "unattempted"
+  },
+  "cleanup": {
+    "no_live_original_runtime_PID_or_source_compiler_matches": true,
+    "original_runtime_pid": 737954,
+    "original_pgid": "unavailable: not serialized before failure; original PID reaped",
+    "die0_and_both_export_locks_acquired_and_released": true,
+    "physical_mapping_verified": "NPU0/chip0=Ascend910B4-1",
+    "health": "OK",
+    "fault": "NA",
+    "device_processes": 0,
+    "utilization_percent": 0,
+    "hbm_usage_percent": 5,
+    "ecc_errors": 0,
+    "no_reset_or_kill": true
+  },
+  "publication_gate": {
+    "scope": "CPU-only functional host interfaces; not kernel correctness",
+    "receipt": {
+      "status": "complete",
+      "tests": 5,
+      "real_backend_imports": [],
+      "real_compile_calls": 0,
+      "npu_forwards": 0,
+      "scientific_frozen_fixtures": 0,
+      "profiles": 0,
+      "scope": "CPU-only public host compatibility gate; original scientific qualification unchanged",
+      "bundle_sha256": "5cb39124a12ab81c6030fdb1edb96fadd80d2808b232115cb4268add8b194c12"
+    },
+    "bundle": {
+      "token": "optimization-w008-clipped-backward-saturation-publication-cpu-v1-f1ee5078",
+      "sha256": "5cb39124a12ab81c6030fdb1edb96fadd80d2808b232115cb4268add8b194c12",
+      "bytes": 307679,
+      "files": 76
+    },
+    "stdout_sha256": "2a615a618a14bc5f930caff2b4327519c73cd9c137485eae630d08ee7dc813be",
+    "stderr_sha256": "8b82c7f560839311f195345d4f6b1b432faa6d72a96be40e0565bee3d9115ff6"
+  },
+  "numeric_API": {
+    "default_factory": "disabled before expected generation",
+    "default_make_case": "disabled",
+    "prepare": "disabled before transfers or compilation",
+    "capture": "disabled before callback",
+    "CLI": "disabled before loading cases/provenance/expected data",
+    "inspection": "explicit compile_inspection=True; uninitialized prototypes only; compile_only never authorizes run"
+  },
+  "retained_evidence": {
+    "compact_archive_basename": "optimization-w008-clipped-backward-saturation-recovery-v2-22257da8ffcc-failed-compact.tgz",
+    "compact_sha256": "b1e053eca2a6ef3068e2850f6b370564c0e460d85bff47919cabd5f531cf12f8",
+    "compact_bytes": 357701,
+    "verified_manifest_files": 99,
+    "manifest_sha256": "c9a481d77a3fba0a94bf6705f4aff5211380fb09ea170c2c92e48ca1af8ee41b",
+    "source_and_baseline_binary_and_failed_IR_retained": true,
+    "scientific_fixture_payloads": 0,
+    "raw_stdout_sha256": "195fdbcc6bd8bfb6b2f86de9a06d947897737fcddf6aedde650318b8682ae36e",
+    "raw_stderr_sha256": "e20e42af3350655ab3ef5b2103327d0994a3bd30bd89816a798c48c090b2eaaf",
+    "diagnostic_artifact": {
+      "file": "T04-compiler-diagnostics.json.gz",
+      "sha256": "5820a8e8a162a862bf604f0da5cdba8a13200a171dda82464d15cd86c1b2f3ba",
+      "bytes": 27230,
+      "uncompressed_sha256": "a01b797fc44e8a06f4dc52c0076e4b157cc538b7e0901561f9d67ad7333dba16",
+      "scope": "Portable full stdout/stderr/fatal diagnostic content; machine paths/board serial identifiers removed, immutable originals separately hashed."
+    },
+    "recovery_bundle": {
+      "token": "optimization-w008-clipped-backward-saturation-recovery-v2-22257da8ffcc",
+      "sha256": "28aceffd3ccacb2da3742001766b59267700317ddad0c959b94c6f2119e5f334",
+      "bytes": 318688,
+      "files": 80
+    }
+  }
+}

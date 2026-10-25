@@ -1,0 +1,109 @@
+{
+  "wave": 9,
+  "approval": "Standing user approval waves003\u2013022; datafirst.",
+  "study_kind": "source-backed-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "query": "61093052e4af41c5b2132db2cd524089",
+  "source_receipts": "bodies.json/tests-license.json/proposals.md; original source inventory full immutable pin; MIT plus Huawei/vLLM/DeepLink third-party notices retained.",
+  "protocol": "Compile/codegen/resource allcasepairs via input-only prototypes BEFORE scientificCPUexpected. Six cached CPU payloads ONCE, numerical correctness ONCE perarm/case/source then exactly10preparedcompleteAPI profilingforwards/arm of4mainpairs; guards0captures. No GPUwarmups/autotune/extraunprofiledtiming/profiledIOinspection. Retainnegative/noop/unsupported/failed results and originalsource/binary/fixture/version bindings. No postdata case/tolerance/flag retuning. Actualtarget/compiler/product/cores queried, never inherited GZ40. Complete operation spans/tasktime/union/gaps/raw10samples/PMUs diagnostic not ordinarylatency/physicaltraffic/roofline proof.",
+  "study_id": "R09",
+  "task": "optimization-w009-awq-inline-gemm",
+  "title": "Dequantize packed AWQ weights inside fixed split-one GEMM",
+  "source_files": [
+    "bodies/src/triton_ascend_kernels/gemm/awq_triton.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W009-R09-01",
+      "role": "gallery",
+      "seed": 90901,
+      "parameters": {
+        "M": 16,
+        "K": 128,
+        "N": 128,
+        "group": 32
+      },
+      "scenario_designation": "gallery-benefit"
+    },
+    {
+      "case_id": "W009-R09-02",
+      "role": "gallery",
+      "seed": 90902,
+      "parameters": {
+        "M": 32,
+        "K": 256,
+        "N": 256,
+        "group": 64
+      },
+      "scenario_designation": "gallery-cost"
+    },
+    {
+      "case_id": "W009-R09-03",
+      "role": "heldout",
+      "seed": 90903,
+      "parameters": {
+        "M": 64,
+        "K": 512,
+        "N": 512,
+        "group": 128
+      },
+      "scenario_designation": "heldout-benefit"
+    },
+    {
+      "case_id": "W009-R09-04",
+      "role": "heldout",
+      "seed": 90904,
+      "parameters": {
+        "M": 128,
+        "K": 512,
+        "N": 256,
+        "group": 128
+      },
+      "scenario_designation": "heldout-cost"
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W009-R09-GA",
+      "role": "guard",
+      "seed": 90991,
+      "parameters": {
+        "M": 17,
+        "K": 96,
+        "N": 136,
+        "group": 32
+      }
+    },
+    {
+      "case_id": "W009-R09-GB",
+      "role": "guard",
+      "seed": 90992,
+      "parameters": {
+        "M": 1,
+        "K": 33,
+        "N": 8,
+        "group": 33
+      }
+    }
+  ],
+  "contract": {
+    "interface": "PreparedfixedSPLIT_K1 AWQ GEMM component FP16A[M,K],I32Q[K,N/8],I32zeros[K/G,N/8],FP16scales[K/G,N],FP16privateC[M,N]. ExactsourceAWQnibbleorder[0,4,1,5,2,6,3,7],NOzero+1. Ainteger/64 q[-8,8],scaleinteger/256 q[4,16], all16nibbles/signedpackedwords exercised. Allcontiguoussamehealthydevice, no alias. Sourcepubliczeros allocator anddegenerate splitone result.sum(0) excludedBOTH; allCwritten, no implicitfree splitKreduce, notclaimfullawq_gemm_triton freshPythonlatency.",
+    "before": "Exactsourceawq_dequantize_kernel writescompleteprivateFP16B[K,N] EVERYAPI (BY16/BX16packedwords); then educationalmaterializedBGEMM withSAMEBM16BN32BK32 andSPLIT_K1 accumulation/dot/casts/store policy asafter. Notvendorbestbaselineclaim. No cacheofdequantizedB acrossforwards. Sameinput/tile/group sourceguards BOTH.",
+    "after": "Exactpinned awq_gemm_kernel inlinepackedBload/threeinterleaves/reversenibbles/zeros/scalesmetadata perBK group/castBtoCelemFP16/ tl.dot andstore. Preserve source accumulator_dtype=c_ptr.type.element_ty and tl.dotdefault signature; DO NOTsilentlypromoteFP16sourceaccumulator/addnewdotprecisionarguments/changeflags orsplitK. CommonBM16BN32BK32SPLIT_K1, stage1/multibufferFalse/fusionFalse; no autotune/retiling.",
+    "oracle": "IndependentCPUuint32logicalnibbledecode+FP64matmul AND predeclaredlike-roundedFP16blockaccmodel, bothcomputedinONEcachedpayload percase AFTERall12input-onlycompile/resource/codecells. CompileIRqualification BEFOREscientificCPUexpected mustprove actualsourceandbaseline dot/loopcarry types match: ifFP32loopcarry useFP64exactdotroundedFP16; ifFP16loopcarry useperBK32 exactdot+previousFP16carry thenroundFP16 EACHBKblock. SelectONLYfromcompiler-typeevidence BEFOREmath, NEVERchooseoraclebasedonoutputs/timing. Unsupported/ambiguous type stopsunqualified, no precisionrewrite. Mathproof:dequantweightinteger/256absnum<=240 exactlyFP16; Ainteger/64absnum<=8; productnum<=1920/16384, fullK<=512 absoluteintegerpartials<=983040<2^24 -> FP32dotarithmeticexact ifFP32carry. FP16carry modelchargesroundingperBK. RequireALLnonzeroFP16bits againsttypedlike-roundedCPUmodel, zerosnumericexact withsignreported; pairedallFP16bits required/report separately ifsourcezero-signsemanticsdiffers (no arbitraryrelax). Also retainFP64exactforwarderror/roundingbound, notclaimFP32accuracyforFP16acc.",
+    "guards": "GA M17/N136 maskrow/col/packedwordtails withK96/G32 alignedgroups;GB K33singlefullgroup/N8/M1 permitsfinalBKtail becauseonlyonevalidrowlastblock/allvalidKsamegroup, sourcepublicG==K admits33. SourceAmaskedKtailother0 soinvaliddequantBvalues cannotcontribute; allscalesfinite, no NaN0product. ElseG32/64/128mustdivideK andG%32==0 topreventvalidBKtilegroupstraddle. Invalidgroup/Ndivisibility/dtype/shape/nonfinite/domain/alias rejectbeforecache NONFROZENtests. IndependentCPUdecode includesallnibbles andnegativeI32patterns.",
+    "compilation": "Firstall12input-onlysource/resource/actualELFcells, commonmatrix before6cachedCPUexpected; publicprobe.run MUSTraise0launch andtransactionalqualification. InspecttypedIR actualdot/loopcarry BOTHarms/classificationindependentofdata; preserve exactIR/binary/compilerproduct/accumulatorreceipt. IfdotFP16Caccsource unsupported selectedruntime, terminalcompilerunsupported0oracles/math/profiles, notexcusetopromote/forcecontrast. Sourcevalidgroup andmaskedptrint32bounds complete.",
+    "claims": "Fullnecessaryworkbefore2kernels(afterdequantGEMM) vsafter1inlinekernel, allrequiredtasktypes/launchgapsincluded. Benefitprobes01/03savefullBmaterialization/write-read; costprobes02/04charge repeateddequantperMtile/livevectors/Cubefeed. Source-applicationnovelty0; correctonce/arm/case then80APIprofiles8caps guards0, no warmup/extratiming/IOinspection/postdataretune. Profiledspan/resources/actualPMUonly notordinarylatency/physicaltraffic/occupancy/rooflineproof. MIT/Huawei/vLLMnoticesretained."
+  },
+  "source_files_manifest": [
+    {
+      "path": "bodies/src/triton_ascend_kernels/gemm/awq_triton.py",
+      "sha256": "0e0c64739bf1524918412fc166f5e0bf4e57fd38367a68c6930e0b5c2bbf385a"
+    }
+  ]
+}

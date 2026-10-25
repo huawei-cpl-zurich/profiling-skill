@@ -1,0 +1,448 @@
+{
+  "study_id": "T07",
+  "status": "candidate-backend-compile-failed",
+  "scientific_contract_version": 2,
+  "contract_sha256": "42eb4fc723b9e2864c9eade5a4293fb4134103979f04003a47ad573b73d110b4",
+  "unexecuted_v1_sha256": "e7c0c66e599896276d0400204abc3219df11e5826d8de709194dc59ad371e096",
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "eps": 1e-20,
+  "candidate_compile_diagnostic": "LLVM ERROR: Failed to obtain op buffer shape size which should be static.",
+  "failure_cause": "Unresolved. This selected compiler failure does not establish general impossibility of cache fusion or behavior on another toolchain.",
+  "target": {
+    "profile": "bz-a3-1",
+    "physical_npu": 0,
+    "chip": 0,
+    "logical_device": 0,
+    "board": "9382",
+    "chip_name": "Ascend910 V1",
+    "compiler_target": "Ascend910_9382"
+  },
+  "runtime": {
+    "imported_triton_version": "3.2.0",
+    "distribution_versions": {
+      "torch": "2.10.0+cpu",
+      "torch-npu": "2.10.0",
+      "triton": "3.5.0",
+      "triton-ascend": "3.2.2"
+    },
+    "metric": "'ACL_AICORE_PIPE_UTILIZATION'",
+    "before_math_receipt_sha256": "23e002da0edecb0cb6ee0c8f54c7b3a0f0e599cf3096f68df3127f057e760c22"
+  },
+  "scientific_cpu_oracles": 0,
+  "correctness_calls": 0,
+  "api_forwards": 0,
+  "profiled_calls": 0,
+  "captures": 0,
+  "observed_optimized_routes": 0,
+  "cases": [
+    {
+      "case_id": "W008-T07-01",
+      "status": "candidate-compile-failed"
+    },
+    {
+      "case_id": "W008-T07-02",
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W008-T07-03",
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W008-T07-04",
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W008-T07-GA",
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W008-T07-GB",
+      "status": "unattempted"
+    }
+  ],
+  "baseline_compiled_cells": [
+    "W008-T07-01"
+  ],
+  "candidate_linked_cells": [],
+  "baseline_linked_artifacts": [
+    {
+      "filename": "kernel-0.npubin",
+      "binary_sha256": "b3bbffa5bf2c52030d882d09efc991b528263e20b52a327673fbec8aa1248cf7",
+      "sections": [
+        {
+          "index": 1,
+          "name": ".text",
+          "type": 1,
+          "flags": 6,
+          "info": 0,
+          "bytes": 1108,
+          "sha256": "b64fb9e7b9f59cd369f687ea76a56ae1caee245e204f963163c3609a6fbdd031"
+        }
+      ],
+      "resource_json_sha256": "adf315605ce2b1bc9804b8c7b3e0fa22e278242fb1c4aff86796072ee7ae9624"
+    },
+    {
+      "filename": "kernel-1.npubin",
+      "binary_sha256": "0c1e28e3e27e916d9767a965b947dc62e30d6b0e9182fa69f1f640b9f5464cdc",
+      "sections": [
+        {
+          "index": 1,
+          "name": ".text",
+          "type": 1,
+          "flags": 6,
+          "info": 0,
+          "bytes": 7728,
+          "sha256": "7671a5f6f127551f1b5f520f4e44ac8a48afab88a86c55b0039ba5428a9d3ab9"
+        }
+      ],
+      "resource_json_sha256": "c30874a4f96beaef5ebbd7a38582a65e89dc4273553f87d724319f3b5febbdcf"
+    },
+    {
+      "filename": "kernel-2.npubin",
+      "binary_sha256": "5e08a332303130c645f3bc05440a07e6baa5040f905c724624437ede0365cfb5",
+      "sections": [
+        {
+          "index": 1,
+          "name": ".text",
+          "type": 1,
+          "flags": 6,
+          "info": 0,
+          "bytes": 516,
+          "sha256": "064bf2ade8bfb8a8bc0c3223f861bf463c1c2a935bfc23c53cadc0ecf8ca8468"
+        }
+      ],
+      "resource_json_sha256": "42b1a60a35b63696a65af50ef195c4338271015aff37de997438d1215feca61e"
+    }
+  ],
+  "compiler_artifacts": [
+    {
+      "role": "linked-baseline",
+      "jit_hash": "4bc0c9a2079540bde58f3957e0a01e94162df9c8e8a471822d2cc7c1c1d1d12c",
+      "name": "_proj_kernel.ttadapter",
+      "sha256": "40d7ab7a6b22086c2f04665aab8f39d1db76b3e00717fbc97f166f95d92cf57e",
+      "bytes": 15051
+    },
+    {
+      "role": "linked-baseline",
+      "jit_hash": "4bc0c9a2079540bde58f3957e0a01e94162df9c8e8a471822d2cc7c1c1d1d12c",
+      "name": "__grp___proj_kernel.json",
+      "sha256": "5db461f9c8e64ca52df36e9654e04ebfe1833a8f14ddd491985cede48c6a8784",
+      "bytes": 455
+    },
+    {
+      "role": "linked-baseline",
+      "jit_hash": "4bc0c9a2079540bde58f3957e0a01e94162df9c8e8a471822d2cc7c1c1d1d12c",
+      "name": "_proj_kernel.json",
+      "sha256": "746a3e8c1e833dbe88e2ef9837174d6eecb3c93d2a34bffc0f70b83505873adb",
+      "bytes": 3198
+    },
+    {
+      "role": "linked-baseline",
+      "jit_hash": "4bc0c9a2079540bde58f3957e0a01e94162df9c8e8a471822d2cc7c1c1d1d12c",
+      "name": "_proj_kernel.ttir",
+      "sha256": "64dd164b3d5cd6b8d2848bc13b877a5789c83cb26e48e5981faf1f6117e8606c",
+      "bytes": 18455
+    },
+    {
+      "role": "linked-baseline",
+      "jit_hash": "4bc0c9a2079540bde58f3957e0a01e94162df9c8e8a471822d2cc7c1c1d1d12c",
+      "name": "_proj_kernel.npubin",
+      "sha256": "b3bbffa5bf2c52030d882d09efc991b528263e20b52a327673fbec8aa1248cf7",
+      "bytes": 2736
+    },
+    {
+      "role": "linked-baseline",
+      "jit_hash": "299eadbfd57ee9d545a316312def69d55081d57cdba40c9410a71f4aed2a14fe",
+      "name": "__grp___pool_kernel.json",
+      "sha256": "4d1085fb8d8d4c38549b1f9f3bb74c9ef1a6d380aeb36e87fcd8f8ee76d14152",
+      "bytes": 455
+    },
+    {
+      "role": "linked-baseline",
+      "jit_hash": "299eadbfd57ee9d545a316312def69d55081d57cdba40c9410a71f4aed2a14fe",
+      "name": "_pool_kernel.json",
+      "sha256": "f0911affb0c79dd37837d28a3540774f78c5c1ee332154f4d0989eb0b2baab55",
+      "bytes": 3210
+    },
+    {
+      "role": "linked-baseline",
+      "jit_hash": "299eadbfd57ee9d545a316312def69d55081d57cdba40c9410a71f4aed2a14fe",
+      "name": "_pool_kernel.ttadapter",
+      "sha256": "d5871cfb613275c13737bcef9bc7b38fcef8ff1b028015b9ac9ce16dc8321246",
+      "bytes": 54904
+    },
+    {
+      "role": "linked-baseline",
+      "jit_hash": "299eadbfd57ee9d545a316312def69d55081d57cdba40c9410a71f4aed2a14fe",
+      "name": "_pool_kernel.npubin",
+      "sha256": "0c1e28e3e27e916d9767a965b947dc62e30d6b0e9182fa69f1f640b9f5464cdc",
+      "bytes": 10248
+    },
+    {
+      "role": "linked-baseline",
+      "jit_hash": "299eadbfd57ee9d545a316312def69d55081d57cdba40c9410a71f4aed2a14fe",
+      "name": "_pool_kernel.ttir",
+      "sha256": "6e33ee2d691ede72e7491150b86644196a39a515ce571bbf70a3fafbf8e813cb",
+      "bytes": 58077
+    },
+    {
+      "role": "linked-baseline",
+      "jit_hash": "ab351907439a16a715e33d7b0e185f12263d67dc5dc2a037db22e97bc2a766fa",
+      "name": "_cache_update_kernel.json",
+      "sha256": "f5e9fe42c8eda1d31d21da810c4f3de7947cf2792c48141c5bbbaec92c7418ee",
+      "bytes": 3220
+    },
+    {
+      "role": "linked-baseline",
+      "jit_hash": "ab351907439a16a715e33d7b0e185f12263d67dc5dc2a037db22e97bc2a766fa",
+      "name": "__grp___cache_update_kernel.json",
+      "sha256": "24448e8431b495a6f039ea5ed3d4ad6e707666ac6c0ce5455caab66d9f82b96f",
+      "bytes": 519
+    },
+    {
+      "role": "linked-baseline",
+      "jit_hash": "ab351907439a16a715e33d7b0e185f12263d67dc5dc2a037db22e97bc2a766fa",
+      "name": "_cache_update_kernel.ttadapter",
+      "sha256": "4c48cf46d5d823f4537c4929945eeaa19299fbcb01fa1e3259423a0e6944c91c",
+      "bytes": 15309
+    },
+    {
+      "role": "linked-baseline",
+      "jit_hash": "ab351907439a16a715e33d7b0e185f12263d67dc5dc2a037db22e97bc2a766fa",
+      "name": "_cache_update_kernel.ttir",
+      "sha256": "2ad79eed830c49016b1e774ccc58dd6fecab4395d2ba78ebc7a8a37b9ab0f198",
+      "bytes": 14139
+    },
+    {
+      "role": "linked-baseline",
+      "jit_hash": "ab351907439a16a715e33d7b0e185f12263d67dc5dc2a037db22e97bc2a766fa",
+      "name": "_cache_update_kernel.npubin",
+      "sha256": "5e08a332303130c645f3bc05440a07e6baa5040f905c724624437ede0365cfb5",
+      "bytes": 3064
+    },
+    {
+      "role": "candidate-compile-partial",
+      "name": "cache_proj_kernel.ttir",
+      "sha256": "1ed163277ac9ca2405ae56334d461fd46f4930d22a49a62378d1edfaca310f1e",
+      "bytes": 22874
+    },
+    {
+      "role": "candidate-compile-partial",
+      "name": "cache_proj_kernel.ttadapter",
+      "sha256": "d613bb945918b8ee372b721bc1c287beb7da9c044163fa479a46dd19a093260f",
+      "bytes": 18698
+    }
+  ],
+  "compiler_dependency_digests_after_failure": [
+    {
+      "role": "triton-backend-python",
+      "name": "compiler.py",
+      "sha256": "253bdb0d9bf2d092c8c1ae40cc610b2d00c534b127f9d258e9e8e1a221934002",
+      "bytes": 53431
+    },
+    {
+      "role": "installed-compiler-binary",
+      "name": "bishengir-compile",
+      "sha256": "89655a56941efe9a184e4d5dfccb783ad88458707827ff6fdd146e7bd2d4af5c",
+      "bytes": 94058360
+    },
+    {
+      "role": "installed-compiler-binary",
+      "name": "hivmc",
+      "sha256": "48ff49ad8e86235679a2e06448d6bfad5d8ab8eaed230859d9089f4152262de4",
+      "bytes": 81407800
+    }
+  ],
+  "zero_identity": {
+    "installed_runtime_libraries_before_math": [
+      {
+        "role": "torch library",
+        "filename": "_C.cpython-311-aarch64-linux-gnu.so",
+        "bytes": 262897,
+        "sha256": "024765deaf4621ebded1189c464eadf6ed55c7e30e2cbce9712479c5db5b91c5"
+      },
+      {
+        "role": "torch-npu library",
+        "filename": "_C.cpython-311-aarch64-linux-gnu.so",
+        "bytes": 339113,
+        "sha256": "09714f921b8eee8e158f021784fba1b9bb102e26fe97aaff59ab9041aac9fe35"
+      },
+      {
+        "role": "torch-npu library",
+        "filename": "libtorch_npu.so",
+        "bytes": 75163441,
+        "sha256": "c0df99ef7584c76c38b05d2e76b070424318d6c8f4e623712211d6fa071efb56"
+      }
+    ],
+    "coverage": "partial wrapper/runtime library digests only; no actual zero task or standalone device binary observed because no API forward ran"
+  },
+  "measured_source_sha256": {
+    "examples/optimization-library/triton/compressor_cache.py": "2e3b5261f81caaa068fcb0c31484ff64a51bd1a273c5508451e34b370a8e703b",
+    "examples/optimization-library/triton/compressor_cache_contract.py": "f9193cfeca7c2a57d974d49754350a6da8a43a62d507f7e552927e206fa7a6f2",
+    "examples/optimization-library/triton/compressor_cache_vendor.py": "93acc5dd1a4c28b5b017f354c8c30a655c5e433b9fee2a052728c9071f968a03",
+    "examples/optimization-library/triton/compressor_cache_projection.py": "95ee03858aca444e27b5a4b70756ccc2c02859b2078aa9102aa97c85e8941815",
+    "examples/optimization-library/triton/compressor_cache_NOTICE.txt": "3421af925aaa95203a08a0a54e7fc8787fda8bc6e80fb5a37ba934e98b848e35"
+  },
+  "publication_interface_sha256": {
+    "examples/optimization-library/triton/compressor_cache.py": "029b20ff1d40fac1bb2aea031b02ad259f1560e981dda5f9e066925e9c4c8451",
+    "tests/test_optimization_compressor_cache.py": "a086a178ca06d14152938ef36c952daa44b49d5464fe317e55374b4c93dc0e2c"
+  },
+  "handles": {
+    "science": "remote:bz-a3-1:job:20261025T004505Z-49b211f112af",
+    "read_only_compact": "remote:bz-a3-1:job:20261025T004802Z-412488663a82",
+    "device_release_check": "remote:bz-a3-1:job:20261025T004906Z-21d0461af355"
+  },
+  "compact_archive": {
+    "sha256": "3427623feedcc076fd46a5a150863cb5e6e199ae090b5706c40a67556e714558",
+    "bytes": 113923,
+    "verified_manifest_files": 49
+  },
+  "coverage": {
+    "status": "failed-as-expected",
+    "cases": [
+      {
+        "name": "W008-T07-01",
+        "performance": true,
+        "scenario": [
+          "B1-BSND",
+          "cache-epilogue",
+          "no-residual",
+          "source-eps1e-20"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": false,
+        "baseline_compile": true,
+        "status": "candidate-compile-failed",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Static ownership proof only: X[1,128,5120] contiguous and source int64 X base; KV/SCORE[128,512] separate; guarded output shape[1,64,512] offset1; guarded cache[1,8,1024] offset1 with separate512 feature halves; tail row<M and row>=M-min(M,C), consecutive tail modulo C injective. No numeric/runtime layout claim."
+        }
+      },
+      {
+        "name": "W008-T07-02",
+        "performance": true,
+        "scenario": [
+          "B1-BSND",
+          "cache-epilogue",
+          "no-residual",
+          "source-eps1e-20"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": false,
+        "baseline_compile": false,
+        "status": "unattempted",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Static ownership proof only: X[1,64,5120] contiguous and source int64 X base; KV/SCORE[64,512] separate; guarded output shape[1,32,512] offset1; guarded cache[1,64,1024] offset1 with separate512 feature halves; tail row<M and row>=M-min(M,C), consecutive tail modulo C injective. No numeric/runtime layout claim."
+        }
+      },
+      {
+        "name": "W008-T07-03",
+        "performance": true,
+        "scenario": [
+          "B1-BSND",
+          "cache-epilogue",
+          "no-residual",
+          "source-eps1e-20"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": false,
+        "baseline_compile": false,
+        "status": "unattempted",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Static ownership proof only: X[1,256,5120] contiguous and source int64 X base; KV/SCORE[256,512] separate; guarded output shape[1,64,512] offset1; guarded cache[1,16,1024] offset1 with separate512 feature halves; tail row<M and row>=M-min(M,C), consecutive tail modulo C injective. No numeric/runtime layout claim."
+        }
+      },
+      {
+        "name": "W008-T07-04",
+        "performance": true,
+        "scenario": [
+          "B1-BSND",
+          "cache-epilogue",
+          "no-residual",
+          "source-eps1e-20"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": false,
+        "baseline_compile": false,
+        "status": "unattempted",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Static ownership proof only: X[1,129,5120] contiguous and source int64 X base; KV/SCORE[129,512] separate; guarded output shape[1,65,512] offset1; guarded cache[1,7,1024] offset1 with separate512 feature halves; tail row<M and row>=M-min(M,C), consecutive tail modulo C injective. No numeric/runtime layout claim."
+        }
+      },
+      {
+        "name": "W008-T07-GA",
+        "performance": false,
+        "scenario": [
+          "B1-BSND",
+          "cache-epilogue",
+          "residual",
+          "source-eps1e-20"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": false,
+        "baseline_compile": false,
+        "status": "unattempted",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Static ownership proof only: X[1,17,5120] contiguous and source int64 X base; KV/SCORE[17,512] separate; guarded output shape[1,9,512] offset1; guarded cache[1,8,1024] offset1 with separate512 feature halves; tail row<M and row>=M-min(M,C), consecutive tail modulo C injective. No numeric/runtime layout claim."
+        }
+      },
+      {
+        "name": "W008-T07-GB",
+        "performance": false,
+        "scenario": [
+          "B1-BSND",
+          "cache-epilogue",
+          "residual",
+          "source-eps1e-20"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": false,
+        "baseline_compile": false,
+        "status": "unattempted",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Static ownership proof only: X[1,9,5120] contiguous and source int64 X base; KV/SCORE[9,512] separate; guarded output shape[1,3,512] offset1; guarded cache[1,4,1024] offset1 with separate512 feature halves; tail row<M and row>=M-min(M,C), consecutive tail modulo C injective. No numeric/runtime layout claim."
+        }
+      }
+    ],
+    "audit_receipt_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "publication_tests": {
+    "local_count": 4,
+    "local": "passed",
+    "bz_a3_cpu_only": "passed",
+    "bz_a3_count": 4,
+    "handle": "remote:bz-a3-1:job:20261025T005142Z-1014da2049b6",
+    "real_backend_imports": 0,
+    "real_compile_calls": 0,
+    "npu_forwards": 0,
+    "scientific_frozen_fixtures": 0,
+    "profiles": 0
+  },
+  "claims": {
+    "numeric_correctness": "unavailable",
+    "path_coverage": "unavailable",
+    "performance": "unavailable",
+    "codegen_comparison": "unavailable: candidate no linked binary",
+    "kernel_gate": "not-passed"
+  },
+  "publication_scope": "Draft failed study. Factory/default prepare/probe/run/capture fail closed; explicit compile inspection cannot enable numeric execution.",
+  "authored_source_test_lines": 503,
+  "vendored_source_lines": 575
+}

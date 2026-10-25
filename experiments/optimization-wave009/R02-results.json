@@ -1,0 +1,2075 @@
+{
+  "status": "complete",
+  "study_id": "R02",
+  "target": "bz-a3-2",
+  "product": "9382 Ascend910V1",
+  "physical_die": 0,
+  "npu": 0,
+  "chip": 0,
+  "logical_device": 0,
+  "observed_cube_cores": 24,
+  "observed_vector_cores": 48,
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "matrix_sha256": "852df823a7139a2865dce6ea896f4b6169bfa02c41dd96a1bdfe282cceb36d8e",
+  "compact_archive_sha256": "7738f00c9467d0df39acac5dc773508f82d3b6dc1ee82b46a199a62ab7645571",
+  "compact_files": 563,
+  "raw_codegen_sha256": "305337a51a0f5b2f947dc779c57cdd8ecb887937f47a142e433a671a5e6d3c97",
+  "raw_coverage_sha256": "b5a4b361d9204463f35a318fc06c79e6a8fe101ee03d2ce047394efa8121791e",
+  "counts": {
+    "scientific_cpu_payloads": 6,
+    "numeric_correctness_calls": 12,
+    "profiled_api_calls": 80,
+    "captures": 8,
+    "guard_captures": 0
+  },
+  "runtime": {
+    "packages": {
+      "torch": "2.10.0+cpu",
+      "torch-npu": "2.10.0",
+      "triton": "3.5.0",
+      "triton-ascend": "3.2.2"
+    },
+    "tools": {
+      "msprof": {
+        "exit": 255,
+        "stdout": "\nUsage:\n      msprof [--options]\n\nThis is subcommand for operator optimization situation:\n      op                                Use binary msopprof to operator optimization (msprof op ...)\n\nOptions:\n      --output                          <Optional> Specify the directory that is used for storing data results.\n      --application                     <Optional> Specify application path, considering the risk of privilege escalation, please pay attention to\n\t\t\t\t\t\t   the group of the application and confirm whether it is the same as the user currently.\n\t\t\t\t\t\t   [Note] This option will be discarded in later versions.\n\t\t\t\t\t\t   you can try to use: msprof [msprof arguments] <app> [app arguments]\n      --ascendcl                        <Optional> Show acl profiling data, the default value is on.\n      --ge-api                          <Optional> Specify if report GE event, the default value is off. The possible parameters are 'l0', 'l1' or 'off'.\n      --runtime-api                     <Optional> Show runtime api profiling data, the default value is off.\n      --task-time                       <Optional> Show task profiling data, the default value is on. The possible parameters are 'l0', 'l1', 'l2', 'l3', 'on' or 'off'.\n      --task-memory                     <Optional> Show the memory usage of the operator, the default value is off. The possible parameters are 'on' or 'off'.\n      --ai-core                         <Optional> Turn on / off the ai core profiling, the default value is on when collecting app Profiling.\n      --aic-mode                        <Optional> Set the aic profiling mode to task-based or sample-based.\n\t\t\t\t\t\t   In task-based mode, profiling data will be collected by tasks.\n\t\t\t\t\t\t   In sample-based mode, profiling data will be collected in a specific interval.\n\t\t\t\t\t\t   The default value is task-based in AI task mode, sample-based in system mode.\n      --aic-freq                        <Optional> The aic sampling frequency in hertz, the default value is 100 Hz, the range is 1 to 100 Hz.\n      --environment                     <Optional> User app custom environment variable configuration.\n      --sys-period                      <Optional> Set total sampling period of system profiling in seconds.\n      --sys-devices                     <Optional> Specify the profiling scope by device ID when collect sys profiling.The value is all or ID list (split with ',').\n      --msproftx                        <Optional> Show msproftx and mstx data, the default value is off.\n      --mstx-domain-include             <Optional> Choose to only include mstx events from a comma separated list of domains;\n\t\t\t\t\t\t   `default` filters the mstx default domain;\n\t\t\t\t\t\t   The switch is only applicable when parameter msproftx is set to on;\n\t\t\t\t\t\t   The switch cannot be set with mstx-domain-exclude at the same time.\n      --mstx-domain-exclude             <Optional> Choose to exclude mstx events from a comma separated list of domains;\n\t\t\t\t\t\t   `default` excludes the mstx default domain;\n\t\t\t\t\t\t   The switch is only applicable when parameter msproftx is set to on;\n\t\t\t\t\t\t   The switch cannot be set with mstx-domain-include at the same time.\n      --storage-limit                   <Optional> Specify the output directory volume. range 200MB ~ 4294967295MB.\n      --hccl                            <Optional> Show hccl profiling data, the default value is off. [Note] This option will be discarded in later versions.\n      --model-execution                 <Optional> Show ge model execution profiling data, the default value is off. [Note] This option will be discarded in later versions.\n      --aic-metrics                     <Optional> The aic metrics groups, include ArithmeticUtilization, PipeUtilization, Memory, MemoryL0, ResourceConflictRatio, MemoryUB, L2Cache, MemoryAccess.\n\t\t\t\t\t\t   the default value is PipeUtilization.\n      --python-path                     <Optional> Specify the python interpreter path that is used for analysis, please ensure the python version is 3.7.5 or later.\n      --parse                           <Optional> Switch for using msprof to parse collecting data, the default value is off.\n      --query                           <Optional> Switch for using msprof to query collecting data, the default value is off.\n      --export                          <Optional> Switch for using msprof to export collecting data, the default value is off.\n      --clear                           <Optional> Switch for using msprof to analyze or export data in clear mode, the default value is off.\n      --analyze                         <Optional> Switch for using msprof to analyze collecting data, the default value is off.\n      --rule                            <Optional> Switch specified rule for using msprof to analyze collecting data, include communication, communication_matrix.\n\t\t\t\t\t\t   the default value is communication,communication_matrix.\n      --iteration-id                    <Optional> The export iteration id, only used when argument export is on, the default value is 1.\n      --model-id                        <Optional> The export model id, only used when argument export is on, msprof will export minium accessible model by default.\n      --summary-format                  <Optional> The export summary file format, only used when argument export is on, include csv, json, the default value is csv.\n      --type                            <Optional> The export type, only used when argument `export` is on \n\t\t\t\t\t\t   or when collecting data, include text, db.\n\t\t\t\t\t\t   the default value is text(which will also export the database).\n      --reports                         <Optional> Specify the path that is used for controlling the export scope of collecting results\n      --aicpu                           <Optional> Show aicpu profiling data, the default value is off.\n      --sys-hardware-mem                <Optional> LLC, DDR, HBM acquisition switch, optional on / off, the default value is off.\n      --sys-hardware-mem-freq           <Optional> LLC, DDR, HBM acquisition frequency, range 1 ~ 100, the default value is 50, unit Hz.\n      --llc-profiling                   <Optional> The llc profiling groups, include read, write. the default value is read.\n      --sys-cpu-profiling               <Optional> The CPU acquisition switch, optional on / off,the default value is off.\n      --sys-cpu-freq                    <Optional> The cpu sampling frequency in hertz. the default value is 50 Hz, the range is 1 to 50 Hz.\n      --sys-profiling                   <Optional> The System CPU usage and system memory acquisition switch,the default value is off.\n      --sys-sampling-freq               <Optional> The sys sampling frequency in hertz. the default value is 10 Hz, the range is 1 to 10 Hz.\n      --sys-pid-profiling               <Optional> The CPU usage of the process and the memory acquisition switch of the process,the default value is off.\n      --sys-pid-sampling-freq           <Optional> The pid sampling frequency in hertz. the default value is 10 Hz, the range is 1 to 10 Hz.\n      --sys-io-profiling                <Optional> NIC, ROCE acquisition switch, the default value is off.\n      --sys-io-sampling-freq            <Optional> NIC, ROCE acquisition frequency, range 1 ~ 100, the default value is 100, unit Hz.\n      --instr-profiling                 <Optional> Show instr profiling data, the default value is off.\n      --instr-profiling-freq            <Optional> The instr profiling sampling period in clock-cycle, the default value is 1000 cycle, the range is 300 to 30000 cycle.\n      --sys-interconnection-profiling   <Optional> PCIE, HCCS acquisition switch, the default value is off.\n      --sys-interconnection-freq        <Optional> PCIE, HCCS acquisition frequency, range 1 ~ 50, the default value is 50, unit Hz.\n      --dvpp-profiling                  <Optional> DVPP acquisition switch, the default value is off.\n      --dvpp-freq                       <Optional> DVPP acquisition frequency, range 1 ~ 100, the default value is 50, unit Hz.\n      --l2                              <Optional> L2 Cache and SMMU acquisition switch. The default value is off.\n      --host-sys                        <Optional> The host-sys data type, include cpu, mem, disk, network, osrt, numa\n      --host-sys-pid                    <Optional> Set the PID of the app process for which you want to collect performance data.\n      --host-sys-usage                  <Optional> The host-sys-usage data type, include cpu, mem.(full-platform)\n      --host-sys-usage-freq             <Optional> The sampling frequency in hertz. the default value is 50 Hz the range is 1 to 50 Hz.\n      --dynamic                         <Optional> Dynamic profiling switch, the default value is off.\n      --pid                             <Optional> Dynamic profiling pids of the target processes\n      --delay                           <Optional> Collect start delay time in seconds, range 1 ~ 4294967295s.\n      --duration                        <Optional> Collection duration in seconds, range 1 ~ 4294967295s.\n      --help                            <Optional> help message.\n",
+        "stderr": "<toolkit>/ascend-toolkit/latest/bin/msprof: unrecognized option '--version'\n"
+      },
+      "bishengir-compile": {
+        "exit": 0,
+        "stdout": "bishengir-compile 1.2.0 (/usr1/BiSheng/npuir-a3/bishengir 8796a8ac1508 2026-07-31) \nllvm 19.1.7 2430ab069eb1\nRelease build\n\n",
+        "stderr": ""
+      },
+      "hivmc": {
+        "exit": 0,
+        "stdout": "hivmc 0.3.0 (4ace068b0b12 2026-07-31)\nRelease build\n\n",
+        "stderr": ""
+      },
+      "bisheng": {
+        "exit": 0,
+        "stdout": "2026-07-30T20:53:21+08:00 clang version 15.0.5 (clang-5c68a1cb1231 flang-5c68a1cb1231)\nTarget: aarch64-unknown-linux-gnu\nThread model: posix\nInstalledDir: <toolkit>/ascend-toolkit/latest/bin\n",
+        "stderr": ""
+      },
+      "ccec": {
+        "exit": 0,
+        "stdout": "2026-07-30T20:53:21+08:00 clang version 15.0.5 (clang-5c68a1cb1231 flang-5c68a1cb1231)\nTarget: aarch64-unknown-linux-gnu\nThread model: posix\nInstalledDir: <toolkit>/ascend-toolkit/latest/bin\n",
+        "stderr": ""
+      }
+    },
+    "torch_npu_metric": "'ACL_AICORE_PIPE_UTILIZATION'",
+    "triton_version": "3.2.0",
+    "profiler_supported_options": {
+      "exit": 0,
+      "stdout": "msopprof (MindStudio Profiler For Operator) is part of MindStudio Operator-dev Tools.\nUsed for Ascend C operator profiling by running on the board.\n\nOptions:\n\n  -v, --version                             Show version information.\n  -h, --help                                Show help message.\n      --config=<FILE>                       Json file for op config path.\n      --application=<FILE>                  Executable file path.\n      --output=<PATH>                       Output path.\n                                              PATH:default \"./\"\n      --aic-metrics=<TYPE>                  Enable collection ability type:\n                                              TYPE:ArithmeticUtilization | MemoryUB | Memory | MemoryL0 | L2Cache |\n                                                | PipeUtilization | ResourceConflictRatio | Default | BasicInfo | Roofline |\n                                                | Occupancy | TimelineDetail | KernelScale | Source | MemoryDetail |\n      --kernel-name=<NAME>                  Specify the kernel name to profile.\n                                              Not effective in config mode.\n      --launch-count=<LIMIT>                Number of kernel that can be collected.\n                                              LIMIT:1-5000, default: 1\n      --launch-skip-before-match=<SKIP>     Set the number of kernel launch to skip\n                                              before starting to analyze the kernel.\n                                              SKIP:0-1000, default: 0\n      --replay-mode=<MODE>                  Data collection replay mode.\n                                              MODE:application|kernel|range, default: kernel\n      --kill=<SWITCH>                       Kill op process when the number of kernel reaches launch-count.\n                                              SWITCH:on|off, default: off\n      --mstx=<SWITCH>                       Enable mstx API or not.\n                                              SWITCH:on|off, default: off\n      --mstx-include=<RANGE>                Specify the mstx range for msprof op to be collected.\n      --warm-up=<TIMES>                     Set the number of warm up times.\n                                              TIMES:0-500, default: 5\n      --dump=<SWITCH>                       Enable or disable dump flushed to disk mode. Only effective when\n                                              --aic-metrics=<TIMELINEDETAIL>.\n                                              SWITCH:on|off, default: off\n      --core-id=<ID>                        Specify the id of cores to be parsed.\n                                              Only effective when --aic-metrics=<TIMELINEDETAIL> and only\n                                              effective in simulation products.\n      --custom-input=<FILE>                 Json file for op custom input.\n",
+      "stderr": ""
+    },
+    "observed_toolkit_version_contents": [
+      "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_asc-devkit_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+    ]
+  },
+  "codegen_status": "all30 input-only component binaries compiled; ELF sections/resources retained; 2before/3after kernels charged",
+  "timing_scope": "Instrumented prepared pack+unpack, CPU max/sum/validation/allocations outside BOTH arms; outputs reused, GPU prefix recomputed EVERY after API; no ordinary latency, allocation, physical traffic, occupancy or roofline claim",
+  "cases": [
+    {
+      "case_id": "W009-R02-01",
+      "role": "gallery",
+      "parameters": {
+        "B": 4,
+        "Lmax": 32,
+        "D": 64
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "arity": 2
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "prefix_exact": true,
+            "paired_exact_bits": true,
+            "exact_bits": true,
+            "arity": 2
+          }
+        }
+      },
+      "fixture_sha256": "c343ddffaaccfc117c28009079cea479482802d1bcd49de7830d1c1d6bda205d",
+      "source_sha256": {
+        "pack_prefix.py": "b5f7a7d8419c49461c018f3496df85968bca040b3df85a0238508a46cc905a3b",
+        "pack_prefix_contract.py": "27d51c8d2d5724a109d1fe03d0cf3d5f85e73d0b4a418ea6788c21bc52c31bab",
+        "pack_prefix_kernels.py": "8cf1cda72acfed780c679297c0f44cf0f0e0eb2a46664df0cac25fb3861b015f"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "arm": "before",
+            "component": "prepared pack+unpack",
+            "grid": [
+              4,
+              1,
+              1
+            ],
+            "tiles": [
+              64,
+              64
+            ],
+            "flags": {
+              "num_warps": 4,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "device_kernel_calls": 2,
+            "reused_outputs": true,
+            "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+            "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+            "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+            "input_strides": {
+              "x": [
+                64,
+                1
+              ],
+              "lengths": [
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.756600022315979,
+              0.3889999985694885,
+              0.32016000151634216,
+              0.33744001388549805,
+              0.45100000500679016,
+              0.31981998682022095,
+              0.3158000111579895,
+              0.32690000534057617,
+              0.2936600148677826,
+              0.31205999851226807
+            ],
+            "count": 10,
+            "mean": 0.3822440057992935,
+            "sample_sd": 0.13941334167430838
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                4.2,
+                4.2,
+                4.1405,
+                3.98,
+                3.96,
+                4.66,
+                3.3200000000000003,
+                3.3,
+                3.4205,
+                3.2800000000000002
+              ],
+              "count": 10,
+              "mean": 3.8461000000000003,
+              "sample_sd": 0.4838627445418334
+            },
+            "device_active_union_us": {
+              "samples": [
+                4.2,
+                4.2,
+                4.1405,
+                3.98,
+                3.96,
+                4.66,
+                3.32,
+                3.3,
+                3.4205,
+                3.28
+              ],
+              "count": 10,
+              "mean": 3.8461,
+              "sample_sd": 0.48386274454183353
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                4.440892098500626e-16,
+                0.0,
+                0.0,
+                4.440892098500626e-16
+              ],
+              "count": 10,
+              "mean": 8.881784197001253e-17,
+              "sample_sd": 1.8724445165742405e-16
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                97.682,
+                80.382,
+                79.2225,
+                86.302,
+                85.522,
+                93.562,
+                78.002,
+                80.142,
+                82.902,
+                79.401
+              ],
+              "count": 10,
+              "mean": 84.31195,
+              "sample_sd": 6.619856755961148
+            },
+            "operation_active_union_us": {
+              "samples": [
+                4.2,
+                4.2,
+                4.1405,
+                3.98,
+                3.96,
+                4.66,
+                3.32,
+                3.3,
+                3.4205,
+                3.28
+              ],
+              "count": 10,
+              "mean": 3.8461,
+              "sample_sd": 0.48386274454183353
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                93.482,
+                76.182,
+                75.082,
+                82.322,
+                81.562,
+                88.902,
+                74.682,
+                76.842,
+                79.4815,
+                76.121
+              ],
+              "count": 10,
+              "mean": 80.46585,
+              "sample_sd": 6.3158065643537045
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_pack_seq_kernel",
+              "_unpack_seq_triton_kernel"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "a94b188c6115042c6ac6f5c053fce54242b90874144edf0ecebb1539c89d3873",
+              "name": "_pack_seq_kernel",
+              "binaries": {
+                "ttir": "762d4b1c11fc66a7f20fa92a8ed4205bdc4fecb1674878b3d1f858b9d2e66b82",
+                "ttadapter": "91cc0db45df212f5a6ed5c5d01b4f91eb9c88a7060bab72847f4812ad5818b29",
+                "npubin": "77dc35b65605f0c74587f1242b1954362e088adc040c98ccb99417b1af1720dd"
+              }
+            },
+            {
+              "hash": "7c9ec26f4e5c002f12b858564d2c0043cedeb3a3ee1a0c61a6d4013b608b8aaf",
+              "name": "_unpack_seq_triton_kernel",
+              "binaries": {
+                "ttir": "8928c0b66381cde26361df55f2d5682c07bf6d965de4333c91b593ad360a6850",
+                "ttadapter": "2b962903362c34802f6fe0931ffa60732de63be3415f313aeeb70fef4ebd415c",
+                "npubin": "26600e04978edb1a5e673bd770a62cf73fd77ad12b261bdd96f0a0a7bb0c5c52"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "a94b188c6115042c6ac6f5c053fce54242b90874144edf0ecebb1539c89d3873",
+              "name": "_pack_seq_kernel",
+              "binaries": {
+                "ttir": "762d4b1c11fc66a7f20fa92a8ed4205bdc4fecb1674878b3d1f858b9d2e66b82",
+                "ttadapter": "91cc0db45df212f5a6ed5c5d01b4f91eb9c88a7060bab72847f4812ad5818b29",
+                "npubin": "77dc35b65605f0c74587f1242b1954362e088adc040c98ccb99417b1af1720dd"
+              }
+            },
+            {
+              "hash": "7c9ec26f4e5c002f12b858564d2c0043cedeb3a3ee1a0c61a6d4013b608b8aaf",
+              "name": "_unpack_seq_triton_kernel",
+              "binaries": {
+                "ttir": "8928c0b66381cde26361df55f2d5682c07bf6d965de4333c91b593ad360a6850",
+                "ttadapter": "2b962903362c34802f6fe0931ffa60732de63be3415f313aeeb70fef4ebd415c",
+                "npubin": "26600e04978edb1a5e673bd770a62cf73fd77ad12b261bdd96f0a0a7bb0c5c52"
+              }
+            }
+          ],
+          "trace_sha256": "37fd55230bda480e379da7a6a1d5bdfc40cc1ea8157621089f4e72c7cda9d243",
+          "accounting_sha256": "1e5d02688fbd649f89b5bb26ab6eb27fc1d50f1de2ba5c3aa250324b8b9a21f8"
+        },
+        "after": {
+          "metadata": {
+            "arm": "after",
+            "component": "prepared pack+unpack",
+            "grid": [
+              4,
+              1,
+              1
+            ],
+            "tiles": [
+              64,
+              64
+            ],
+            "flags": {
+              "num_warps": 4,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "device_kernel_calls": 3,
+            "reused_outputs": true,
+            "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+            "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+            "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+            "input_strides": {
+              "x": [
+                64,
+                1
+              ],
+              "lengths": [
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.1467599868774414,
+              0.4444600045681,
+              0.43915998935699463,
+              0.4450800120830536,
+              0.5636399984359741,
+              0.4201599955558777,
+              0.421640008687973,
+              0.4385800063610077,
+              0.4195599853992462,
+              0.3971000015735626
+            ],
+            "count": 10,
+            "mean": 0.5136139988899231,
+            "sample_sd": 0.226971280420406
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                5.12,
+                5.28,
+                5.18,
+                5.82,
+                4.9399999999999995,
+                5.1,
+                4.96,
+                5.0,
+                4.98,
+                5.16
+              ],
+              "count": 10,
+              "mean": 5.154,
+              "sample_sd": 0.25855152076305593
+            },
+            "device_active_union_us": {
+              "samples": [
+                5.12,
+                5.28,
+                5.18,
+                5.82,
+                4.94,
+                5.1,
+                4.96,
+                5.0,
+                4.98,
+                5.16
+              ],
+              "count": 10,
+              "mean": 5.154,
+              "sample_sd": 0.2585515207630559
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                238.085,
+                200.724,
+                184.124,
+                207.544,
+                186.344,
+                195.524,
+                174.363,
+                185.124,
+                177.124,
+                170.663
+              ],
+              "count": 10,
+              "mean": 191.9619,
+              "sample_sd": 19.95239667837203
+            },
+            "operation_active_union_us": {
+              "samples": [
+                5.12,
+                5.28,
+                5.18,
+                5.82,
+                4.94,
+                5.1,
+                4.96,
+                5.0,
+                4.98,
+                5.16
+              ],
+              "count": 10,
+              "mean": 5.154,
+              "sample_sd": 0.2585515207630559
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                232.965,
+                195.444,
+                178.944,
+                201.724,
+                181.404,
+                190.424,
+                169.403,
+                180.124,
+                172.144,
+                165.503
+              ],
+              "count": 10,
+              "mean": 186.8079,
+              "sample_sd": 19.855598625240862
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_exclusive_prefix",
+              "_pack_seq_kernel_prefix",
+              "_unpack_seq_triton_kernel_prefix"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "e7cdf71a8c1d54dc85735ea1b069fa53691daa69fb57be6cb26debdee2a36233",
+              "name": "_exclusive_prefix",
+              "binaries": {
+                "ttir": "c57b1b2139832811a903c4994618225c398c95743d658c35febb459a82b46a03",
+                "ttadapter": "b10fd034b040c8a839315bbe2cc7fedae779978bf677c900a10d53bf58006065",
+                "npubin": "6dbe413cebe414d73584efe202ae69d96128733d669e109e92ed846b0b173018"
+              }
+            },
+            {
+              "hash": "64aa9f2c2262583861ebb0f0f6e73cc01389e6abd1407dae83f5b1b4edcd95ee",
+              "name": "_pack_seq_kernel_prefix",
+              "binaries": {
+                "ttir": "45771410e009acc05f03b2cde56dc5382c7d298c296fa5ade0bc30539e34fc2e",
+                "ttadapter": "76223e03e7e95edcf87f0e251a276cb73f1082f5b8a79edab971a958f26dab4a",
+                "npubin": "50ae0b53fa624ca735221ea86237d8c70ea39ac36d5fa115e10bcee8f509e766"
+              }
+            },
+            {
+              "hash": "6f249119d154ebb7ea0f2d4450eef1ebe37843402485c7c10a77893cac11d462",
+              "name": "_unpack_seq_triton_kernel_prefix",
+              "binaries": {
+                "ttir": "e4470f75ebf9ce126e65ac5c0e202ea7abd380b4725d6ffd3a70499545030879",
+                "ttadapter": "75c62c0a5da23ac8982d1372a893266eb755e816bd96da750d50271687e60bcf",
+                "npubin": "4624d9b6ee85ad65ff998b1b6dde4911b042d2bd1edda066ca9c74866aefb1bd"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "e7cdf71a8c1d54dc85735ea1b069fa53691daa69fb57be6cb26debdee2a36233",
+              "name": "_exclusive_prefix",
+              "binaries": {
+                "ttir": "c57b1b2139832811a903c4994618225c398c95743d658c35febb459a82b46a03",
+                "ttadapter": "b10fd034b040c8a839315bbe2cc7fedae779978bf677c900a10d53bf58006065",
+                "npubin": "6dbe413cebe414d73584efe202ae69d96128733d669e109e92ed846b0b173018"
+              }
+            },
+            {
+              "hash": "64aa9f2c2262583861ebb0f0f6e73cc01389e6abd1407dae83f5b1b4edcd95ee",
+              "name": "_pack_seq_kernel_prefix",
+              "binaries": {
+                "ttir": "45771410e009acc05f03b2cde56dc5382c7d298c296fa5ade0bc30539e34fc2e",
+                "ttadapter": "76223e03e7e95edcf87f0e251a276cb73f1082f5b8a79edab971a958f26dab4a",
+                "npubin": "50ae0b53fa624ca735221ea86237d8c70ea39ac36d5fa115e10bcee8f509e766"
+              }
+            },
+            {
+              "hash": "6f249119d154ebb7ea0f2d4450eef1ebe37843402485c7c10a77893cac11d462",
+              "name": "_unpack_seq_triton_kernel_prefix",
+              "binaries": {
+                "ttir": "e4470f75ebf9ce126e65ac5c0e202ea7abd380b4725d6ffd3a70499545030879",
+                "ttadapter": "75c62c0a5da23ac8982d1372a893266eb755e816bd96da750d50271687e60bcf",
+                "npubin": "4624d9b6ee85ad65ff998b1b6dde4911b042d2bd1edda066ca9c74866aefb1bd"
+              }
+            }
+          ],
+          "trace_sha256": "72f5855b3b1a5efe27372ec21425fb48261b8fbd11317e09beaa35064a3cab37",
+          "accounting_sha256": "be40f9f2dc9ca3c5f397e56d8a53ce12edf1f504308776096a6a8ba76455fb53"
+        }
+      }
+    },
+    {
+      "case_id": "W009-R02-02",
+      "role": "gallery",
+      "parameters": {
+        "B": 32,
+        "Lmax": 64,
+        "D": 128
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "arity": 2
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "prefix_exact": true,
+            "paired_exact_bits": true,
+            "exact_bits": true,
+            "arity": 2
+          }
+        }
+      },
+      "fixture_sha256": "0185615bfac3fb864feba6ca904bb6740fb31f31ffa88473f96a7d08c32b326e",
+      "source_sha256": {
+        "pack_prefix.py": "b5f7a7d8419c49461c018f3496df85968bca040b3df85a0238508a46cc905a3b",
+        "pack_prefix_contract.py": "27d51c8d2d5724a109d1fe03d0cf3d5f85e73d0b4a418ea6788c21bc52c31bab",
+        "pack_prefix_kernels.py": "8cf1cda72acfed780c679297c0f44cf0f0e0eb2a46664df0cac25fb3861b015f"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "arm": "before",
+            "component": "prepared pack+unpack",
+            "grid": [
+              32,
+              1,
+              2
+            ],
+            "tiles": [
+              64,
+              64
+            ],
+            "flags": {
+              "num_warps": 4,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "device_kernel_calls": 2,
+            "reused_outputs": true,
+            "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+            "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+            "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+            "input_strides": {
+              "x": [
+                128,
+                1
+              ],
+              "lengths": [
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.9878600239753723,
+              0.34279999136924744,
+              0.3295600116252899,
+              0.3309600055217743,
+              0.4918600022792816,
+              0.32523998618125916,
+              0.324319988489151,
+              0.32872000336647034,
+              0.3322399854660034,
+              0.3282800018787384
+            ],
+            "count": 10,
+            "mean": 0.4121840000152588,
+            "sample_sd": 0.20861071200236295
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                17.161,
+                10.3805,
+                10.98,
+                10.780000000000001,
+                10.7,
+                10.4605,
+                10.8,
+                10.88,
+                10.7605,
+                10.4805
+              ],
+              "count": 10,
+              "mean": 11.3383,
+              "sample_sd": 2.05504077007408
+            },
+            "device_active_union_us": {
+              "samples": [
+                17.161,
+                10.3805,
+                10.98,
+                10.78,
+                10.7,
+                10.4605,
+                10.8,
+                10.88,
+                10.7605,
+                10.4805
+              ],
+              "count": 10,
+              "mean": 11.3383,
+              "sample_sd": 2.05504077007408
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                1.7763568394002505e-15,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 1.7763568394002506e-16,
+              "sample_sd": 5.617333549722722e-16
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                109.5225,
+                83.8215,
+                91.422,
+                81.341,
+                98.882,
+                86.5025,
+                91.342,
+                82.382,
+                85.5415,
+                81.142
+              ],
+              "count": 10,
+              "mean": 89.1899,
+              "sample_sd": 9.06175919822783
+            },
+            "operation_active_union_us": {
+              "samples": [
+                17.161,
+                10.3805,
+                10.98,
+                10.78,
+                10.7,
+                10.4605,
+                10.8,
+                10.88,
+                10.7605,
+                10.4805
+              ],
+              "count": 10,
+              "mean": 11.3383,
+              "sample_sd": 2.05504077007408
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                92.3615,
+                73.441,
+                80.442,
+                70.561,
+                88.182,
+                76.042,
+                80.542,
+                71.502,
+                74.781,
+                70.6615
+              ],
+              "count": 10,
+              "mean": 77.8516,
+              "sample_sd": 7.51684938358855
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_pack_seq_kernel",
+              "_unpack_seq_triton_kernel"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "4cbc3e2078586908902eea6ebf6c1f572e28d473945a8073b0fb12bb1358659c",
+              "name": "_pack_seq_kernel",
+              "binaries": {
+                "ttir": "c73c0b04756141697bac6aee4fe080b498b013050581f4a7b4f2acba7defaf6b",
+                "ttadapter": "1ce26bd7f9744fe9538436d630c82ab8bbdea8d666812ebdec20ce04379bcfc0",
+                "npubin": "d18ccb9e17a033e51d1f515792cc7015fbe7e4ca2e441dcd1f083226398769cc"
+              }
+            },
+            {
+              "hash": "dc406aa6c2171f31c77a68ba6f739a187106739c7e00b54a2f359e874e0d345c",
+              "name": "_unpack_seq_triton_kernel",
+              "binaries": {
+                "ttir": "ad77446377681768fb9ffe1e93ee0deb68c656d5ccf2383a358a7d81aae8a13b",
+                "ttadapter": "c4fcb58c1fa6667bb8c1e64887a61782a33b9ae5e24212f9fc58ac5e6613f6d7",
+                "npubin": "f370983039125086712c5ce14034a6c2f3eec5ede7e41ec12dc4f41e3d8b9110"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "4cbc3e2078586908902eea6ebf6c1f572e28d473945a8073b0fb12bb1358659c",
+              "name": "_pack_seq_kernel",
+              "binaries": {
+                "ttir": "c73c0b04756141697bac6aee4fe080b498b013050581f4a7b4f2acba7defaf6b",
+                "ttadapter": "1ce26bd7f9744fe9538436d630c82ab8bbdea8d666812ebdec20ce04379bcfc0",
+                "npubin": "d18ccb9e17a033e51d1f515792cc7015fbe7e4ca2e441dcd1f083226398769cc"
+              }
+            },
+            {
+              "hash": "dc406aa6c2171f31c77a68ba6f739a187106739c7e00b54a2f359e874e0d345c",
+              "name": "_unpack_seq_triton_kernel",
+              "binaries": {
+                "ttir": "ad77446377681768fb9ffe1e93ee0deb68c656d5ccf2383a358a7d81aae8a13b",
+                "ttadapter": "c4fcb58c1fa6667bb8c1e64887a61782a33b9ae5e24212f9fc58ac5e6613f6d7",
+                "npubin": "f370983039125086712c5ce14034a6c2f3eec5ede7e41ec12dc4f41e3d8b9110"
+              }
+            }
+          ],
+          "trace_sha256": "8a0addfab622e854a3dbfdb289c06ab49baf8fbcb0d36f9a224ba2775e4237a0",
+          "accounting_sha256": "63c317fff8ac65e6bd2af6b89030036de5e0f1f219e24272a68f11469810f5c8"
+        },
+        "after": {
+          "metadata": {
+            "arm": "after",
+            "component": "prepared pack+unpack",
+            "grid": [
+              32,
+              1,
+              2
+            ],
+            "tiles": [
+              64,
+              64
+            ],
+            "flags": {
+              "num_warps": 4,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "device_kernel_calls": 3,
+            "reused_outputs": true,
+            "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+            "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+            "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+            "input_strides": {
+              "x": [
+                128,
+                1
+              ],
+              "lengths": [
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.184340000152588,
+              0.5960000157356262,
+              0.444379985332489,
+              0.41749998927116394,
+              0.4221799969673157,
+              0.4264799952507019,
+              0.4162999987602234,
+              0.4440799951553345,
+              0.5511599779129028,
+              0.40907999873161316
+            ],
+            "count": 10,
+            "mean": 0.5311499953269958,
+            "sample_sd": 0.2380969750224662
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                21.04,
+                14.6005,
+                14.24,
+                13.92,
+                14.7205,
+                13.7805,
+                14.12,
+                15.060500000000001,
+                14.900500000000001,
+                14.3005
+              ],
+              "count": 10,
+              "mean": 15.0683,
+              "sample_sd": 2.1390837238822087
+            },
+            "device_active_union_us": {
+              "samples": [
+                21.04,
+                14.6005,
+                14.24,
+                13.92,
+                14.7205,
+                13.7805,
+                14.12,
+                15.0605,
+                14.9005,
+                14.3005
+              ],
+              "count": 10,
+              "mean": 15.068299999999999,
+              "sample_sd": 2.1390837238822087
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.7763568394002505e-15,
+                1.7763568394002505e-15,
+                0.0
+              ],
+              "count": 10,
+              "mean": 3.552713678800501e-16,
+              "sample_sd": 7.489778066296962e-16
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                258.065,
+                217.5845,
+                204.884,
+                184.164,
+                204.6445,
+                216.244,
+                193.724,
+                194.5045,
+                203.064,
+                193.544
+              ],
+              "count": 10,
+              "mean": 207.04225,
+              "sample_sd": 20.72452656241177
+            },
+            "operation_active_union_us": {
+              "samples": [
+                21.04,
+                14.6005,
+                14.24,
+                13.92,
+                14.7205,
+                13.7805,
+                14.12,
+                15.0605,
+                14.9005,
+                14.3005
+              ],
+              "count": 10,
+              "mean": 15.068299999999999,
+              "sample_sd": 2.1390837238822087
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                237.025,
+                202.984,
+                190.644,
+                170.244,
+                189.924,
+                202.4635,
+                179.604,
+                179.444,
+                188.1635,
+                179.2435
+              ],
+              "count": 10,
+              "mean": 191.97395,
+              "sample_sd": 18.931484509864045
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_exclusive_prefix",
+              "_pack_seq_kernel_prefix",
+              "_unpack_seq_triton_kernel_prefix"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "c80d86d15f25600cdbeed390f88b0d0b290755d3c3724fcd5c94a5dd2af86e02",
+              "name": "_exclusive_prefix",
+              "binaries": {
+                "ttir": "75fba2a3b72e9c7204d737e57bc493641bf8089a945c11420d56801a7c8cc407",
+                "ttadapter": "90168ea3f6e09500553604b0c9758e4406295da42ffa6d328b3bcc7b0c6de2bd",
+                "npubin": "46e2dd8eaf89d5df9e0ea2bbbd9f435eb5d764b28acfae406fee348e6e89f0a3"
+              }
+            },
+            {
+              "hash": "80cd55c1bbbccd9d34badc0d23c651626aed98dde8220134d480cc7626fa6ad9",
+              "name": "_pack_seq_kernel_prefix",
+              "binaries": {
+                "ttir": "7cfdd471f3757a9d29aeca6d7bb1e01fb41f50c633ee39324db56440ab808d4a",
+                "ttadapter": "ecff62e1b686ab47378ea6e0ada0121bc53a3d25386b9d94063d6c9a46a3884b",
+                "npubin": "2327c8cf63e6fcc2a2db1078a1317e3bae2673b718cc61a5e51d54dd4fb5001e"
+              }
+            },
+            {
+              "hash": "f2e0161fed8aa590fa7a7d4622135410f8251164b22d7baad5164c74da24731a",
+              "name": "_unpack_seq_triton_kernel_prefix",
+              "binaries": {
+                "ttir": "2ab36504a00bc15e1ec214a6a33d5430577ceaa55a77e7b64b3b04e76d96da6a",
+                "ttadapter": "2aecbf1d57d0debdef1492ef72f396fd7f55cd8adb63c3c1dd4362e9e9d12dde",
+                "npubin": "7352de822f19244693145b42848d5fc1f4034577416932779676567f559a08ca"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "c80d86d15f25600cdbeed390f88b0d0b290755d3c3724fcd5c94a5dd2af86e02",
+              "name": "_exclusive_prefix",
+              "binaries": {
+                "ttir": "75fba2a3b72e9c7204d737e57bc493641bf8089a945c11420d56801a7c8cc407",
+                "ttadapter": "90168ea3f6e09500553604b0c9758e4406295da42ffa6d328b3bcc7b0c6de2bd",
+                "npubin": "46e2dd8eaf89d5df9e0ea2bbbd9f435eb5d764b28acfae406fee348e6e89f0a3"
+              }
+            },
+            {
+              "hash": "80cd55c1bbbccd9d34badc0d23c651626aed98dde8220134d480cc7626fa6ad9",
+              "name": "_pack_seq_kernel_prefix",
+              "binaries": {
+                "ttir": "7cfdd471f3757a9d29aeca6d7bb1e01fb41f50c633ee39324db56440ab808d4a",
+                "ttadapter": "ecff62e1b686ab47378ea6e0ada0121bc53a3d25386b9d94063d6c9a46a3884b",
+                "npubin": "2327c8cf63e6fcc2a2db1078a1317e3bae2673b718cc61a5e51d54dd4fb5001e"
+              }
+            },
+            {
+              "hash": "f2e0161fed8aa590fa7a7d4622135410f8251164b22d7baad5164c74da24731a",
+              "name": "_unpack_seq_triton_kernel_prefix",
+              "binaries": {
+                "ttir": "2ab36504a00bc15e1ec214a6a33d5430577ceaa55a77e7b64b3b04e76d96da6a",
+                "ttadapter": "2aecbf1d57d0debdef1492ef72f396fd7f55cd8adb63c3c1dd4362e9e9d12dde",
+                "npubin": "7352de822f19244693145b42848d5fc1f4034577416932779676567f559a08ca"
+              }
+            }
+          ],
+          "trace_sha256": "948c6b4c39343c7609fe9007942dee28c3f4abcfdef623ac818a0d3ee8c08055",
+          "accounting_sha256": "dadb7c1fc48aa2ff220709314525302909eafbd379f0ce4dce29c3e1cc654657"
+        }
+      }
+    },
+    {
+      "case_id": "W009-R02-03",
+      "role": "heldout",
+      "parameters": {
+        "B": 128,
+        "Lmax": 64,
+        "D": 256
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "arity": 2
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "prefix_exact": true,
+            "paired_exact_bits": true,
+            "exact_bits": true,
+            "arity": 2
+          }
+        }
+      },
+      "fixture_sha256": "a2699682aad3706ac7a6c93b65cfcadc8077ebee21dcad3a1cffdf9923c8c621",
+      "source_sha256": {
+        "pack_prefix.py": "b5f7a7d8419c49461c018f3496df85968bca040b3df85a0238508a46cc905a3b",
+        "pack_prefix_contract.py": "27d51c8d2d5724a109d1fe03d0cf3d5f85e73d0b4a418ea6788c21bc52c31bab",
+        "pack_prefix_kernels.py": "8cf1cda72acfed780c679297c0f44cf0f0e0eb2a46664df0cac25fb3861b015f"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "arm": "before",
+            "component": "prepared pack+unpack",
+            "grid": [
+              128,
+              1,
+              4
+            ],
+            "tiles": [
+              64,
+              64
+            ],
+            "flags": {
+              "num_warps": 4,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "device_kernel_calls": 2,
+            "reused_outputs": true,
+            "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+            "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+            "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+            "input_strides": {
+              "x": [
+                256,
+                1
+              ],
+              "lengths": [
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.0246399641036987,
+              0.4926599860191345,
+              0.3515399992465973,
+              0.32269999384880066,
+              0.3169200122356415,
+              0.31049999594688416,
+              0.32392001152038574,
+              0.33344000577926636,
+              0.33476001024246216,
+              0.33507999777793884
+            ],
+            "count": 10,
+            "mean": 0.414615997672081,
+            "sample_sd": 0.22074372824392766
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                43.421,
+                40.5005,
+                39.900999999999996,
+                40.141000000000005,
+                40.561,
+                40.181,
+                39.861,
+                39.8205,
+                40.001000000000005,
+                40.1605
+              ],
+              "count": 10,
+              "mean": 40.45485,
+              "sample_sd": 1.071827231361887
+            },
+            "device_active_union_us": {
+              "samples": [
+                43.421,
+                40.5005,
+                39.901,
+                40.141,
+                40.561,
+                40.181,
+                39.861,
+                39.8205,
+                40.001,
+                40.1605
+              ],
+              "count": 10,
+              "mean": 40.45485,
+              "sample_sd": 1.0718272313618873
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                7.105427357601002e-15,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                7.105427357601002e-15,
+                0.0
+              ],
+              "count": 10,
+              "mean": 1.4210854715202005e-15,
+              "sample_sd": 2.995911226518785e-15
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                138.9825,
+                99.422,
+                117.4825,
+                100.0225,
+                94.8815,
+                94.7015,
+                96.0025,
+                107.0615,
+                93.6825,
+                105.2025
+              ],
+              "count": 10,
+              "mean": 104.74414999999999,
+              "sample_sd": 14.093469157438369
+            },
+            "operation_active_union_us": {
+              "samples": [
+                43.421,
+                40.5005,
+                39.901,
+                40.141,
+                40.561,
+                40.181,
+                39.861,
+                39.8205,
+                40.001,
+                40.1605
+              ],
+              "count": 10,
+              "mean": 40.45485,
+              "sample_sd": 1.0718272313618873
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                95.5615,
+                58.9215,
+                77.5815,
+                59.8815,
+                54.3205,
+                54.5205,
+                56.1415,
+                67.241,
+                53.6815,
+                65.042
+              ],
+              "count": 10,
+              "mean": 64.2893,
+              "sample_sd": 13.274338795418608
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_pack_seq_kernel",
+              "_unpack_seq_triton_kernel"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "abb381f7754d4c228c67fb42645dfd0f14ee8ef5774ed9a0817edb840f5a8da0",
+              "name": "_pack_seq_kernel",
+              "binaries": {
+                "ttir": "73f97da0a40e7868a5f92af816b15ecc32112e4eafaf7e7e10337f57f67d874a",
+                "ttadapter": "37f1b74a6a7b9ff9e2aa8f848d2e0b8ec4e2a206156f60b6c7e4e4d5414f5f20",
+                "npubin": "950cfd9fddef89aca7fd0e45e9c3a55d0fd3a9ed6fb9d7838aa1cebe36f64fdc"
+              }
+            },
+            {
+              "hash": "ea0708780d6aabda422c71f70af79c6e7cfecdbffab427f1abda8e26b44d8003",
+              "name": "_unpack_seq_triton_kernel",
+              "binaries": {
+                "ttir": "281f622d400b864979b7906d4234a3f34ff0acbcda30b87111b681fbd04ead0a",
+                "ttadapter": "4c66e2e5d3236a4e6177280e177db70cee3a1e1fd45fb801f03c0a0589322b9a",
+                "npubin": "5f5b5bf7b4f92dbe41fdc460044c1d3a747a82d262a2760be58a6ea1a7ca9ca0"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "abb381f7754d4c228c67fb42645dfd0f14ee8ef5774ed9a0817edb840f5a8da0",
+              "name": "_pack_seq_kernel",
+              "binaries": {
+                "ttir": "73f97da0a40e7868a5f92af816b15ecc32112e4eafaf7e7e10337f57f67d874a",
+                "ttadapter": "37f1b74a6a7b9ff9e2aa8f848d2e0b8ec4e2a206156f60b6c7e4e4d5414f5f20",
+                "npubin": "950cfd9fddef89aca7fd0e45e9c3a55d0fd3a9ed6fb9d7838aa1cebe36f64fdc"
+              }
+            },
+            {
+              "hash": "ea0708780d6aabda422c71f70af79c6e7cfecdbffab427f1abda8e26b44d8003",
+              "name": "_unpack_seq_triton_kernel",
+              "binaries": {
+                "ttir": "281f622d400b864979b7906d4234a3f34ff0acbcda30b87111b681fbd04ead0a",
+                "ttadapter": "4c66e2e5d3236a4e6177280e177db70cee3a1e1fd45fb801f03c0a0589322b9a",
+                "npubin": "5f5b5bf7b4f92dbe41fdc460044c1d3a747a82d262a2760be58a6ea1a7ca9ca0"
+              }
+            }
+          ],
+          "trace_sha256": "96a00bd98567023c80e236583464808b078be10d3f6e968ea3affc41073ec496",
+          "accounting_sha256": "b6293576e9639a4abdd9399b9716dbea9310f72417897689e9dd5d58f54dcbc1"
+        },
+        "after": {
+          "metadata": {
+            "arm": "after",
+            "component": "prepared pack+unpack",
+            "grid": [
+              128,
+              1,
+              4
+            ],
+            "tiles": [
+              64,
+              64
+            ],
+            "flags": {
+              "num_warps": 4,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "device_kernel_calls": 3,
+            "reused_outputs": true,
+            "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+            "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+            "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+            "input_strides": {
+              "x": [
+                256,
+                1
+              ],
+              "lengths": [
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.615880012512207,
+              0.8189200162887573,
+              0.5323600172996521,
+              0.44523999094963074,
+              0.4402799904346466,
+              0.4390200078487396,
+              0.5829600095748901,
+              0.4401800036430359,
+              0.42719998955726624,
+              0.41071999073028564
+            ],
+            "count": 10,
+            "mean": 0.6152760028839112,
+            "sample_sd": 0.3725400852003131
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                44.241,
+                41.161,
+                43.3005,
+                42.9405,
+                41.161,
+                40.961,
+                40.9615,
+                41.081,
+                41.201,
+                41.681000000000004
+              ],
+              "count": 10,
+              "mean": 41.86895,
+              "sample_sd": 1.1821237350632965
+            },
+            "device_active_union_us": {
+              "samples": [
+                44.241,
+                41.161,
+                43.3005,
+                42.9405,
+                41.161,
+                40.961,
+                40.9615,
+                41.081,
+                41.201,
+                41.681
+              ],
+              "count": 10,
+              "mean": 41.86895,
+              "sample_sd": 1.1821237350632965
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                7.105427357601002e-15
+              ],
+              "count": 10,
+              "mean": 7.105427357601002e-16,
+              "sample_sd": 2.2469334198890887e-15
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                361.8275,
+                299.4255,
+                219.324,
+                203.564,
+                204.0445,
+                222.024,
+                217.0245,
+                202.6235,
+                196.4245,
+                202.3645
+              ],
+              "count": 10,
+              "mean": 232.86464999999998,
+              "sample_sd": 54.23748463063468
+            },
+            "operation_active_union_us": {
+              "samples": [
+                44.241,
+                41.161,
+                43.3005,
+                42.9405,
+                41.161,
+                40.961,
+                40.9615,
+                41.081,
+                41.201,
+                41.681
+              ],
+              "count": 10,
+              "mean": 41.86895,
+              "sample_sd": 1.1821237350632965
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                317.5865,
+                258.2645,
+                176.0235,
+                160.6235,
+                162.8835,
+                181.063,
+                176.063,
+                161.5425,
+                155.2235,
+                160.6835
+              ],
+              "count": 10,
+              "mean": 190.9957,
+              "sample_sd": 53.61889178172186
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_exclusive_prefix",
+              "_pack_seq_kernel_prefix",
+              "_unpack_seq_triton_kernel_prefix"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "90bf3d4e46a78627e1b8e5801beedc2b15f1a2d82e909987c2dcc5004f36c610",
+              "name": "_exclusive_prefix",
+              "binaries": {
+                "ttir": "aa81c64ecbd3c605eeba69ed797de13484cf40c2b715423161046c1a244024a5",
+                "ttadapter": "bf9a994d5d3a8a8fb842f9ae845d798f205e4f0cdc2d0c8d443251806ed18462",
+                "npubin": "873015ca01b0c011503256261002395ee9a5a5e49fdc1137363257e2a9f80b87"
+              }
+            },
+            {
+              "hash": "a014f02a600cbafe64e77159c0faf90a934cd5655d9c6bfbe62302115eac6018",
+              "name": "_pack_seq_kernel_prefix",
+              "binaries": {
+                "ttir": "aae4741c6c1dfa50adedbb268c869633eedcafa122fc2152fd35d2015e0ae6fa",
+                "ttadapter": "82d8d27b24d8e06ac050086e54e1340823615c1d9c7b796427a4995678067fa8",
+                "npubin": "8cc5bc733d525000b5c3f532d223fddc50df8df2826fbf3adc9448cd1826fa74"
+              }
+            },
+            {
+              "hash": "b3f21e4ba315534db6d3eb8490688750e73ea2eb0ff3703afcefd3eae70d1311",
+              "name": "_unpack_seq_triton_kernel_prefix",
+              "binaries": {
+                "ttir": "da69e954fdafd4a8f7b67ceff826d6e10f3be3289df9b46f0fade459ad15eaf2",
+                "ttadapter": "49091c5351032c97f77352fd130b406f8002d08ce4fc0772fe125695e63b8b25",
+                "npubin": "b71bb29a7a4ea364a83610dfe350d0c2d3b211ad3d1d5292ac97f2496fa54f9f"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "90bf3d4e46a78627e1b8e5801beedc2b15f1a2d82e909987c2dcc5004f36c610",
+              "name": "_exclusive_prefix",
+              "binaries": {
+                "ttir": "aa81c64ecbd3c605eeba69ed797de13484cf40c2b715423161046c1a244024a5",
+                "ttadapter": "bf9a994d5d3a8a8fb842f9ae845d798f205e4f0cdc2d0c8d443251806ed18462",
+                "npubin": "873015ca01b0c011503256261002395ee9a5a5e49fdc1137363257e2a9f80b87"
+              }
+            },
+            {
+              "hash": "a014f02a600cbafe64e77159c0faf90a934cd5655d9c6bfbe62302115eac6018",
+              "name": "_pack_seq_kernel_prefix",
+              "binaries": {
+                "ttir": "aae4741c6c1dfa50adedbb268c869633eedcafa122fc2152fd35d2015e0ae6fa",
+                "ttadapter": "82d8d27b24d8e06ac050086e54e1340823615c1d9c7b796427a4995678067fa8",
+                "npubin": "8cc5bc733d525000b5c3f532d223fddc50df8df2826fbf3adc9448cd1826fa74"
+              }
+            },
+            {
+              "hash": "b3f21e4ba315534db6d3eb8490688750e73ea2eb0ff3703afcefd3eae70d1311",
+              "name": "_unpack_seq_triton_kernel_prefix",
+              "binaries": {
+                "ttir": "da69e954fdafd4a8f7b67ceff826d6e10f3be3289df9b46f0fade459ad15eaf2",
+                "ttadapter": "49091c5351032c97f77352fd130b406f8002d08ce4fc0772fe125695e63b8b25",
+                "npubin": "b71bb29a7a4ea364a83610dfe350d0c2d3b211ad3d1d5292ac97f2496fa54f9f"
+              }
+            }
+          ],
+          "trace_sha256": "857c12a172404dc0d6a14328b1599f76162160fbbc4c3433c83e6d1c2438eabe",
+          "accounting_sha256": "7b8dbf575e46a4788986720881def3865e3332a73048bad9322a2f97964894e6"
+        }
+      }
+    },
+    {
+      "case_id": "W009-R02-04",
+      "role": "heldout",
+      "parameters": {
+        "B": 256,
+        "Lmax": 128,
+        "D": 256
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "arity": 2
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "prefix_exact": true,
+            "paired_exact_bits": true,
+            "exact_bits": true,
+            "arity": 2
+          }
+        }
+      },
+      "fixture_sha256": "89819af6240945fd0095febb3fc517f85dbbb30257d4812c7382cf70dfb31dd7",
+      "source_sha256": {
+        "pack_prefix.py": "b5f7a7d8419c49461c018f3496df85968bca040b3df85a0238508a46cc905a3b",
+        "pack_prefix_contract.py": "27d51c8d2d5724a109d1fe03d0cf3d5f85e73d0b4a418ea6788c21bc52c31bab",
+        "pack_prefix_kernels.py": "8cf1cda72acfed780c679297c0f44cf0f0e0eb2a46664df0cac25fb3861b015f"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "arm": "before",
+            "component": "prepared pack+unpack",
+            "grid": [
+              256,
+              2,
+              4
+            ],
+            "tiles": [
+              64,
+              64
+            ],
+            "flags": {
+              "num_warps": 4,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "device_kernel_calls": 2,
+            "reused_outputs": true,
+            "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+            "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+            "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+            "input_strides": {
+              "x": [
+                256,
+                1
+              ],
+              "lengths": [
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.995199978351593,
+              0.5081800222396851,
+              0.32638001441955566,
+              0.34483999013900757,
+              0.3239800035953522,
+              0.3352600038051605,
+              0.30847999453544617,
+              0.31025999784469604,
+              0.3239400088787079,
+              0.47402000427246094
+            ],
+            "count": 10,
+            "mean": 0.4250540018081665,
+            "sample_sd": 0.21234536856781525
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                118.1425,
+                109.2025,
+                109.822,
+                108.2225,
+                108.1225,
+                109.9625,
+                108.8825,
+                110.7225,
+                108.72200000000001,
+                109.462
+              ],
+              "count": 10,
+              "mean": 110.12635,
+              "sample_sd": 2.928553160502449
+            },
+            "device_active_union_us": {
+              "samples": [
+                118.1425,
+                109.2025,
+                109.822,
+                108.2225,
+                108.1225,
+                109.9625,
+                108.8825,
+                110.7225,
+                108.722,
+                109.462
+              ],
+              "count": 10,
+              "mean": 110.12635,
+              "sample_sd": 2.92855316050245
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.4210854715202004e-14,
+                0.0
+              ],
+              "count": 10,
+              "mean": 1.4210854715202005e-15,
+              "sample_sd": 4.4938668397781774e-15
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                139.083,
+                122.483,
+                133.402,
+                122.343,
+                120.782,
+                121.083,
+                136.283,
+                118.343,
+                120.822,
+                132.263
+              ],
+              "count": 10,
+              "mean": 126.6887,
+              "sample_sd": 7.6649661744560555
+            },
+            "operation_active_union_us": {
+              "samples": [
+                118.1425,
+                109.2025,
+                109.822,
+                108.2225,
+                108.1225,
+                109.9625,
+                108.8825,
+                110.7225,
+                108.722,
+                109.462
+              ],
+              "count": 10,
+              "mean": 110.12635,
+              "sample_sd": 2.92855316050245
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                20.9405,
+                13.2805,
+                23.58,
+                14.1205,
+                12.6595,
+                11.1205,
+                27.4005,
+                7.6205,
+                12.1,
+                22.801
+              ],
+              "count": 10,
+              "mean": 16.56235,
+              "sample_sd": 6.551083434779658
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_pack_seq_kernel",
+              "_unpack_seq_triton_kernel"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "77a822ebdacff1f6320f3c0d8db6bf93fb95a71e470b431899fcd94edb72085b",
+              "name": "_pack_seq_kernel",
+              "binaries": {
+                "ttir": "e94c36a63210bd4458e8d6649fd372fc7ababe5b22b9157957d2a27b09549c3f",
+                "ttadapter": "792692fd465378df80ced55d5547bf7fc106ff46006be3139c9fb154a59734c8",
+                "npubin": "b28b60ac7d3f2ca5a7bcfd8b79256d7e7763389eaeaf1f5e37d270ddb786d83f"
+              }
+            },
+            {
+              "hash": "a1f5eacb92172fefe5bf3c982107b08701b47fcd26ec1c5cf2c679d4687bdfa7",
+              "name": "_unpack_seq_triton_kernel",
+              "binaries": {
+                "ttir": "33952828d1c3ec332b16a985d9b7ad7c091e0571aa0bb383f85eb2b721df4d76",
+                "ttadapter": "1aa84260014a8a0ecd4787fd0dee8a588406554bc98a3a5839d7b6ce963cee4c",
+                "npubin": "f241de210db2e5043ea7dfa985b5145cb26c37ee9b126ba710a43a5f5d380da3"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "77a822ebdacff1f6320f3c0d8db6bf93fb95a71e470b431899fcd94edb72085b",
+              "name": "_pack_seq_kernel",
+              "binaries": {
+                "ttir": "e94c36a63210bd4458e8d6649fd372fc7ababe5b22b9157957d2a27b09549c3f",
+                "ttadapter": "792692fd465378df80ced55d5547bf7fc106ff46006be3139c9fb154a59734c8",
+                "npubin": "b28b60ac7d3f2ca5a7bcfd8b79256d7e7763389eaeaf1f5e37d270ddb786d83f"
+              }
+            },
+            {
+              "hash": "a1f5eacb92172fefe5bf3c982107b08701b47fcd26ec1c5cf2c679d4687bdfa7",
+              "name": "_unpack_seq_triton_kernel",
+              "binaries": {
+                "ttir": "33952828d1c3ec332b16a985d9b7ad7c091e0571aa0bb383f85eb2b721df4d76",
+                "ttadapter": "1aa84260014a8a0ecd4787fd0dee8a588406554bc98a3a5839d7b6ce963cee4c",
+                "npubin": "f241de210db2e5043ea7dfa985b5145cb26c37ee9b126ba710a43a5f5d380da3"
+              }
+            }
+          ],
+          "trace_sha256": "8c47cff4933c38eaad65fdaa84dff1c6161eaaabdcd56f8af456106eb0fbbb0c",
+          "accounting_sha256": "1a8bc6058594b8168d4da8339cb68ec3f619be31412d431b6807bc8219314c7e"
+        },
+        "after": {
+          "metadata": {
+            "arm": "after",
+            "component": "prepared pack+unpack",
+            "grid": [
+              256,
+              2,
+              4
+            ],
+            "tiles": [
+              64,
+              64
+            ],
+            "flags": {
+              "num_warps": 4,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "device_kernel_calls": 3,
+            "reused_outputs": true,
+            "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+            "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+            "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+            "input_strides": {
+              "x": [
+                256,
+                1
+              ],
+              "lengths": [
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.152340054512024,
+              0.6202999949455261,
+              0.42489999532699585,
+              0.4135400056838989,
+              0.4417800009250641,
+              0.40786001086235046,
+              0.43178001046180725,
+              0.5646799802780151,
+              0.41471999883651733,
+              0.39667999744415283
+            ],
+            "count": 10,
+            "mean": 0.5268580049276352,
+            "sample_sd": 0.23204069728659713
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                120.322,
+                116.0025,
+                114.103,
+                115.9025,
+                114.8025,
+                114.782,
+                118.503,
+                115.2025,
+                115.562,
+                116.7625
+              ],
+              "count": 10,
+              "mean": 116.19445,
+              "sample_sd": 1.9003360294958385
+            },
+            "device_active_union_us": {
+              "samples": [
+                120.322,
+                116.0025,
+                114.103,
+                115.9025,
+                114.8025,
+                114.782,
+                118.503,
+                115.2025,
+                115.562,
+                116.7625
+              ],
+              "count": 10,
+              "mean": 116.19445,
+              "sample_sd": 1.9003360294958385
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                290.826,
+                269.686,
+                226.805,
+                229.025,
+                253.9055,
+                237.405,
+                235.785,
+                220.724,
+                228.744,
+                211.524
+              ],
+              "count": 10,
+              "mean": 240.44295,
+              "sample_sd": 24.23070811829256
+            },
+            "operation_active_union_us": {
+              "samples": [
+                120.322,
+                116.0025,
+                114.103,
+                115.9025,
+                114.8025,
+                114.782,
+                118.503,
+                115.2025,
+                115.562,
+                116.7625
+              ],
+              "count": 10,
+              "mean": 116.19445,
+              "sample_sd": 1.9003360294958385
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                170.504,
+                153.6835,
+                112.702,
+                113.1225,
+                139.103,
+                122.623,
+                117.282,
+                105.5215,
+                113.182,
+                94.7615
+              ],
+              "count": 10,
+              "mean": 124.2485,
+              "sample_sd": 23.279895252007567
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_exclusive_prefix",
+              "_pack_seq_kernel_prefix",
+              "_unpack_seq_triton_kernel_prefix"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "f9c44cb9c6c0140a62bbcf10edfcd346e07520e1ad7fa9d43c0192afecc67603",
+              "name": "_exclusive_prefix",
+              "binaries": {
+                "ttir": "322660a8c4b61a7e47a9580d811f9cc5ed689c1545d8d3932cf79b01d3270076",
+                "ttadapter": "a045fea1bf73fb86cca425a19e10dfe40c14d9be4588285f333ac29654824e55",
+                "npubin": "89720b53a7f12f141290d93ac07d7c4c21f735071f2133080e1ac71e0ae930fe"
+              }
+            },
+            {
+              "hash": "fa95fd13ec30f28c12dda1c0a6ce1763d70aff1a34e3dae22a4072bc9e61a8b7",
+              "name": "_pack_seq_kernel_prefix",
+              "binaries": {
+                "ttir": "a4420417919d031afc7cbcdf1029b0a84b3496fe43a3b867744018923f9cf9be",
+                "ttadapter": "1366e38a09c5733518a28c2dbdc6d53a4e59add5cc76c6eaa1da3eb8becddefe",
+                "npubin": "60d79384f52f38422b7a4e91a5f956703ec22c81ccfb7bf4ec1a7161d506987c"
+              }
+            },
+            {
+              "hash": "92416e3b1ac82090026ef86285cf8900bb33b860b3417d34eb1ec6ac9ec8b602",
+              "name": "_unpack_seq_triton_kernel_prefix",
+              "binaries": {
+                "ttir": "160f66a71a5c922f6970e9e54aca6060bd0094c481c6f9258f5ec31b638f36fe",
+                "ttadapter": "175a3f6108758be6d3b0bc31304e4ab0fc372a64cd66743dd6452c835fe156f9",
+                "npubin": "a84df3b0456bccb244f4f698df30849516526dfe23a32d4087449b61c9dcb395"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "f9c44cb9c6c0140a62bbcf10edfcd346e07520e1ad7fa9d43c0192afecc67603",
+              "name": "_exclusive_prefix",
+              "binaries": {
+                "ttir": "322660a8c4b61a7e47a9580d811f9cc5ed689c1545d8d3932cf79b01d3270076",
+                "ttadapter": "a045fea1bf73fb86cca425a19e10dfe40c14d9be4588285f333ac29654824e55",
+                "npubin": "89720b53a7f12f141290d93ac07d7c4c21f735071f2133080e1ac71e0ae930fe"
+              }
+            },
+            {
+              "hash": "fa95fd13ec30f28c12dda1c0a6ce1763d70aff1a34e3dae22a4072bc9e61a8b7",
+              "name": "_pack_seq_kernel_prefix",
+              "binaries": {
+                "ttir": "a4420417919d031afc7cbcdf1029b0a84b3496fe43a3b867744018923f9cf9be",
+                "ttadapter": "1366e38a09c5733518a28c2dbdc6d53a4e59add5cc76c6eaa1da3eb8becddefe",
+                "npubin": "60d79384f52f38422b7a4e91a5f956703ec22c81ccfb7bf4ec1a7161d506987c"
+              }
+            },
+            {
+              "hash": "92416e3b1ac82090026ef86285cf8900bb33b860b3417d34eb1ec6ac9ec8b602",
+              "name": "_unpack_seq_triton_kernel_prefix",
+              "binaries": {
+                "ttir": "160f66a71a5c922f6970e9e54aca6060bd0094c481c6f9258f5ec31b638f36fe",
+                "ttadapter": "175a3f6108758be6d3b0bc31304e4ab0fc372a64cd66743dd6452c835fe156f9",
+                "npubin": "a84df3b0456bccb244f4f698df30849516526dfe23a32d4087449b61c9dcb395"
+              }
+            }
+          ],
+          "trace_sha256": "5c17422daefd1c08d2e3f104b0d214aed136cb858af7574b5156fd0c9b535c45",
+          "accounting_sha256": "143bd470fe8f3bece8c130b7a259e970f9102a1c755a9b036b1d78700cfdb510"
+        }
+      }
+    },
+    {
+      "case_id": "W009-R02-GA",
+      "role": "guard",
+      "parameters": {
+        "B": 3,
+        "Lmax": 17,
+        "D": 65,
+        "lengths": [
+          0,
+          17,
+          3
+        ]
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "arity": 2
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "prefix_exact": true,
+            "paired_exact_bits": true,
+            "exact_bits": true,
+            "arity": 2
+          }
+        }
+      },
+      "fixture_sha256": "c27bcaa3dcb1c6791deaf3255e7613bb98f8060809cdee85f6b1545359e06a9c",
+      "source_sha256": {
+        "pack_prefix.py": "b5f7a7d8419c49461c018f3496df85968bca040b3df85a0238508a46cc905a3b",
+        "pack_prefix_contract.py": "27d51c8d2d5724a109d1fe03d0cf3d5f85e73d0b4a418ea6788c21bc52c31bab",
+        "pack_prefix_kernels.py": "8cf1cda72acfed780c679297c0f44cf0f0e0eb2a46664df0cac25fb3861b015f"
+      }
+    },
+    {
+      "case_id": "W009-R02-GB",
+      "role": "guard",
+      "parameters": {
+        "B": 1,
+        "Lmax": 1,
+        "D": 1,
+        "lengths": [
+          1
+        ],
+        "signed_zero": true
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "arity": 2
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "prefix_exact": true,
+            "paired_exact_bits": true,
+            "exact_bits": true,
+            "arity": 2
+          }
+        }
+      },
+      "fixture_sha256": "eb01128f91c05a252a3cbae06602baac3977c7f2d634a0b12ea19cfc0c784967",
+      "source_sha256": {
+        "pack_prefix.py": "b5f7a7d8419c49461c018f3496df85968bca040b3df85a0238508a46cc905a3b",
+        "pack_prefix_contract.py": "27d51c8d2d5724a109d1fe03d0cf3d5f85e73d0b4a418ea6788c21bc52c31bab",
+        "pack_prefix_kernels.py": "8cf1cda72acfed780c679297c0f44cf0f0e0eb2a46664df0cac25fb3861b015f"
+      }
+    }
+  ],
+  "acquisition": {
+    "science_handle": "remote:bz-a3-2:job:20261025T023527Z-046a1c9874ff",
+    "prior_staging_failure": {
+      "handle": "remote:bz-a3-2:job:20261025T023345Z-734baa02cc7c",
+      "category": "staging archive absent before controller",
+      "compile_calls": 0,
+      "scientific_cpu_payloads": 0,
+      "numeric_device_calls": 0,
+      "profiled_calls": 0
+    },
+    "retuning": false,
+    "scientific_replays": 0,
+    "release_confirmed": true
+  }
+}

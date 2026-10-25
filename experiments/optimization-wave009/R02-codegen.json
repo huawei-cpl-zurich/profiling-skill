@@ -1,0 +1,485 @@
+{
+  "overall": {
+    "status": "all-input-only-components-compiled",
+    "before_components": 2,
+    "after_components": 3,
+    "detail": "all IR/binaries/resources retained; no instruction or identical-ELF claim",
+    "expected_prefix_entry": "_exclusive_prefix"
+  },
+  "cases": [
+    {
+      "case_id": "W009-R02-01",
+      "arms": {
+        "before": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1032,
+                "sha256": "5679b1970d068cabef2d221315a0552322dbf7d66cb26e0a474baac2adb54e79",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 1,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 796,
+                "sha256": "07a89d1952f23e240de99e464a5d7e02a72c2415dc9acdd70c45dde29c096d66",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 264,
+                "sha256": "90bcea5e7c4ff14eb397c46d32321427fca4b5d7b71350b5e7d53cc0fa5b521c",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 1,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1012,
+                "sha256": "92e5c505ffaed2a2460595e16170a6da990a255dde41f6b53a334144a7f93f7f",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 2,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 768,
+                "sha256": "5a81f011a5ee19ae47e81b974381a8aaad013ae4dec56e2995cd98b52a0a7410",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R02-02",
+      "arms": {
+        "before": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1012,
+                "sha256": "d19ac9fda331fb960ed8119e3b7386cf12b31ac632998f55a51cddca3dbaa751",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 1,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 784,
+                "sha256": "a9153cbf53b24caa4b8dd56d963fe2bf0b80fec50531e51271f84797f70e288e",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 272,
+                "sha256": "f27f3f8ceda958841e05ed66c4f3b958acdebe52c5f51009dd38e5aa98c094c1",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 1,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 996,
+                "sha256": "3b769bf0e09493975adba422927ed4768992c19273dc74a346ac4fdf5dc0f1bf",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 2,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 748,
+                "sha256": "35052247eb2c472df8a472e8028f69f276c8b7b4a8c2520a103284fb33a9151f",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R02-03",
+      "arms": {
+        "before": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1012,
+                "sha256": "04926585fbb4854315a67e466640c89fbbcf473b3800ea3f116b3e47d250c2fe",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 1,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 784,
+                "sha256": "4f9b0e2ea0f9bbe24acbcae2b20ae7717012253e6f367e15e7b71922ad197424",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 272,
+                "sha256": "f96983be082d2e927a496fd3706fa8fc63692f7624a950cb1ab0f51444963a5c",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 1,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 996,
+                "sha256": "a246c8272d6eeb6352da64165a32e79e8c2a2c818c521ebb26cc5022c0d4dff4",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 2,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 748,
+                "sha256": "5c428df5e1ad22af494aa95de64b60c781205a3a40fd93db9acce5811a2b44a8",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R02-04",
+      "arms": {
+        "before": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1036,
+                "sha256": "0361dbb2d92ebbb95479dce063cd39c235cd801e4429d42183720ea6685d4b4f",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 1,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 780,
+                "sha256": "347e89911ff7016b4452b3cf6a03ce271435f047ebc9024716b5c553b4481bd6",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 272,
+                "sha256": "b79f4002243ad1cdb2b56e85a6af17210ee6e52cb18c25603a71d7bb69551a45",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 1,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1000,
+                "sha256": "8df81db0cfa6a1e7a1336ea3ed4fdf0b8c84eb374f3685092b07013f8ca301b4",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 2,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 752,
+                "sha256": "248bc1b1e59b03eac3a3eff23e1b86bcd57943d47b0281a45e3456fd46829713",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R02-GA",
+      "arms": {
+        "before": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1048,
+                "sha256": "87ac3450bb125ab20603471d998aeffa92221f83383990c6ba2570bb1c34c5d0",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 1,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 800,
+                "sha256": "72c7d24682ca4770ab2fa7e47cef5e0aa6b78c2e606201b29bac13c9c6e1df4c",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 324,
+                "sha256": "e0bcf454f0a8cfca825a72ccf99f4e9c9284ba2fe07b189260cd502f73d2c1f7",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 1,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1016,
+                "sha256": "1757714133daf767cd13be1d35565546acd169de157991b5cefcc99a4699814d",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 2,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 768,
+                "sha256": "6a0f336467adcc63728a453e86589ceafed7e7186ba80a1ce782698e0f143c9c",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R02-GB",
+      "arms": {
+        "before": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1220,
+                "sha256": "ab59e3d43c75740b9a11b4161e9ffad8607398f48553999c2352a0340d3caccb",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 1,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 940,
+                "sha256": "57c1660f7ec4229d5e69e2b22a1fc7ab293db7ac8351163d5cb4bfe2ea8525dc",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 200,
+                "sha256": "200811410f487c264a966b4149f9bf0cf71040f897e3ca73233c976f4a0c7dd0",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 1,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1200,
+                "sha256": "82e720aed58cb4b37ec2699c9d2333dc1cf7097928d873cb8ba81cf42ae1454d",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          },
+          {
+            "index": 2,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 908,
+                "sha256": "f6dd959a4aacac1a0b13b6c85d3a1d8404ee475987ade83d50b2eea21690c84e",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

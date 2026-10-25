@@ -1,0 +1,142 @@
+{
+  "cases": [
+    {
+      "name": "W009-R02-01",
+      "performance": true,
+      "scenario": [
+        "gallery",
+        "contiguous-fp32-int32",
+        "ragged-pack-unpack"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "contiguous X[N,D]/packed[B,Lmax,D]/roundtrip[N,D]; private outputs offset32 with 64 sentinels; active and padded signed-int32 address bounds in docs/optimization-pack-prefix.md; full input immutability, both outputs bitexact/padding/signedzero, internal GPU prefix checked once against same cached CPU expected"
+      },
+      "selected_candidate_kernels": [
+        "_exclusive_prefix",
+        "_pack_seq_kernel_prefix",
+        "_unpack_seq_triton_kernel_prefix"
+      ],
+      "scope": "whole prepared scan+pack+unpack; both outputs bitexact; internal prefix checked once within numerical gate"
+    },
+    {
+      "name": "W009-R02-02",
+      "performance": true,
+      "scenario": [
+        "gallery",
+        "contiguous-fp32-int32",
+        "ragged-pack-unpack"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "contiguous X[N,D]/packed[B,Lmax,D]/roundtrip[N,D]; private outputs offset32 with 64 sentinels; active and padded signed-int32 address bounds in docs/optimization-pack-prefix.md; full input immutability, both outputs bitexact/padding/signedzero, internal GPU prefix checked once against same cached CPU expected"
+      },
+      "selected_candidate_kernels": [
+        "_exclusive_prefix",
+        "_pack_seq_kernel_prefix",
+        "_unpack_seq_triton_kernel_prefix"
+      ],
+      "scope": "whole prepared scan+pack+unpack; both outputs bitexact; internal prefix checked once within numerical gate"
+    },
+    {
+      "name": "W009-R02-03",
+      "performance": true,
+      "scenario": [
+        "heldout",
+        "contiguous-fp32-int32",
+        "ragged-pack-unpack"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "contiguous X[N,D]/packed[B,Lmax,D]/roundtrip[N,D]; private outputs offset32 with 64 sentinels; active and padded signed-int32 address bounds in docs/optimization-pack-prefix.md; full input immutability, both outputs bitexact/padding/signedzero, internal GPU prefix checked once against same cached CPU expected"
+      },
+      "selected_candidate_kernels": [
+        "_exclusive_prefix",
+        "_pack_seq_kernel_prefix",
+        "_unpack_seq_triton_kernel_prefix"
+      ],
+      "scope": "whole prepared scan+pack+unpack; both outputs bitexact; internal prefix checked once within numerical gate"
+    },
+    {
+      "name": "W009-R02-04",
+      "performance": true,
+      "scenario": [
+        "heldout",
+        "contiguous-fp32-int32",
+        "ragged-pack-unpack"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "contiguous X[N,D]/packed[B,Lmax,D]/roundtrip[N,D]; private outputs offset32 with 64 sentinels; active and padded signed-int32 address bounds in docs/optimization-pack-prefix.md; full input immutability, both outputs bitexact/padding/signedzero, internal GPU prefix checked once against same cached CPU expected"
+      },
+      "selected_candidate_kernels": [
+        "_exclusive_prefix",
+        "_pack_seq_kernel_prefix",
+        "_unpack_seq_triton_kernel_prefix"
+      ],
+      "scope": "whole prepared scan+pack+unpack; both outputs bitexact; internal prefix checked once within numerical gate"
+    },
+    {
+      "name": "W009-R02-GA",
+      "performance": false,
+      "scenario": [
+        "guard",
+        "contiguous-fp32-int32",
+        "ragged-pack-unpack"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "contiguous X[N,D]/packed[B,Lmax,D]/roundtrip[N,D]; private outputs offset32 with 64 sentinels; active and padded signed-int32 address bounds in docs/optimization-pack-prefix.md; full input immutability, both outputs bitexact/padding/signedzero, internal GPU prefix checked once against same cached CPU expected"
+      },
+      "selected_candidate_kernels": [
+        "_exclusive_prefix",
+        "_pack_seq_kernel_prefix",
+        "_unpack_seq_triton_kernel_prefix"
+      ],
+      "scope": "whole prepared scan+pack+unpack; both outputs bitexact; internal prefix checked once within numerical gate"
+    },
+    {
+      "name": "W009-R02-GB",
+      "performance": false,
+      "scenario": [
+        "guard",
+        "contiguous-fp32-int32",
+        "ragged-pack-unpack"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "contiguous X[N,D]/packed[B,Lmax,D]/roundtrip[N,D]; private outputs offset32 with 64 sentinels; active and padded signed-int32 address bounds in docs/optimization-pack-prefix.md; full input immutability, both outputs bitexact/padding/signedzero, internal GPU prefix checked once against same cached CPU expected"
+      },
+      "selected_candidate_kernels": [
+        "_exclusive_prefix",
+        "_pack_seq_kernel_prefix",
+        "_unpack_seq_triton_kernel_prefix"
+      ],
+      "scope": "whole prepared scan+pack+unpack; both outputs bitexact; internal prefix checked once within numerical gate"
+    }
+  ]
+}

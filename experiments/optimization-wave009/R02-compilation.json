@@ -1,0 +1,752 @@
+[
+  {
+    "case_id": "W009-R02-01",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "a94b188c6115042c6ac6f5c053fce54242b90874144edf0ecebb1539c89d3873",
+        "name": "_pack_seq_kernel",
+        "binaries": {
+          "ttir": "762d4b1c11fc66a7f20fa92a8ed4205bdc4fecb1674878b3d1f858b9d2e66b82",
+          "ttadapter": "91cc0db45df212f5a6ed5c5d01b4f91eb9c88a7060bab72847f4812ad5818b29",
+          "npubin": "77dc35b65605f0c74587f1242b1954362e088adc040c98ccb99417b1af1720dd"
+        }
+      },
+      {
+        "hash": "7c9ec26f4e5c002f12b858564d2c0043cedeb3a3ee1a0c61a6d4013b608b8aaf",
+        "name": "_unpack_seq_triton_kernel",
+        "binaries": {
+          "ttir": "8928c0b66381cde26361df55f2d5682c07bf6d965de4333c91b593ad360a6850",
+          "ttadapter": "2b962903362c34802f6fe0931ffa60732de63be3415f313aeeb70fef4ebd415c",
+          "npubin": "26600e04978edb1a5e673bd770a62cf73fd77ad12b261bdd96f0a0a7bb0c5c52"
+        }
+      }
+    ],
+    "metadata": {
+      "arm": "before",
+      "component": "prepared pack+unpack",
+      "grid": [
+        4,
+        1,
+        1
+      ],
+      "tiles": [
+        64,
+        64
+      ],
+      "flags": {
+        "num_warps": 4,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "device_kernel_calls": 0,
+      "reused_outputs": true,
+      "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+      "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+      "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+      "input_strides": {
+        "x": [
+          64,
+          1
+        ],
+        "lengths": [
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R02-01",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "e7cdf71a8c1d54dc85735ea1b069fa53691daa69fb57be6cb26debdee2a36233",
+        "name": "_exclusive_prefix",
+        "binaries": {
+          "ttir": "c57b1b2139832811a903c4994618225c398c95743d658c35febb459a82b46a03",
+          "ttadapter": "b10fd034b040c8a839315bbe2cc7fedae779978bf677c900a10d53bf58006065",
+          "npubin": "6dbe413cebe414d73584efe202ae69d96128733d669e109e92ed846b0b173018"
+        }
+      },
+      {
+        "hash": "64aa9f2c2262583861ebb0f0f6e73cc01389e6abd1407dae83f5b1b4edcd95ee",
+        "name": "_pack_seq_kernel_prefix",
+        "binaries": {
+          "ttir": "45771410e009acc05f03b2cde56dc5382c7d298c296fa5ade0bc30539e34fc2e",
+          "ttadapter": "76223e03e7e95edcf87f0e251a276cb73f1082f5b8a79edab971a958f26dab4a",
+          "npubin": "50ae0b53fa624ca735221ea86237d8c70ea39ac36d5fa115e10bcee8f509e766"
+        }
+      },
+      {
+        "hash": "6f249119d154ebb7ea0f2d4450eef1ebe37843402485c7c10a77893cac11d462",
+        "name": "_unpack_seq_triton_kernel_prefix",
+        "binaries": {
+          "ttir": "e4470f75ebf9ce126e65ac5c0e202ea7abd380b4725d6ffd3a70499545030879",
+          "ttadapter": "75c62c0a5da23ac8982d1372a893266eb755e816bd96da750d50271687e60bcf",
+          "npubin": "4624d9b6ee85ad65ff998b1b6dde4911b042d2bd1edda066ca9c74866aefb1bd"
+        }
+      }
+    ],
+    "metadata": {
+      "arm": "after",
+      "component": "prepared pack+unpack",
+      "grid": [
+        4,
+        1,
+        1
+      ],
+      "tiles": [
+        64,
+        64
+      ],
+      "flags": {
+        "num_warps": 4,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "device_kernel_calls": 0,
+      "reused_outputs": true,
+      "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+      "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+      "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+      "input_strides": {
+        "x": [
+          64,
+          1
+        ],
+        "lengths": [
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R02-02",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "4cbc3e2078586908902eea6ebf6c1f572e28d473945a8073b0fb12bb1358659c",
+        "name": "_pack_seq_kernel",
+        "binaries": {
+          "ttir": "c73c0b04756141697bac6aee4fe080b498b013050581f4a7b4f2acba7defaf6b",
+          "ttadapter": "1ce26bd7f9744fe9538436d630c82ab8bbdea8d666812ebdec20ce04379bcfc0",
+          "npubin": "d18ccb9e17a033e51d1f515792cc7015fbe7e4ca2e441dcd1f083226398769cc"
+        }
+      },
+      {
+        "hash": "dc406aa6c2171f31c77a68ba6f739a187106739c7e00b54a2f359e874e0d345c",
+        "name": "_unpack_seq_triton_kernel",
+        "binaries": {
+          "ttir": "ad77446377681768fb9ffe1e93ee0deb68c656d5ccf2383a358a7d81aae8a13b",
+          "ttadapter": "c4fcb58c1fa6667bb8c1e64887a61782a33b9ae5e24212f9fc58ac5e6613f6d7",
+          "npubin": "f370983039125086712c5ce14034a6c2f3eec5ede7e41ec12dc4f41e3d8b9110"
+        }
+      }
+    ],
+    "metadata": {
+      "arm": "before",
+      "component": "prepared pack+unpack",
+      "grid": [
+        32,
+        1,
+        2
+      ],
+      "tiles": [
+        64,
+        64
+      ],
+      "flags": {
+        "num_warps": 4,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "device_kernel_calls": 0,
+      "reused_outputs": true,
+      "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+      "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+      "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+      "input_strides": {
+        "x": [
+          128,
+          1
+        ],
+        "lengths": [
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R02-02",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "c80d86d15f25600cdbeed390f88b0d0b290755d3c3724fcd5c94a5dd2af86e02",
+        "name": "_exclusive_prefix",
+        "binaries": {
+          "ttir": "75fba2a3b72e9c7204d737e57bc493641bf8089a945c11420d56801a7c8cc407",
+          "ttadapter": "90168ea3f6e09500553604b0c9758e4406295da42ffa6d328b3bcc7b0c6de2bd",
+          "npubin": "46e2dd8eaf89d5df9e0ea2bbbd9f435eb5d764b28acfae406fee348e6e89f0a3"
+        }
+      },
+      {
+        "hash": "80cd55c1bbbccd9d34badc0d23c651626aed98dde8220134d480cc7626fa6ad9",
+        "name": "_pack_seq_kernel_prefix",
+        "binaries": {
+          "ttir": "7cfdd471f3757a9d29aeca6d7bb1e01fb41f50c633ee39324db56440ab808d4a",
+          "ttadapter": "ecff62e1b686ab47378ea6e0ada0121bc53a3d25386b9d94063d6c9a46a3884b",
+          "npubin": "2327c8cf63e6fcc2a2db1078a1317e3bae2673b718cc61a5e51d54dd4fb5001e"
+        }
+      },
+      {
+        "hash": "f2e0161fed8aa590fa7a7d4622135410f8251164b22d7baad5164c74da24731a",
+        "name": "_unpack_seq_triton_kernel_prefix",
+        "binaries": {
+          "ttir": "2ab36504a00bc15e1ec214a6a33d5430577ceaa55a77e7b64b3b04e76d96da6a",
+          "ttadapter": "2aecbf1d57d0debdef1492ef72f396fd7f55cd8adb63c3c1dd4362e9e9d12dde",
+          "npubin": "7352de822f19244693145b42848d5fc1f4034577416932779676567f559a08ca"
+        }
+      }
+    ],
+    "metadata": {
+      "arm": "after",
+      "component": "prepared pack+unpack",
+      "grid": [
+        32,
+        1,
+        2
+      ],
+      "tiles": [
+        64,
+        64
+      ],
+      "flags": {
+        "num_warps": 4,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "device_kernel_calls": 0,
+      "reused_outputs": true,
+      "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+      "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+      "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+      "input_strides": {
+        "x": [
+          128,
+          1
+        ],
+        "lengths": [
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R02-03",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "abb381f7754d4c228c67fb42645dfd0f14ee8ef5774ed9a0817edb840f5a8da0",
+        "name": "_pack_seq_kernel",
+        "binaries": {
+          "ttir": "73f97da0a40e7868a5f92af816b15ecc32112e4eafaf7e7e10337f57f67d874a",
+          "ttadapter": "37f1b74a6a7b9ff9e2aa8f848d2e0b8ec4e2a206156f60b6c7e4e4d5414f5f20",
+          "npubin": "950cfd9fddef89aca7fd0e45e9c3a55d0fd3a9ed6fb9d7838aa1cebe36f64fdc"
+        }
+      },
+      {
+        "hash": "ea0708780d6aabda422c71f70af79c6e7cfecdbffab427f1abda8e26b44d8003",
+        "name": "_unpack_seq_triton_kernel",
+        "binaries": {
+          "ttir": "281f622d400b864979b7906d4234a3f34ff0acbcda30b87111b681fbd04ead0a",
+          "ttadapter": "4c66e2e5d3236a4e6177280e177db70cee3a1e1fd45fb801f03c0a0589322b9a",
+          "npubin": "5f5b5bf7b4f92dbe41fdc460044c1d3a747a82d262a2760be58a6ea1a7ca9ca0"
+        }
+      }
+    ],
+    "metadata": {
+      "arm": "before",
+      "component": "prepared pack+unpack",
+      "grid": [
+        128,
+        1,
+        4
+      ],
+      "tiles": [
+        64,
+        64
+      ],
+      "flags": {
+        "num_warps": 4,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "device_kernel_calls": 0,
+      "reused_outputs": true,
+      "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+      "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+      "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+      "input_strides": {
+        "x": [
+          256,
+          1
+        ],
+        "lengths": [
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R02-03",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "90bf3d4e46a78627e1b8e5801beedc2b15f1a2d82e909987c2dcc5004f36c610",
+        "name": "_exclusive_prefix",
+        "binaries": {
+          "ttir": "aa81c64ecbd3c605eeba69ed797de13484cf40c2b715423161046c1a244024a5",
+          "ttadapter": "bf9a994d5d3a8a8fb842f9ae845d798f205e4f0cdc2d0c8d443251806ed18462",
+          "npubin": "873015ca01b0c011503256261002395ee9a5a5e49fdc1137363257e2a9f80b87"
+        }
+      },
+      {
+        "hash": "a014f02a600cbafe64e77159c0faf90a934cd5655d9c6bfbe62302115eac6018",
+        "name": "_pack_seq_kernel_prefix",
+        "binaries": {
+          "ttir": "aae4741c6c1dfa50adedbb268c869633eedcafa122fc2152fd35d2015e0ae6fa",
+          "ttadapter": "82d8d27b24d8e06ac050086e54e1340823615c1d9c7b796427a4995678067fa8",
+          "npubin": "8cc5bc733d525000b5c3f532d223fddc50df8df2826fbf3adc9448cd1826fa74"
+        }
+      },
+      {
+        "hash": "b3f21e4ba315534db6d3eb8490688750e73ea2eb0ff3703afcefd3eae70d1311",
+        "name": "_unpack_seq_triton_kernel_prefix",
+        "binaries": {
+          "ttir": "da69e954fdafd4a8f7b67ceff826d6e10f3be3289df9b46f0fade459ad15eaf2",
+          "ttadapter": "49091c5351032c97f77352fd130b406f8002d08ce4fc0772fe125695e63b8b25",
+          "npubin": "b71bb29a7a4ea364a83610dfe350d0c2d3b211ad3d1d5292ac97f2496fa54f9f"
+        }
+      }
+    ],
+    "metadata": {
+      "arm": "after",
+      "component": "prepared pack+unpack",
+      "grid": [
+        128,
+        1,
+        4
+      ],
+      "tiles": [
+        64,
+        64
+      ],
+      "flags": {
+        "num_warps": 4,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "device_kernel_calls": 0,
+      "reused_outputs": true,
+      "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+      "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+      "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+      "input_strides": {
+        "x": [
+          256,
+          1
+        ],
+        "lengths": [
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R02-04",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "77a822ebdacff1f6320f3c0d8db6bf93fb95a71e470b431899fcd94edb72085b",
+        "name": "_pack_seq_kernel",
+        "binaries": {
+          "ttir": "e94c36a63210bd4458e8d6649fd372fc7ababe5b22b9157957d2a27b09549c3f",
+          "ttadapter": "792692fd465378df80ced55d5547bf7fc106ff46006be3139c9fb154a59734c8",
+          "npubin": "b28b60ac7d3f2ca5a7bcfd8b79256d7e7763389eaeaf1f5e37d270ddb786d83f"
+        }
+      },
+      {
+        "hash": "a1f5eacb92172fefe5bf3c982107b08701b47fcd26ec1c5cf2c679d4687bdfa7",
+        "name": "_unpack_seq_triton_kernel",
+        "binaries": {
+          "ttir": "33952828d1c3ec332b16a985d9b7ad7c091e0571aa0bb383f85eb2b721df4d76",
+          "ttadapter": "1aa84260014a8a0ecd4787fd0dee8a588406554bc98a3a5839d7b6ce963cee4c",
+          "npubin": "f241de210db2e5043ea7dfa985b5145cb26c37ee9b126ba710a43a5f5d380da3"
+        }
+      }
+    ],
+    "metadata": {
+      "arm": "before",
+      "component": "prepared pack+unpack",
+      "grid": [
+        256,
+        2,
+        4
+      ],
+      "tiles": [
+        64,
+        64
+      ],
+      "flags": {
+        "num_warps": 4,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "device_kernel_calls": 0,
+      "reused_outputs": true,
+      "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+      "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+      "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+      "input_strides": {
+        "x": [
+          256,
+          1
+        ],
+        "lengths": [
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R02-04",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "f9c44cb9c6c0140a62bbcf10edfcd346e07520e1ad7fa9d43c0192afecc67603",
+        "name": "_exclusive_prefix",
+        "binaries": {
+          "ttir": "322660a8c4b61a7e47a9580d811f9cc5ed689c1545d8d3932cf79b01d3270076",
+          "ttadapter": "a045fea1bf73fb86cca425a19e10dfe40c14d9be4588285f333ac29654824e55",
+          "npubin": "89720b53a7f12f141290d93ac07d7c4c21f735071f2133080e1ac71e0ae930fe"
+        }
+      },
+      {
+        "hash": "fa95fd13ec30f28c12dda1c0a6ce1763d70aff1a34e3dae22a4072bc9e61a8b7",
+        "name": "_pack_seq_kernel_prefix",
+        "binaries": {
+          "ttir": "a4420417919d031afc7cbcdf1029b0a84b3496fe43a3b867744018923f9cf9be",
+          "ttadapter": "1366e38a09c5733518a28c2dbdc6d53a4e59add5cc76c6eaa1da3eb8becddefe",
+          "npubin": "60d79384f52f38422b7a4e91a5f956703ec22c81ccfb7bf4ec1a7161d506987c"
+        }
+      },
+      {
+        "hash": "92416e3b1ac82090026ef86285cf8900bb33b860b3417d34eb1ec6ac9ec8b602",
+        "name": "_unpack_seq_triton_kernel_prefix",
+        "binaries": {
+          "ttir": "160f66a71a5c922f6970e9e54aca6060bd0094c481c6f9258f5ec31b638f36fe",
+          "ttadapter": "175a3f6108758be6d3b0bc31304e4ab0fc372a64cd66743dd6452c835fe156f9",
+          "npubin": "a84df3b0456bccb244f4f698df30849516526dfe23a32d4087449b61c9dcb395"
+        }
+      }
+    ],
+    "metadata": {
+      "arm": "after",
+      "component": "prepared pack+unpack",
+      "grid": [
+        256,
+        2,
+        4
+      ],
+      "tiles": [
+        64,
+        64
+      ],
+      "flags": {
+        "num_warps": 4,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "device_kernel_calls": 0,
+      "reused_outputs": true,
+      "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+      "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+      "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+      "input_strides": {
+        "x": [
+          256,
+          1
+        ],
+        "lengths": [
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R02-GA",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "43406b5f690a961f936a958077b03aa3a4d2d1f62fb4d794d9a7a4b30bafc390",
+        "name": "_pack_seq_kernel",
+        "binaries": {
+          "ttir": "0a224fbe3b41a31f075cc610b2caf6df430d476280ae7cdd354e8d9cf21a67d6",
+          "ttadapter": "f74ff1153ba7e75013fa2558f962005e188585ca7bea0945eb57dc027bc674e7",
+          "npubin": "3f6fe6109c06dc88005c785df2cad09187f225fe7b8ab51ede9c29337a174928"
+        }
+      },
+      {
+        "hash": "49bfac8e16bf22092befca65f91dad2bdc9ce6949751af420aac9c667226ab47",
+        "name": "_unpack_seq_triton_kernel",
+        "binaries": {
+          "ttir": "c7f496b2d900a313545f8578e3d135cfc8e6245244ce45e73ed11d93232a4d5d",
+          "ttadapter": "7b0ba085a50d34951f6f5ab266e3190b84369e1a849d1420686b973883a7d9b4",
+          "npubin": "37a43aa0452bfc5a071f56dd4fc7756f3599a5097576d49559dff9a3dd7c9284"
+        }
+      }
+    ],
+    "metadata": {
+      "arm": "before",
+      "component": "prepared pack+unpack",
+      "grid": [
+        3,
+        1,
+        2
+      ],
+      "tiles": [
+        64,
+        64
+      ],
+      "flags": {
+        "num_warps": 4,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "device_kernel_calls": 0,
+      "reused_outputs": true,
+      "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+      "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+      "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+      "input_strides": {
+        "x": [
+          65,
+          1
+        ],
+        "lengths": [
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R02-GA",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "5339bcd0d4cdd54ec1d8180aa54e6df4afacd74a27c7fc1b0788227b8ee66d6c",
+        "name": "_exclusive_prefix",
+        "binaries": {
+          "ttir": "b446f6ce8f19da93e125aa3fc713061517ca5dbcb367a49baa9c145027312eba",
+          "ttadapter": "8bd45bc0a79c98412d75b83d1bfec0c8af54ba17464e28e6c11e4bb384eb8872",
+          "npubin": "cb54f7a38c79b42514d087764ed7efac180ccd8860ef1e6da57b535efa7e265a"
+        }
+      },
+      {
+        "hash": "3266b49eeb45cf6e10a18c393fbdd1c91432b6aa1e354e6685324c365aa31456",
+        "name": "_pack_seq_kernel_prefix",
+        "binaries": {
+          "ttir": "b86df953e2941f66926507522bb7c9aa58c2228ba7c0d551c059e1afd96b7886",
+          "ttadapter": "ac587016ca80f43f2bf49fa47d5fee1a5fa44d873a7855493fc1f938f7a9851f",
+          "npubin": "dee2c19f4ccd984ddec310047b803fb35f5463545a0b4817942ca4a1fee9c3fc"
+        }
+      },
+      {
+        "hash": "8fef6ebc3f11945f1c07e0d897f8c4e4062aa30283913b649850b425d7f5010b",
+        "name": "_unpack_seq_triton_kernel_prefix",
+        "binaries": {
+          "ttir": "6592ee479f5983e1a01df0fab24496bc979e41b2689ec4d29fe869357727eb21",
+          "ttadapter": "f8f05c706466c4df705a5ef190ff547378859297872e6468c563cff78a2da102",
+          "npubin": "fe29f48ca2afac185886dea81697abb8bd226c93b2f6aadf0214a79ea93fa34c"
+        }
+      }
+    ],
+    "metadata": {
+      "arm": "after",
+      "component": "prepared pack+unpack",
+      "grid": [
+        3,
+        1,
+        2
+      ],
+      "tiles": [
+        64,
+        64
+      ],
+      "flags": {
+        "num_warps": 4,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "device_kernel_calls": 0,
+      "reused_outputs": true,
+      "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+      "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+      "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+      "input_strides": {
+        "x": [
+          65,
+          1
+        ],
+        "lengths": [
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R02-GB",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "bda3667bca65d2afff8f155ccbce006b891a3f35ba50c87730cb5af1cfe9cb33",
+        "name": "_pack_seq_kernel",
+        "binaries": {
+          "ttir": "8c89da7595da440835434c6054794d0778c999498ac8dc8314ec48a3ecbc6438",
+          "ttadapter": "f39e77dd55732e7d9cf34e41e0e3779bf20756b532e2ff6cc98fd3fa7f6d94c3",
+          "npubin": "fce21025b2dc53ad79de92d24b59ccaefbf7c5af4f3910ba4405bbe057b90f36"
+        }
+      },
+      {
+        "hash": "f136df2ab6f4a11a07241f75a2b95bc95e1ce33d4f9b0e208850491e47ecca57",
+        "name": "_unpack_seq_triton_kernel",
+        "binaries": {
+          "ttir": "84914409f99fb079d7a5ae4760709c15c2658ecb9e31f655cb6fa9d20efeb943",
+          "ttadapter": "9e77de334c81194c7a1cb132b0b48a72d3f99c22c7374b782c66a621291b678c",
+          "npubin": "8a3e02d3a2eacfbc86154b8608acf1456fdc6b117ecb1d33221411b41d91939b"
+        }
+      }
+    ],
+    "metadata": {
+      "arm": "before",
+      "component": "prepared pack+unpack",
+      "grid": [
+        1,
+        1,
+        1
+      ],
+      "tiles": [
+        64,
+        64
+      ],
+      "flags": {
+        "num_warps": 4,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "device_kernel_calls": 0,
+      "reused_outputs": true,
+      "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+      "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+      "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+      "input_strides": {
+        "x": [
+          1,
+          1
+        ],
+        "lengths": [
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R02-GB",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "787a1d91fd02e12ce8566dce3d12660a2d0fcd2fb854935f1c47556fda135946",
+        "name": "_exclusive_prefix",
+        "binaries": {
+          "ttir": "e407a961dbba4d56de63c02dd452f8e025e9a3df70e920a0a731162a65b676b9",
+          "ttadapter": "55b7403a4def41f2606daebe6414ff6422a9a67f995b61e632446b5616fefa0d",
+          "npubin": "b0a5ea4dc50c6f9666893038b10b3610ec7cedcd126029b5e0b2a03efb9c142a"
+        }
+      },
+      {
+        "hash": "9e3125cd6fba1c5c75e06fc9847d8d5ca128b892128b75a9d9221b89406aa7a3",
+        "name": "_pack_seq_kernel_prefix",
+        "binaries": {
+          "ttir": "cacd50f9467d42726e9922c1945502798395a1beec99091be9e508d464c57212",
+          "ttadapter": "0b8eae6d11ef543df0b2436c9c2c8db50faf14ffeb84fd61d0c61e0f2af44ed3",
+          "npubin": "3aa4adf495fa26dbac9ccbe6c5d4ebde3066dff5198a6c5cba0557a720358e8e"
+        }
+      },
+      {
+        "hash": "6ccaabc5199dcbffef62defdd07715c6072e6bacb9f2d8eac392a0a1b981835e",
+        "name": "_unpack_seq_triton_kernel_prefix",
+        "binaries": {
+          "ttir": "00930cadaf41c1b7e1111a1cc0af4f71202099a574c8bdb0eba9c5765ee6ec8a",
+          "ttadapter": "c949850b83aa0909ea5c030889085e2eac9ef1ea0a4b62207e890dcd3a5b1061",
+          "npubin": "59b86445475ad8256f690cc022ddb2e95e1b5df3cd6f0c75cc96c3fdbef9f4c0"
+        }
+      }
+    ],
+    "metadata": {
+      "arm": "after",
+      "component": "prepared pack+unpack",
+      "grid": [
+        1,
+        1,
+        1
+      ],
+      "tiles": [
+        64,
+        64
+      ],
+      "flags": {
+        "num_warps": 4,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "device_kernel_calls": 0,
+      "reused_outputs": true,
+      "prefix_scope": "after GPU recomputed every API; B+1 int32 workspace",
+      "host_scope": "CPU validation/max/sum and all allocations outside both APIs",
+      "allocator_limit": "reused prepared outputs/workspace; no ordinary allocation/API latency claim",
+      "input_strides": {
+        "x": [
+          1,
+          1
+        ],
+        "lengths": [
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  }
+]

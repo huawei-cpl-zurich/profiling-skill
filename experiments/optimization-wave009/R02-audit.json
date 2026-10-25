@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "errors": [],
+  "inventory": "R02-inventory.json",
+  "coverage": "R02-coverage.json",
+  "command": "python ~/.agents/skills/triton-guarded-kernel/scripts/audit_contract.py experiments/optimization-wave009/R02-coverage.json --inventory experiments/optimization-wave009/R02-inventory.json --json",
+  "exit": 0,
+  "scope": "full six-case inventory; manual physical address proof and observed candidate kernel selection plus numerical gates"
+}

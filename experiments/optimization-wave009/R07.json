@@ -1,0 +1,106 @@
+{
+  "wave": 9,
+  "approval": "Standing user approval waves003\u2013022; datafirst.",
+  "study_kind": "source-backed-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "query": "61093052e4af41c5b2132db2cd524089",
+  "source_receipts": "bodies.json/tests-license.json/proposals.md; original source inventory full immutable pin; MIT plus Huawei/vLLM/DeepLink third-party notices retained.",
+  "protocol": "Compile/codegen/resource allcasepairs via input-only prototypes BEFORE scientificCPUexpected. Six cached CPU payloads ONCE, numerical correctness ONCE perarm/case/source then exactly10preparedcompleteAPI profilingforwards/arm of4mainpairs; guards0captures. No GPUwarmups/autotune/extraunprofiledtiming/profiledIOinspection. Retainnegative/noop/unsupported/failed results and originalsource/binary/fixture/version bindings. No postdata case/tolerance/flag retuning. Actualtarget/compiler/product/cores queried, never inherited GZ40. Complete operation spans/tasktime/union/gaps/raw10samples/PMUs diagnostic not ordinarylatency/physicaltraffic/roofline proof.",
+  "study_id": "R07",
+  "task": "optimization-w009-mean-inner-coalescing",
+  "title": "Coalesce adjacent inner lanes while preserving mean reduction tree",
+  "source_files": [
+    "bodies/src/triton_ascend_kernels/deterministic/mean_batch_invariant.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W009-R07-01",
+      "role": "gallery",
+      "seed": 90701,
+      "parameters": {
+        "M": 4,
+        "N": 33,
+        "K": 16
+      },
+      "scenario_designation": "gallery-cost"
+    },
+    {
+      "case_id": "W009-R07-02",
+      "role": "gallery",
+      "seed": 90702,
+      "parameters": {
+        "M": 8,
+        "N": 1024,
+        "K": 32
+      },
+      "scenario_designation": "gallery-benefit"
+    },
+    {
+      "case_id": "W009-R07-03",
+      "role": "heldout",
+      "seed": 90703,
+      "parameters": {
+        "M": 4,
+        "N": 1025,
+        "K": 64
+      },
+      "scenario_designation": "heldout-benefit"
+    },
+    {
+      "case_id": "W009-R07-04",
+      "role": "heldout",
+      "seed": 90704,
+      "parameters": {
+        "M": 2,
+        "N": 4096,
+        "K": 128
+      },
+      "scenario_designation": "heldout-benefit"
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W009-R07-GA",
+      "role": "guard",
+      "seed": 90791,
+      "parameters": {
+        "M": 1,
+        "N": 1025,
+        "K": 1,
+        "source_fallback": true
+      }
+    },
+    {
+      "case_id": "W009-R07-GB",
+      "role": "guard",
+      "seed": 90792,
+      "parameters": {
+        "M": 2,
+        "N": 37,
+        "K": 16,
+        "source_fallback": true,
+        "physical_layout": "MKN-backing"
+      }
+    }
+  ],
+  "contract": {
+    "interface": "Prepared single mean_dim reduction oflogicalFP32X[M,N,K] overN withoutputFP32[M,K], finiteboundedinputs, Npositive, Kpositive. MainphysicalcontiguousMNK andK16/32/64/128. No genericmultidimmean_batch_invariant sequence/dtypeconversion/allocator claim. OutputprivatecontiguousMKsameboth, allinputsimmutable/halos/shape/arity/dtype checkedonce.",
+    "before": "Exactsource mean_kernel oneprogram per(m,k), BLOCK_SIZE1024, per-output tl.sum1024tree eachchunk thenSERIAL FP32acc+=chunk_sum, finalacc/N. GridM*K andsourcepointerstrides. KeepcommonflagsfusionFalse/stage1/multibufferFalse. No split-N/Welford/onlinealgorithm.",
+    "after": "Mainonly oneprogram per(m,k_tile), frozenK_TILE8, rectangular[1024,8] loads withadjacentKlanes contiguous. tl.sum onaxis0 produces8independent1024-lane trees, EXACTSAME1024chunk size/withinchunk per-k tree andserialchunkacc order, identicalfinaldivision/storecast. Grid(M,cdivK8). No reductionacrossK/reassociation/multichunkpartials. SourceK1 orstridedK!=1 guarddispatch exactoriginalsourcekernelBOTH; fullguardqualificationnotprooffastpath.",
+    "oracle": "SIXindependentCPUFP64mean payloadsonce afterall12inputonlycode/resourcecells. SeededrepresentedFP32 inputpalette \u00b116,\u00b11/16 plusseededinteger[-4,4]*2^-15 perturbations; cancellationheavyfinite allabs<=16.0001221. DuplicatefirsttwoMrows(whereM>=2) withsameexactvalues so onceAPIalsoobservesduplicate-rowconsistency, notextraNPUbatchpartitionruns. Fixedatol2e-5rtol2e-5 againstCPUFP64mean, plus REQUIREpairFP32bits exactlyequal foralloutputs for claimedunchangedsource/deterministictree. Ifchangedloweringaltersbits, recordfailedgate/unsupportedclaim, doNOTrelax/tunecases. No universalnumericaccuracyorbatchpartitionruntimeclaim beyondonceAPI duplicate rows and independentper-m/k schedule.",
+    "guards": "GA K1 directexactsourcefallback inclN1025twochunks,0profiles. GB actualphysicalMKNbackingcontiguous[M,K,N] ->transpose(1,2) logicalMNK withstrides(K*N,1,N); compileprototypepreservesactualview (doNOTcontiguouscopy). Botharms exactsourcefallback forKstride!=1, aliasoutputprivateMK andallinputbackingimmutable. NonpositiveN/invalidshape/dtype/nonfinite/outputalias/outofdomain rejectbeforecache usingNONFROZENtests. GuardfallbackcodeidentityexpectedandNOTterminalwhole-study-noop; mainactualELFcontrast screenedbeforeCPUexpected.",
+    "resources": "K_TILE8 inputtile32768B FP32vsoriginal4096B, extrasum/masks/accbuffers actualcompilerresourceprobe ALLcells beforemath; do notassumeUBfitsorinferoccupancy. SourceactualimportsrequirescurrentTritoncancompileaxis0reduce; do notchangechunk/tree/flags toforcecontrast. Actualnative9382VEC48 queriedreceipt: candidate mainafter8programs(case01) or32programs(02/03/04),source64/256. Gridrepartition/activeprogramreductionispartoftradeoff, notpurememoryclaim.",
+    "claims": "Prospectivebenefit02/03/04coalescedKreadsvsmiddleaxisstridedperoutput;01shortNcostrisk increasedUB/underfilledprograms. Completeonekernelboth, no freepretranspose/materialization. Correctnessonceperarmcase BEFORE80profileAPIs8captures guards0,nowarmups/autotuning/extra timings/IOinspection. Retainnegative/failed/noop withsource/binary/cachebindings. Novelty0; no actualphysicaltraffic/hardwareoccupancy/roofline/ordinarylatency proof fromsourcecounts/spans."
+  },
+  "source_files_manifest": [
+    {
+      "path": "bodies/src/triton_ascend_kernels/deterministic/mean_batch_invariant.py",
+      "sha256": "491ddacff928af9fbebdd0ddd6a8be2880e94fe7bbe3694e528118c6c81ff012"
+    }
+  ]
+}

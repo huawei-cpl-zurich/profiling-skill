@@ -1,0 +1,22 @@
+{
+  "expected_failure": true,
+  "actual_exit": 1,
+  "scope": "Full six-case inventory; first paired bits failed, remaining mathematical cells unattempted. No full coverage/correctness pass claim.",
+  "command": "python installed triton-guarded-kernel/scripts/audit_contract.py R07-coverage.json --inventory R07-inventory.json --json",
+  "auditor": {
+    "errors": [
+      "case 'W009-R07-01' lacks a passing correctness result",
+      "case 'W009-R07-02' lacks a passing correctness result",
+      "case 'W009-R07-02' route must be optimized or reference",
+      "case 'W009-R07-03' lacks a passing correctness result",
+      "case 'W009-R07-03' route must be optimized or reference",
+      "case 'W009-R07-04' lacks a passing correctness result",
+      "case 'W009-R07-04' route must be optimized or reference",
+      "case 'W009-R07-GA' lacks a passing correctness result",
+      "case 'W009-R07-GA' route must be optimized or reference",
+      "case 'W009-R07-GB' lacks a passing correctness result",
+      "case 'W009-R07-GB' route must be optimized or reference"
+    ],
+    "ok": false
+  }
+}

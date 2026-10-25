@@ -1,0 +1,75 @@
+{
+  "kind": "host-publication-only",
+  "numeric_qualification": false,
+  "default_failclosed_before_cpu_oracle_backend_transfers": true,
+  "compile_inspection_only": true,
+  "probe_run_rejects": true,
+  "source_bindings": {
+    "mean_inner.py": {
+      "original_attempt_sha256": "fe021d7185dfc8e882364802f83d468d3f21321c98a992c8a4d121063f67b5ff",
+      "publication_sha256": "f3e451b85666763e7104ee89128cfa33c04d980429e43359710d2cddc8bca877",
+      "unchanged": false
+    },
+    "mean_inner_source.py": {
+      "original_attempt_sha256": "491ddacff928af9fbebdd0ddd6a8be2880e94fe7bbe3694e528118c6c81ff012",
+      "publication_sha256": "491ddacff928af9fbebdd0ddd6a8be2880e94fe7bbe3694e528118c6c81ff012",
+      "unchanged": true
+    },
+    "mean_inner_contract.py": {
+      "original_attempt_sha256": "75be5711798e3cb11e19f17c4812da3232ce50a614a6d13f4469d3d6cb5fc909",
+      "publication_sha256": "75be5711798e3cb11e19f17c4812da3232ce50a614a6d13f4469d3d6cb5fc909",
+      "unchanged": true
+    },
+    "mean_inner_kernels.py": {
+      "original_attempt_sha256": "6c9f317fbf07f5c8c8b3328a6be9ee32ebfdcc43caa352bb0fcebd1bf3b6a99e",
+      "publication_sha256": "6c9f317fbf07f5c8c8b3328a6be9ee32ebfdcc43caa352bb0fcebd1bf3b6a99e",
+      "unchanged": true
+    },
+    "mean_inner_screen.py": {
+      "original_attempt_sha256": "c20fac77c9648c0bb79ee780849e94bc1cb7f5061ec222fe5bd863318ae189a0",
+      "publication_sha256": "c20fac77c9648c0bb79ee780849e94bc1cb7f5061ec222fe5bd863318ae189a0",
+      "unchanged": true
+    }
+  },
+  "provider_and_both_JITs_unchanged": true,
+  "scientific_replays_for_publication": 0,
+  "cpu_gate": {
+    "target": "bz-a3-2",
+    "handle": "remote:bz-a3-2:job:20261025T042336Z-30881c100ee7",
+    "terminal": "completed",
+    "exit": 0,
+    "unit_test_seconds": 11.61,
+    "receipt_sha256": "8e1511c7a0a8dc8ef6bf2ba4931629978accb2e6e1d384b04fee30cd7265dc13",
+    "receipt": {
+      "npu_runtime_imported": true,
+      "status": "passed",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 16.490373669657856,
+      "scientific_cpu_payloads": 0,
+      "real_compile_calls": 0,
+      "npu_forwards": 0,
+      "profiles": 0,
+      "fixture_scope": "NONFROZEN only1907xx seeds; CPU mocked backend",
+      "source_sha256": {
+        "mean_inner_source.py": "491ddacff928af9fbebdd0ddd6a8be2880e94fe7bbe3694e528118c6c81ff012",
+        "mean_inner.py": "f3e451b85666763e7104ee89128cfa33c04d980429e43359710d2cddc8bca877",
+        "mean_inner_screen.py": "c20fac77c9648c0bb79ee780849e94bc1cb7f5061ec222fe5bd863318ae189a0",
+        "mean_inner_contract.py": "75be5711798e3cb11e19f17c4812da3232ce50a614a6d13f4469d3d6cb5fc909",
+        "mean_inner_kernels.py": "6c9f317fbf07f5c8c8b3328a6be9ee32ebfdcc43caa352bb0fcebd1bf3b6a99e"
+      }
+    }
+  },
+  "local_nonfrozen_tests": {
+    "tests": 4,
+    "passed": true,
+    "seconds": 1.857
+  },
+  "full_inventory_audit": "expected FAIL: 11semantic errors; no fabricated passing correctness/route",
+  "source_test_lines": {
+    "raw": 486,
+    "vendored": 170,
+    "authored": 316
+  }
+}

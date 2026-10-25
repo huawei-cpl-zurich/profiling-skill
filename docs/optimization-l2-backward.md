@@ -90,3 +90,9 @@ host rejection checks were reused by exact receipt hash and matrix/spec/arm
 binding in the authorized device0 acquisition; they were not repeated. Both
 attempts use identical operator source, oracle provider, cases, tolerances,
 and compilation parameters. The earlier failure remains separate evidence.
+
+Publication interface correction: compile probes expose compilation, metadata
+and binary identity, while their `run()` always rejects execution. Ordinary
+prepared items retain normal execution. `T09-publication.json` separates the
+original measured adapter hash from this host-only interface revision; JIT,
+oracle provider, binaries, fixtures and scientific results are unchanged.

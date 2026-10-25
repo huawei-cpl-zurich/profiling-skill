@@ -68,13 +68,20 @@ class L2Tests(unittest.TestCase):
         def host_full(*a,**kw):kw.pop('device',None);return full(*a,**kw)
         modules=dict(torch_npu=NS(),l2_backward_kernels=NS(l2norm_bwd_kernel1=before,l2norm_bwd_factored=after))
         with patch.dict(sys.modules,modules),patch.object(torch.Tensor,'to',lambda self,*a,**kw:self.clone()),patch.object(torch,'full',host_full),patch.object(op,'check_inputs',lambda inputs,p,device:check(inputs,p,'cpu')):
-            probe=op.Adapter().compile_probe('after',dict(rows=2,D=525),None);probe.compile_only();self.assertEqual(after.launches,0)
+            for arm,kernel in [('before',before),('after',after)]:
+                probe=op.Adapter().compile_probe(arm,dict(rows=2,D=525),None);count=kernel.compiles;calls=kernel.launches
+                with self.assertRaisesRegex(RuntimeError,'compile-only probe'):probe.run()
+                self.assertEqual((kernel.compiles,kernel.launches),(count,calls))
+                probe.compile_only();self.assertEqual(kernel.launches,calls)
+                self.assertEqual(len(probe.compilation_state()),1);self.assertEqual(probe.metadata['device_kernel_calls'],0)
+                with self.assertRaisesRegex(RuntimeError,'compile-only probe'):probe.run()
+                self.assertEqual((kernel.compiles,kernel.launches),(count+1,calls))
             adapter=op.Adapter()
             for order in [('before','after'),('after','before')]:
                 for i,arm in enumerate(order):
                     k=before if arm=='before' else after;count=k.compiles;calls=k.launches
                     item=adapter.prepare(arm,dict(rows=2,D=525),f,None);a=item.run();b=item.run();self.assertIs(a,b)
-                    self.assertEqual((k.compiles-count,k.launches-calls),(1,2));result=adapter.validate(arm,a,f,dict(rows=2,D=525))
+                    self.assertEqual((k.compiles-count,k.launches-calls),(1,2));self.assertEqual(item.metadata['device_kernel_calls'],1);result=adapter.validate(arm,a,f,dict(rows=2,D=525))
                     self.assertTrue(result['passed']);self.assertEqual('paired_exact_bits' in result,i==1)
             after.binary=b'invalid';calls=after.launches;item=adapter.prepare('after',dict(rows=2,D=525),f,None)
             with self.assertRaises(ValueError):item.run()

@@ -21,7 +21,12 @@ class Adapter:
     def compile_probe(self,arm,spec,output):
         """Input-only compile API: no expected payload, no oracle and no run."""
         p=check_spec(spec);rows,d=p['rows'],p['D']
-        return self._prepare(arm,spec,dict(y=torch.zeros(rows,d),rstd=torch.ones(rows),dy=torch.zeros(rows,d)))
+        item=self._prepare(arm,spec,dict(y=torch.zeros(rows,d),rstd=torch.ones(rows),dy=torch.zeros(rows,d)))
+        def reject_run():
+            raise RuntimeError('compile-only probe cannot execute numerical work')
+        item.run=reject_run
+        item.metadata.update(compile_only_probe=True,device_kernel_calls=0)
+        return item
 
     def prepare(self,arm,spec,fixture,output):
         p=check_spec(spec);e=fixture.get('expected')

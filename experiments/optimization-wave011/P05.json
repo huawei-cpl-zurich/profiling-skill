@@ -1,0 +1,199 @@
+{
+  "study_id": "W011-P05",
+  "task": "optimization-w011-wy-shared-operands",
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "query_id": "fdc4f358bc174023a0557b89c87a7eb8",
+  "sources": {
+    "src/triton_ascend_kernels/attention/fla/__init__.py": "98f4bcf0a56256a1c124e5488b4753a571ed9c91b5ca7cd7f32e2f761ea411ee",
+    "src/triton_ascend_kernels/attention/fla/chunk.py": "b1b7c8017bff4e7d3d431b280b6cf6583de1b0c920c8f67d278fec1015d35ea6",
+    "src/triton_ascend_kernels/attention/fla/utils.py": "448abca3130f30b94d2dd1f90271e6616e635790973da3cf6a48701907125f3a",
+    "src/triton_ascend_kernels/attention/fla/wy_fast.py": "48654bbdd2f2e86f4c5abf60f94a3ecfe600dea592e28e9a957d7b109b7de416",
+    "tests/attention/test_chunk_gated_delta_rule_fwd.py": "b78b5c50f0a7af4099e9d6b9662b3af9cdc2160c6b173ae335e5f9ddd81a22d7"
+  },
+  "licenses": "Per-file Apache2.0/SPDX+FLA MIT notices; complete Apache2 +rootMIT+fullthirdparty preserved",
+  "novelty": "Known shared-operands/producerfusion technique; distinctWYcomponentapplication,notGDN-gating/tokenmix/initialE12DMA. novelty0",
+  "admitted_domain": "ONLY B1 packedSINGLEnonempty cu=[0,T], T1..2048,H=Hg8,K=V128,BT64; dense physical FP16K/V/A,FP16beta headmajor[1,8,T],FP32g headmajor[1,8,T], exactI64cu/indices. CPUfixtures checked beforecache/backend/transfers. Reject dense/Nonecu,B>1,multisequence/emptyseq,H!=Hg/8,K/V!=128,BT!=64,badprefix/indices/int32overflow/layout/dtype/aliases. Sourcehazards notfixed.",
+  "open_miss": "b26f6e86f6733351659ed05cee804a0b",
+  "before": "Educational splitW producer thenU producer; exact same source head/feature loops,cast/mul/dot/outputmath perproducer; allW+U outputs/requiredkernels charged. No omitted output/math.",
+  "after": "Source fused dual-output body reusing A/beta commonloads, with common explicitW IEEEpolicy patch only.",
+  "common_extraction": {
+    "original_source_preserved": true,
+    "precision_patch": "OriginalU allow_tf32=False retained; add allow_tf32=False only to originalW tl.dot(b_A,b_kb). Common BOTHarms to preserve testTRITON_F32_DEFAULT=ieee intent.",
+    "TRITON_F32_DEFAULT": "ieee set beforeTritonimport",
+    "compiler_dot_policy": "EachcompiledFP32tt.dot must retain explicit inputPrecision=ieee inrawTTIR beforeCPUexpected; missing/other policy stopsunqualified without math/source retune.",
+    "IS_VARLEN": true,
+    "heuristic": "Same source cu!=None outcomeTrue provided directly to extractedJIT; originalheuristics/helper/sourcekept, no densepathrepair",
+    "grid": [
+      "ceil(T/64)",
+      1
+    ],
+    "BK": 64,
+    "BV": 64,
+    "num_warps": 4,
+    "num_stages": 3,
+    "enable_fp_fusion": false,
+    "autotune": false
+  },
+  "prepared_boundary": "COMMON alreadycomputedA +denseK/V +headmajorbeta/g +exactsource-equivalentmetadata cu[0,T], indices[[0,i] for i<ceilT/64]. No inverse/transpose/indexcreation/H2D/allocator/profileIO insideAPI. Allinputallocations and BOTHprivateoutputsprepared/reused; sourceF32cast/multiply/dots/exp/FP16stores INSIDEAPI everycall. NotfullGDN/publicwrapperlatency.",
+  "input_fixture": {
+    "generator": "Seeded CPU torch.Generator, orderKthenVthenbeta. K,V randint[-8,8]/32\u2192FP16;beta randint[4,12]/16\u2192FP16 physicallyheadmajor; g[h,t]=-(t%64+1)*(h+1)/1024 FP32 (nonzero negative chunkcumulative).",
+    "A": "FP16precomputedrow[global_t,h,j]:diagj=t%64 gives1; strictlowerj<t%64 gives((t%64+j+h)%3-1)/512; upper0. All64columns owned pervalidrow. strictlowerrowsum<=63/512<1; infinityconditionbound<1.29, notfreeAinverse.",
+    "padding": "128B logical alignment, leading/trailing128B typedcanaries perinput/output; outputs poisoned1000onceprepare. Trueaccessmaskbounds verified separately frompaddedfalsemaskpointerexpressions, alloffset/bytearithmetic signedI32safe underT<=2048."
+  },
+  "typed_reference": {
+    "independent": "CPUFP64 onlyfromoriginalcachedCPUinputtensors: FP16values exactly promoted; beta products computedFP64 then roundedFP32; ideal exp(FP32g) FP64thenroundedFP32; W secondproductroundedFP32 preserving(K*beta)*exp(g). Padded64x64 full A/zeroK/V chunks, FP64dot, then BOTHfinalexpectedFP16casts.",
+    "primary": "CompareBOTHFP16outputs totypedFP64reference-finalFP16, atol2e-4 rtol2e-3 fixed; fullmatrices/finitevalues/canaries/wholeimmutableinputs/nonalias. Approxexp/F32dotaccum discrepancies tolerated, no exactbitprimary.",
+    "paired": "Alloutputbits/zero sign SECONDARYdiagnostics only; noextracorrectnessGPUcalls",
+    "atol": 0.0002,
+    "rtol": 0.002
+  },
+  "protocol": {
+    "inputonly_case_arm_screens": 12,
+    "compiled_component_cells": 18,
+    "allcompile_before_CPUexpected_once": 6,
+    "correctness_API_once": 12,
+    "allcorrect_before_profile": true,
+    "profile_API_per_arm_main": 10,
+    "profile_API_total": 80,
+    "captures": 8,
+    "guard_profiles": 0,
+    "device_warmups": 0,
+    "extra_timing": 0,
+    "startup_watchdog_seconds": 600,
+    "run_validate_profile_watchdog_seconds": 600,
+    "counter_before_NPUinit": true,
+    "all12correctdirs_upfront": true,
+    "both_HOST_export_locks": true,
+    "fatal": "STOPfamily/preserve raw/no reset/retry/source/config/case/tol retune"
+  },
+  "cases": [
+    {
+      "case_id": "W011-P05-01",
+      "role": "cost",
+      "seed": 110501,
+      "parameters": {
+        "B": 1,
+        "T": 6,
+        "H": 8,
+        "Hg": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "packed": true,
+        "sequence_count": 1,
+        "cu_seqlens": [
+          0,
+          6
+        ],
+        "precision": "ieee"
+      }
+    },
+    {
+      "case_id": "W011-P05-02",
+      "role": "cost",
+      "seed": 110502,
+      "parameters": {
+        "B": 1,
+        "T": 64,
+        "H": 8,
+        "Hg": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "packed": true,
+        "sequence_count": 1,
+        "cu_seqlens": [
+          0,
+          64
+        ],
+        "precision": "ieee"
+      }
+    },
+    {
+      "case_id": "W011-P05-03",
+      "role": "benefit",
+      "seed": 110503,
+      "parameters": {
+        "B": 1,
+        "T": 128,
+        "H": 8,
+        "Hg": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "packed": true,
+        "sequence_count": 1,
+        "cu_seqlens": [
+          0,
+          128
+        ],
+        "precision": "ieee"
+      }
+    },
+    {
+      "case_id": "W011-P05-04",
+      "role": "benefit",
+      "seed": 110504,
+      "parameters": {
+        "B": 1,
+        "T": 2048,
+        "H": 8,
+        "Hg": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "packed": true,
+        "sequence_count": 1,
+        "cu_seqlens": [
+          0,
+          2048
+        ],
+        "precision": "ieee"
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W011-P05-GA",
+      "role": "guard",
+      "seed": 110591,
+      "parameters": {
+        "B": 1,
+        "T": 33,
+        "H": 8,
+        "Hg": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "packed": true,
+        "sequence_count": 1,
+        "cu_seqlens": [
+          0,
+          33
+        ],
+        "precision": "ieee"
+      }
+    },
+    {
+      "case_id": "W011-P05-GB",
+      "role": "guard",
+      "seed": 110592,
+      "parameters": {
+        "B": 1,
+        "T": 127,
+        "H": 8,
+        "Hg": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "packed": true,
+        "sequence_count": 1,
+        "cu_seqlens": [
+          0,
+          127
+        ],
+        "precision": "ieee"
+      }
+    }
+  ]
+}

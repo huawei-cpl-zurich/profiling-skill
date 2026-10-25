@@ -1,0 +1,7 @@
+{
+  "vendor/src/triton_ascend_kernels/attention/fla/__init__.py": "98f4bcf0a56256a1c124e5488b4753a571ed9c91b5ca7cd7f32e2f761ea411ee",
+  "vendor/src/triton_ascend_kernels/attention/fla/chunk.py": "b1b7c8017bff4e7d3d431b280b6cf6583de1b0c920c8f67d278fec1015d35ea6",
+  "vendor/src/triton_ascend_kernels/attention/fla/utils.py": "448abca3130f30b94d2dd1f90271e6616e635790973da3cf6a48701907125f3a",
+  "vendor/src/triton_ascend_kernels/attention/fla/wy_fast.py": "48654bbdd2f2e86f4c5abf60f94a3ecfe600dea592e28e9a957d7b109b7de416",
+  "vendor/tests/attention/test_chunk_gated_delta_rule_fwd.py": "b78b5c50f0a7af4099e9d6b9662b3af9cdc2160c6b173ae335e5f9ddd81a22d7"
+}

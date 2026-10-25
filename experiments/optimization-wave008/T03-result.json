@@ -1,0 +1,397 @@
+{
+  "study_id": "T03",
+  "scientific_contract_version": 2,
+  "status": "unsupported-candidate-backend-compile",
+  "frozen_matrix_sha256": "8731ae28f04bc7e717008516c5841a4963a1fdc5334d5e55e2072fa6b6f67640",
+  "scientific_cpu_payloads_generated": 1,
+  "scientific_correctness_calls": 0,
+  "profiled_calls": 0,
+  "captures": 0,
+  "gpu_mode_observations": 0,
+  "host_functional_tests": {
+    "count": 7,
+    "local": "passed",
+    "gz_a3": "passed",
+    "scope": "pre-publication CPU tests; not device correctness"
+  },
+  "baseline_compiled_cells": [
+    "W008-T03-01"
+  ],
+  "candidate_compiled_cells": [],
+  "diagnostic": "MLIR backend: Unknown core type: llvm.func @malloc(i64) -> !llvm.ptr",
+  "retained_attempts": [
+    {
+      "version": 2,
+      "handle": "remote:gz-a3:job:2d71ea9a-95a9-4440-96e5-bd6d0d382c80",
+      "status": "failed",
+      "scientific_forwards": 0
+    },
+    {
+      "version": 3,
+      "handle": "remote:gz-a3:job:9d292125-8370-4234-bc12-cc5019f4bb2d",
+      "status": "failed",
+      "scientific_forwards": 0
+    },
+    {
+      "version": 4,
+      "handle": "remote:gz-a3:job:2a4b3976-1776-492a-b6cb-52dbdc164894",
+      "status": "failed",
+      "scientific_forwards": 0
+    },
+    {
+      "version": 5,
+      "handle": "remote:gz-a3:job:c5d8f247-2e41-4edb-8662-bde1adf9521d",
+      "status": "failed",
+      "scientific_forwards": 0
+    }
+  ],
+  "compact_archive_sha256": "c3bfb5a047edfc8041a3a37459486c4315f11e910608b7c06295b9783b012bfb",
+  "claims": {
+    "numeric_correctness": "unavailable",
+    "optimized_dispatch": "unavailable",
+    "performance": "unavailable",
+    "machine_multiply_count": "unavailable",
+    "coverage_gate": "failed"
+  },
+  "measured_source_sha256": {
+    "examples/optimization-library/triton/scaled_mm_contract.py": "e6be34c412736792aafb15806e8b4980ac714ef3b83ecfba3953aff46c8dabe2",
+    "examples/optimization-library/triton/scaled_mm_NOTICE.txt": "3421af925aaa95203a08a0a54e7fc8787fda8bc6e80fb5a37ba934e98b848e35",
+    "examples/optimization-library/triton/scaled_mm.py": "ed704ce3752d4463007126417bc98a8588509ab60b4e62cb4988d8bcab7d4adb",
+    "examples/optimization-library/triton/scaled_mm_kernel.py": "b86f2a6617a09f71a9bb690b12f4d86aa3fd71c5d884607c47167b06ec1e4fd8"
+  },
+  "publication_interface_sha256": {
+    "examples/optimization-library/triton/scaled_mm.py": "cf933752de01bb7a5a58ddc0fa052846228ce0bc411e35e1cb011e6b74354fbd",
+    "tests/test_optimization_scaled_mm.py": "d682e7620e5b0c3dab9bcebd7a9f62c1042a2d27f4919206c030185023fa0b2e"
+  },
+  "failure_cause": "Unresolved. The selected compiler reports malloc during candidate compilation; this does not establish that runtime guards generally fail.",
+  "public_execution": "disabled before fixture generation in factory, before backend imports in prepare by default, and before all launches/captures; explicit compile_inspection enables compile_only only",
+  "cases": [
+    {
+      "case_id": "W008-T03-01",
+      "status": "candidate-compile-failed",
+      "correctness_calls": 0,
+      "profiled_calls": 0,
+      "captures": 0,
+      "observed_mode": null
+    },
+    {
+      "case_id": "W008-T03-02",
+      "status": "unattempted",
+      "correctness_calls": 0,
+      "profiled_calls": 0,
+      "captures": 0,
+      "observed_mode": null
+    },
+    {
+      "case_id": "W008-T03-03",
+      "status": "unattempted",
+      "correctness_calls": 0,
+      "profiled_calls": 0,
+      "captures": 0,
+      "observed_mode": null
+    },
+    {
+      "case_id": "W008-T03-04",
+      "status": "unattempted",
+      "correctness_calls": 0,
+      "profiled_calls": 0,
+      "captures": 0,
+      "observed_mode": null
+    },
+    {
+      "case_id": "W008-T03-GA",
+      "status": "unattempted",
+      "correctness_calls": 0,
+      "profiled_calls": 0,
+      "captures": 0,
+      "observed_mode": null
+    },
+    {
+      "case_id": "W008-T03-GB",
+      "status": "unattempted",
+      "correctness_calls": 0,
+      "profiled_calls": 0,
+      "captures": 0,
+      "observed_mode": null
+    }
+  ],
+  "baseline_artifacts": [
+    {
+      "version": 3,
+      "binary_sha256": "ac8e4fa5341e5b4cb45bf446c71465406184058e02dda2b998bd06b413ef4f34",
+      "sections": [
+        {
+          "index": 1,
+          "name": ".text",
+          "type": 1,
+          "flags": 6,
+          "info": 0,
+          "bytes": 3312,
+          "sha256": "4216ae3446036a093b5fe25d2d1accc592ebe6267667e68a1082fa5f4d995897"
+        }
+      ],
+      "jit_hash": "849a16a356bccd6bd65a6b2f3f14163e1bc783682cce4033a64f7b8245ab1d87",
+      "resource_json_sha256": "37a3e702c3bbe40bb33bc4a7dc34cc87f5993a622bba7bd993a498d2bb5465f9"
+    },
+    {
+      "version": 4,
+      "binary_sha256": "ac8e4fa5341e5b4cb45bf446c71465406184058e02dda2b998bd06b413ef4f34",
+      "sections": [
+        {
+          "index": 1,
+          "name": ".text",
+          "type": 1,
+          "flags": 6,
+          "info": 0,
+          "bytes": 3312,
+          "sha256": "4216ae3446036a093b5fe25d2d1accc592ebe6267667e68a1082fa5f4d995897"
+        }
+      ],
+      "jit_hash": "c8b81d470c78a9e6bd3a4844bb21583d5ca46d73bd127ad1426874740e70d952",
+      "resource_json_sha256": "a81a3d285a6939b285f4c45b6affd8c876bd3e545b28cb2949af09ce5a0b5a3f"
+    },
+    {
+      "version": 5,
+      "binary_sha256": "ac8e4fa5341e5b4cb45bf446c71465406184058e02dda2b998bd06b413ef4f34",
+      "sections": [
+        {
+          "index": 1,
+          "name": ".text",
+          "type": 1,
+          "flags": 6,
+          "info": 0,
+          "bytes": 3312,
+          "sha256": "4216ae3446036a093b5fe25d2d1accc592ebe6267667e68a1082fa5f4d995897"
+        }
+      ],
+      "jit_hash": "f0088328fb4809157b2c98d6c104b9c9549cdb79cf88bc1f99e9b9ea36f7fa6f",
+      "resource_json_sha256": "a408f231861d47a518b42cfea943968644394209eb8b7b2961ccf22b0b731eb5"
+    }
+  ],
+  "candidate_compiler_artifacts": [
+    {
+      "filename": "scaled_mm_kernel.ttadapter",
+      "sha256": "d00432418ffdfadf6e50ab94dbd2e33f35bc89586a3acfeffc655c5c195d8982",
+      "bytes": 31694,
+      "version": 5
+    },
+    {
+      "filename": "scaled_mm_kernel.ttir",
+      "sha256": "147ffaebca82dc055f7be06b18a2032be5b919acdfeaeed30e2349de429c33f6",
+      "bytes": 34678,
+      "version": 5
+    },
+    {
+      "filename": "scaled_mm_kernel.ttadapter",
+      "sha256": "f365fd8c176c93b81e17ca50f84af2ab899ba4b1de4c768dd716eb6f6ad22584",
+      "bytes": 29118,
+      "version": 4
+    },
+    {
+      "filename": "scaled_mm_kernel.ttir",
+      "sha256": "55a5039b9a4bc506db3412aa83ce8b7fdff6042b1d3a352b12e9546e7e615586",
+      "bytes": 32555,
+      "version": 4
+    }
+  ],
+  "attempt_source_sha256": [
+    {
+      "version": 2,
+      "files": {
+        "scaled_mm.py": "ed704ce3752d4463007126417bc98a8588509ab60b4e62cb4988d8bcab7d4adb",
+        "scaled_mm_contract.py": "e6be34c412736792aafb15806e8b4980ac714ef3b83ecfba3953aff46c8dabe2",
+        "scaled_mm_kernel.py": "795939d093b584c9f1373745ec20824a985a041e557c3b2cf4f1533c1b378124",
+        "T03.json": "8731ae28f04bc7e717008516c5841a4963a1fdc5334d5e55e2072fa6b6f67640"
+      }
+    },
+    {
+      "version": 3,
+      "files": {
+        "scaled_mm.py": "ed704ce3752d4463007126417bc98a8588509ab60b4e62cb4988d8bcab7d4adb",
+        "scaled_mm_contract.py": "e6be34c412736792aafb15806e8b4980ac714ef3b83ecfba3953aff46c8dabe2",
+        "scaled_mm_kernel.py": "926b310ea6965af5b70a0e205c7af2d19a27757432dc52e44c61e2516855448b",
+        "T03.json": "8731ae28f04bc7e717008516c5841a4963a1fdc5334d5e55e2072fa6b6f67640"
+      }
+    },
+    {
+      "version": 4,
+      "files": {
+        "scaled_mm.py": "ed704ce3752d4463007126417bc98a8588509ab60b4e62cb4988d8bcab7d4adb",
+        "scaled_mm_contract.py": "e6be34c412736792aafb15806e8b4980ac714ef3b83ecfba3953aff46c8dabe2",
+        "scaled_mm_kernel.py": "c4dc632f1fde790f83116b173ed6bd51aafdb7fbfd55d48f5a0cc1460a3f84cb",
+        "T03.json": "8731ae28f04bc7e717008516c5841a4963a1fdc5334d5e55e2072fa6b6f67640"
+      }
+    },
+    {
+      "version": 5,
+      "files": {
+        "scaled_mm.py": "ed704ce3752d4463007126417bc98a8588509ab60b4e62cb4988d8bcab7d4adb",
+        "scaled_mm_contract.py": "e6be34c412736792aafb15806e8b4980ac714ef3b83ecfba3953aff46c8dabe2",
+        "scaled_mm_kernel.py": "b86f2a6617a09f71a9bb690b12f4d86aa3fd71c5d884607c47167b06ec1e4fd8",
+        "T03.json": "8731ae28f04bc7e717008516c5841a4963a1fdc5334d5e55e2072fa6b6f67640"
+      }
+    }
+  ],
+  "scientific_fixture": {
+    "case_id": "W008-T03-01",
+    "payload_sha256": "fe183c1daefbf25a1e19306dc9bbe0bdd598a27599a6e9e6208a731fbe91a1ee",
+    "source_identity": [
+      {
+        "position": 0,
+        "sha256": "e6be34c412736792aafb15806e8b4980ac714ef3b83ecfba3953aff46c8dabe2"
+      }
+    ],
+    "oracle_calls": 1,
+    "reused_in_later_attempts": true
+  },
+  "publication_tests": {
+    "local_count": 8,
+    "local": "passed",
+    "gz_a3_cpu_only": "passed",
+    "gz_a3_count": 8,
+    "handle": "remote:gz-a3:job:03a09f1c-d9de-44ab-8ef4-d050510e6ffc",
+    "real_backend_imports": 0,
+    "real_compile_calls": 0,
+    "npu_forwards": 0,
+    "scientific_oracles": 0,
+    "profiles": 0
+  },
+  "coverage_audit": {
+    "status": "failed-as-expected",
+    "receipt_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "cases": [
+      {
+        "name": "W008-T03-01",
+        "performance": true,
+        "scenario": [
+          "scalar",
+          "int8-f32",
+          "no-bias",
+          "full-tiles"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": false,
+        "observed_mode": null,
+        "required_mode": 1,
+        "failure": "candidate backend compilation failed before any math; remaining cells not reached",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "CPU audited source int64 offsets: A[32,128] stride[128,1], maxoffset 4095; B[128,64] stride[64,1], maxoffset 8191; output guarded contiguous view offset1 shape[32,64] stride[64,1], maxoffset 2048, backingnumel 2050; scalar or contiguous row/column scale offsets masked by M/N. No runtime layout claim."
+        },
+        "baseline_compile": true
+      },
+      {
+        "name": "W008-T03-02",
+        "performance": true,
+        "scenario": [
+          "scalar",
+          "int8-f32",
+          "bias",
+          "full-tiles"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": false,
+        "observed_mode": null,
+        "required_mode": 1,
+        "failure": "candidate backend compilation failed before any math; remaining cells not reached",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "CPU audited source int64 offsets: A[64,512] stride[512,1], maxoffset 32767; B[512,128] stride[128,1], maxoffset 65535; output guarded contiguous view offset1 shape[64,128] stride[128,1], maxoffset 8192, backingnumel 8194; scalar or contiguous row/column scale offsets masked by M/N. No runtime layout claim."
+        },
+        "baseline_compile": false
+      },
+      {
+        "name": "W008-T03-03",
+        "performance": true,
+        "scenario": [
+          "scalar",
+          "int8-f32",
+          "no-bias",
+          "tail"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": false,
+        "observed_mode": null,
+        "required_mode": 1,
+        "failure": "candidate backend compilation failed before any math; remaining cells not reached",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "CPU audited source int64 offsets: A[8,128] stride[128,1], maxoffset 1023; B[128,128] stride[128,1], maxoffset 16383; output guarded contiguous view offset1 shape[8,128] stride[128,1], maxoffset 1024, backingnumel 1026; scalar or contiguous row/column scale offsets masked by M/N. No runtime layout claim."
+        },
+        "baseline_compile": false
+      },
+      {
+        "name": "W008-T03-04",
+        "performance": true,
+        "scenario": [
+          "scalar",
+          "int8-f32",
+          "bias",
+          "full-tiles"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": false,
+        "observed_mode": null,
+        "required_mode": 1,
+        "failure": "candidate backend compilation failed before any math; remaining cells not reached",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "CPU audited source int64 offsets: A[128,256] stride[256,1], maxoffset 32767; B[256,64] stride[64,1], maxoffset 16383; output guarded contiguous view offset1 shape[128,64] stride[64,1], maxoffset 8192, backingnumel 8194; scalar or contiguous row/column scale offsets masked by M/N. No runtime layout claim."
+        },
+        "baseline_compile": false
+      },
+      {
+        "name": "W008-T03-GA",
+        "performance": false,
+        "scenario": [
+          "nonpower_scalar",
+          "int8-f32",
+          "bias",
+          "tail"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": false,
+        "observed_mode": null,
+        "required_mode": 2,
+        "failure": "candidate backend compilation failed before any math; remaining cells not reached",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "CPU audited source int64 offsets: A[17,128] stride[128,1], maxoffset 2175; B[128,65] stride[65,1], maxoffset 8319; output guarded contiguous view offset1 shape[17,65] stride[65,1], maxoffset 1105, backingnumel 1107; scalar or contiguous row/column scale offsets masked by M/N. No runtime layout claim."
+        },
+        "baseline_compile": false
+      },
+      {
+        "name": "W008-T03-GB",
+        "performance": false,
+        "scenario": [
+          "row_col",
+          "int8-f32",
+          "bias",
+          "tail"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": false,
+        "observed_mode": null,
+        "required_mode": 2,
+        "failure": "candidate backend compilation failed before any math; remaining cells not reached",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "CPU audited source int64 offsets: A[17,256] stride[256,1], maxoffset 4351; B[256,65] stride[65,1], maxoffset 16639; output guarded contiguous view offset1 shape[17,65] stride[65,1], maxoffset 1105, backingnumel 1107; scalar or contiguous row/column scale offsets masked by M/N. No runtime layout claim."
+        },
+        "baseline_compile": false
+      }
+    ]
+  }
+}

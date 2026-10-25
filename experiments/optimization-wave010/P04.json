@@ -1,0 +1,150 @@
+{
+  "study": "W010-P04",
+  "task": "optimization-w010-native-sasum-core-partial",
+  "source_revision": "c2332551586763f8c2d27621f8bc119bd1c3a301",
+  "language": "native AscendC",
+  "license": "CANN OSLA2",
+  "source": {
+    "sasum_host.cpp": "8730302ac4f45b064e2c24489a4620e1deb4a1468cf9607cece79eb4e85340c4",
+    "sasum_kernel.cpp": "52c78894e2ffb12c134ce6e9a55f481a827e38c5a72fc219f59282dad9e5c6ce"
+  },
+  "closure": "sasum_kernel.cpp plus actual SDK kernel_operator.h; no full repository build claim",
+  "technique": "core-local accumulation of identical source tile ReduceSum values; one atomic per nonempty core",
+  "before": "Exact source SasumAIV body: atomic output every tile, all-core source result zero and SyncAll each API",
+  "after": "Only replace CopyOut atomic per tile with V_S-synchronized scalar read/core FP32 accumulation; after final tile one private 32B local scalar output, S_MTE3 event, one atomic per nonempty core; preserve source zero, SyncAll and SetAtomicAdd/None",
+  "configuration": {
+    "launch_blocks": 8,
+    "tiling_bytes": 332,
+    "offset_count_arrays": 40,
+    "ownership": "exact source CalAsumTilingData aligned8 partitions",
+    "tile_elements": 20480,
+    "declared_UB_before": 165216,
+    "declared_UB_after": 165248,
+    "compiler_managed_scratch": "UNKNOWN; report tooling availability is not gate"
+  },
+  "interface": "immutable guarded FP32 x physical stride incx via full backing; private aligned scalar result, tiling/workspace prepared; no allocation/compiler/H2D in forward; same current Torch ACL stream; source clearing/sync inside every API",
+  "domain": "1<=n<=2097155, incx in {1,2}, actual full backing +32-float halos, pointer alignment128B; finite x=q/256 integer q[-4,4]; negative-zero guard allowed; strict no alias",
+  "oracle": {
+    "independent": "CPU FP64 abs-sum once then FP32",
+    "certificate": "n*4<2^24; all nonnegative tile/core/atomic sums exact dyadic",
+    "primary": "nonzero FP32 bits; zero numeric exact",
+    "secondary": "zero sign",
+    "validation": "one output-storage CPU transfer, scalar plus canaries and immutable input full backing; preserve actual mismatch diagnostics no replay"
+  },
+  "protocol": {
+    "input_only_compile_ABI_cells": 12,
+    "compile_before_expected": true,
+    "CPU_expected_once": 6,
+    "correctness_once_per_arm_case": 12,
+    "all_correctness_before_profiles": true,
+    "profile_API_total": 80,
+    "captures": 8,
+    "warmups": 0,
+    "autotune": false,
+    "extra_timing": false,
+    "fatal": "stop family, no reset/source retune/retry",
+    "watchdog_seconds": 600,
+    "precreate_correctness_dirs_counters": 12
+  },
+  "binary_identity": "actual selected DEVICE AIV ELF+sections/RODATA/relocations/resources/source ABI via .ascend.meta and defined nm; canonical LIST CompiledBinaryIdentity through collect_pair tested before science; no guessed suffix or host.so identity substitute",
+  "resource_policy": "actual compiler acceptance + static source bounds + bounded once correctness; automatic scratch/peak unknown, no occupancy/roofline claim",
+  "cases": [
+    {
+      "case_id": "W010-P04-01",
+      "spec": {
+        "n": 8192,
+        "incx": 1,
+        "seed": 100401,
+        "negative_zero": false
+      },
+      "role": "cost",
+      "main": true,
+      "profile_forwards_per_arm": 10
+    },
+    {
+      "case_id": "W010-P04-02",
+      "spec": {
+        "n": 65536,
+        "incx": 1,
+        "seed": 100402,
+        "negative_zero": false
+      },
+      "role": "cost",
+      "main": true,
+      "profile_forwards_per_arm": 10
+    },
+    {
+      "case_id": "W010-P04-03",
+      "spec": {
+        "n": 524288,
+        "incx": 1,
+        "seed": 100403,
+        "negative_zero": false
+      },
+      "role": "benefit",
+      "main": true,
+      "profile_forwards_per_arm": 10
+    },
+    {
+      "case_id": "W010-P04-04",
+      "spec": {
+        "n": 2097155,
+        "incx": 1,
+        "seed": 100404,
+        "negative_zero": false
+      },
+      "role": "benefit",
+      "main": true,
+      "profile_forwards_per_arm": 10
+    },
+    {
+      "case_id": "W010-P04-GA",
+      "spec": {
+        "n": 1031,
+        "incx": 2,
+        "seed": 100491,
+        "negative_zero": false
+      },
+      "role": "stride_holes",
+      "main": false,
+      "profile_forwards_per_arm": 0
+    },
+    {
+      "case_id": "W010-P04-GB",
+      "spec": {
+        "n": 1,
+        "incx": 1,
+        "seed": 100492,
+        "negative_zero": true
+      },
+      "role": "negative_zero",
+      "main": false,
+      "profile_forwards_per_arm": 0
+    }
+  ],
+  "version": 2,
+  "supersedes": {
+    "contract_sha256": "1993323c116c88eb6601cd361814e80f230afcdf90027ecbef109478693081a2",
+    "old_job": "remote:gz-a3:job:54078fcb-1d51-46f5-8836-2a1c803678a5",
+    "old_outcome": "ACL507015 first BEFORE output transfer; zero CPU values/comparisons/profiles; cause UNRESOLVED; preserve alloriginal evidence"
+  },
+  "build_requalification": {
+    "reason": "source-intended ASC build contract repair, not performance tuning",
+    "language": "actual installed FindASC/ascendc_library, .cpp LANGUAGE ASC",
+    "configuration": "Release -O3; --asc-aicore-lang; --npu-arch=dav-2201; documented explicit --cce-auto-sync=on and --cce-auto-sync-log=<unique>/auto-sync.log with -g in device group; -save-temps=obj driver scope",
+    "discovery": "actual GZ runtime ASC package/compiler/SDK includes+libraries; retain modules/verbose actual compiler command; compile_commands may be absent",
+    "causality": "mode/O3/SDK defaults change together; legacy defaults and failure cause unresolved",
+    "immutable": {
+      "native.cpp": "8b15cacc522b49f5c6bb60200afe148e6420b752342fde65c33db76703cf852e",
+      "sasum_contract.py": "4936375e64b34837f9a2f4df31cc0b8fb81655d2728db14136f52f0055d1c216",
+      "sasum_kernel.cpp": "52c78894e2ffb12c134ce6e9a55f481a827e38c5a72fc219f59282dad9e5c6ce",
+      "sasum_host.cpp": "8730302ac4f45b064e2c24489a4620e1deb4a1468cf9607cece79eb4e85340c4"
+    },
+    "derivative": "same exact derivative() byte-preserved; no source barriers/workspace/tilesize/math changes",
+    "identity": "both actual Cube+Vec ELFs, allsections and real metadata/nm; empty Cube text permitted if actual ASC build; host SO secondary; canonical list tested in generic consumer",
+    "host_changes": "restore original enabled numeric wrapper, prepared-device guarded allocations/run/stream/validate/cleanup restoring caller, idempotent close releases own global NativeArm registry handle and buffers",
+    "fixtures": "reuse all six existing immutable cached payload/manifests hashverified; generate0/cachemiss failfast",
+    "target": "same GZ physical0 under own fresh mapping/health lease; named runtime py311-torch; 20Cube40VEC actual query",
+    "protocol": "12new input-only compile/ABI/resource/code screens BEFORE sixcache load;12newonce correctness BEFORE80API8captures; guards0; stop fatal/no reset/replay/retune; C600 startup/run/validate/profile bounds; both host export locks"
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "study": "W010-P04",
+  "contract_sha256": "1993323c116c88eb6601cd361814e80f230afcdf90027ecbef109478693081a2",
+  "rows": [
+    {
+      "case_id": "W010-P04-01",
+      "spec": {
+        "n": 8192,
+        "incx": 1,
+        "seed": 100401,
+        "negative_zero": false
+      },
+      "role": "cost",
+      "main": true,
+      "profile_forwards_per_arm": 10,
+      "correct": false,
+      "performance": false,
+      "status": "UNATTEMPTED"
+    },
+    {
+      "case_id": "W010-P04-02",
+      "spec": {
+        "n": 65536,
+        "incx": 1,
+        "seed": 100402,
+        "negative_zero": false
+      },
+      "role": "cost",
+      "main": true,
+      "profile_forwards_per_arm": 10,
+      "correct": false,
+      "performance": false,
+      "status": "UNATTEMPTED"
+    },
+    {
+      "case_id": "W010-P04-03",
+      "spec": {
+        "n": 524288,
+        "incx": 1,
+        "seed": 100403,
+        "negative_zero": false
+      },
+      "role": "benefit",
+      "main": true,
+      "profile_forwards_per_arm": 10,
+      "correct": false,
+      "performance": false,
+      "status": "UNATTEMPTED"
+    },
+    {
+      "case_id": "W010-P04-04",
+      "spec": {
+        "n": 2097155,
+        "incx": 1,
+        "seed": 100404,
+        "negative_zero": false
+      },
+      "role": "benefit",
+      "main": true,
+      "profile_forwards_per_arm": 10,
+      "correct": false,
+      "performance": false,
+      "status": "UNATTEMPTED"
+    },
+    {
+      "case_id": "W010-P04-GA",
+      "spec": {
+        "n": 1031,
+        "incx": 2,
+        "seed": 100491,
+        "negative_zero": false
+      },
+      "role": "stride_holes",
+      "main": false,
+      "profile_forwards_per_arm": 0,
+      "correct": false,
+      "performance": false,
+      "status": "UNATTEMPTED"
+    },
+    {
+      "case_id": "W010-P04-GB",
+      "spec": {
+        "n": 1,
+        "incx": 1,
+        "seed": 100492,
+        "negative_zero": true
+      },
+      "role": "negative_zero",
+      "main": false,
+      "profile_forwards_per_arm": 0,
+      "correct": false,
+      "performance": false,
+      "status": "UNATTEMPTED"
+    }
+  ]
+}

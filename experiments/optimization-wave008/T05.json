@@ -1,0 +1,97 @@
+{
+  "wave": 8,
+  "approval": "Standing user approval waves003\u2013022; datafirst optionalmodeldemonstrationsdeferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "snapshot_digest": "92fb5efaf51aa786cdd8d1a5869dd952486dffcdb039897d790393947a2aad54",
+  "query": "c4b83c49cd88401a86f27c8a303a605c",
+  "source_receipts": "proposal.md/triton-leads.json/triton-tests-license.json/utils-query1.json +priorinventory fullpin; preserveMIT/thirdparty/Huawei/LinkedIn/vLLM notices, no rawlibrary traversal.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T05",
+  "task": "optimization-w008-clipped-forward-indexing",
+  "title": "Row-column addressing versus flattened divmod in clipped SwiGLU forward",
+  "source_files": [
+    "mindspeed_ops__arch32__triton__clipped_swiglu.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W008-T05-01",
+      "role": "gallery",
+      "seed": 80501,
+      "parameters": {
+        "M": 128,
+        "K": 3072
+      }
+    },
+    {
+      "case_id": "W008-T05-02",
+      "role": "gallery",
+      "seed": 80502,
+      "parameters": {
+        "M": 33,
+        "K": 1024
+      }
+    },
+    {
+      "case_id": "W008-T05-03",
+      "role": "heldout",
+      "seed": 80503,
+      "parameters": {
+        "M": 256,
+        "K": 4000
+      }
+    },
+    {
+      "case_id": "W008-T05-04",
+      "role": "heldout",
+      "seed": 80504,
+      "parameters": {
+        "M": 129,
+        "K": 65
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W008-T05-GA",
+      "role": "guard",
+      "seed": 80591,
+      "parameters": {
+        "M": 1,
+        "K": 17,
+        "pattern": "clamp_boundaries"
+      }
+    },
+    {
+      "case_id": "W008-T05-GB",
+      "role": "guard",
+      "seed": 80592,
+      "parameters": {
+        "M": 3,
+        "K": 65,
+        "pattern": "zeros_signed_tail"
+      }
+    }
+  ],
+  "contract": {
+    "interface": "Prepared FP32 forward GUP[M,2K] contiguous, private OUT[M,K], alpha1.702 limit7. Finite dyadic 1/64 inputs [-12,12], no alias; source-selected block picker applied to both. No fresh allocation latency included.",
+    "before": "Conventional flattened 1D outputs j=pid*T+arange(T),row=j//K,col=j%K, gate=row*2K+col,up=gate+K. T=source BM*BK. EXACT SAME source FP32 clamp/sigmoid/expression order/dtype. Common compiler flags,no disabled strength reduction.",
+    "after": "Exact pinned source 2D row*2K+column addressing, same source BM/BK, full masks. Difference includes program count and padding/layout alongside divmod; disclose actual grids. No T04 saturation or other math changes.",
+    "oracle": "One FP64 independent CPU provider once/case, source expression (clamp(up)+1)*(min(g,L)*sigmoid(min(g,L)*alpha)); all elements finite, fixed atol3e-5 rtol2e-5. Source-vs-flat exact paired FP32 output bits also required because same elemental arithmetic path; if backend violates pair bit requirement retain failed gate, no relaxation. GA includes +/-7,nextafter boundaries,zero; GB signedzero and tails.",
+    "physical": "Host prove every padded intermediate offset and byte bounds signed int32 safe or use SAME int64 route both arms. NONFROZEN symbolic wide-stride tests no giant allocation. Odd trailingdimension/noncontiguous/dtype rejects beforecache; no hidden copy. Tiny tile area source512, K65 BK512 BM2 for M3 or8 capped for129. Actual picker authoritative; publish full grids.",
+    "claims": "Actual compile/codegen/resource screen before math. Compiler-equivalent cases retained as no-op; no forced compiler disable. Report all10 operation spans/task work/gaps/PMU separately, no ordinary latency or instruction count inferred from source."
+  },
+  "source_files_manifest": [
+    {
+      "path": "mindspeed_ops__arch32__triton__clipped_swiglu.py",
+      "sha256": "786d6bcce46e49cd485f310da096df2075907f3454875a82ed08bd89e6ab1b01"
+    }
+  ],
+  "contract_version": 2,
+  "clarification": "Pre-math source-picker typo corrected; v1 retained unexecuted. Source picker authoritative; M3<=8 yields BM2, notBM4. No input/oracle/kernel/tolerance/protocol changes."
+}

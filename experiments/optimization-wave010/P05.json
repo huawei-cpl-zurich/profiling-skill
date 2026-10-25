@@ -1,0 +1,137 @@
+{
+  "wave": 10,
+  "proposal": 5,
+  "task": "optimization-w010-native-sger-fusion",
+  "source_pin": "c2332551586763f8c2d27621f8bc119bd1c3a301",
+  "source_receipts": "Filtered queryd41e042399894c02a7d400b6c6adc31a source pin c233; missing helper query57a0a776fe9b44ad9000def7f6367f50 missd18c5047faf1e893c64242b444b20886 retained, no sourceHOST parity claim.",
+  "source_files_manifest": [
+    {
+      "path": "blas/ger/arch22/sger_kernel.cpp",
+      "sha256": "bc0a69ac382dd93dd5db51f81abec8b18220a6694b5a372b0a54ece2f50fddf4"
+    },
+    {
+      "path": "blas/ger/arch22/sger_tiling.h",
+      "sha256": "3186c4fddd9768a36e3f9da28324262f9fe9a52665c7f499433310323334b598"
+    },
+    {
+      "path": "blas/ger/arch22/sger_host.cpp",
+      "sha256": "b803b226c264dbd855b427d174a21b9c50e7ec2282cd20d6f7d080e74142d2d4"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "cb282ac2b66d7d6734c3fb354db792b28cf23ab29fbc16d5cfd8bd542bedeb1e"
+    }
+  ],
+  "new_unique_mechanism_claim": false,
+  "cases": [
+    {
+      "case_id": "W010-P05-01",
+      "role": "gallery",
+      "scenario_designation": "cost",
+      "seed": 100501,
+      "parameters": {
+        "m": 128,
+        "n": 48,
+        "lda": 128,
+        "alpha": 0.5,
+        "incx": 1,
+        "incy": 1,
+        "aiv_cores": 48
+      }
+    },
+    {
+      "case_id": "W010-P05-02",
+      "role": "gallery",
+      "scenario_designation": "cost",
+      "seed": 100502,
+      "parameters": {
+        "m": 512,
+        "n": 240,
+        "lda": 520,
+        "alpha": 0.5,
+        "incx": 1,
+        "incy": 1,
+        "aiv_cores": 48
+      }
+    },
+    {
+      "case_id": "W010-P05-03",
+      "role": "gallery",
+      "scenario_designation": "benefit",
+      "seed": 100503,
+      "parameters": {
+        "m": 1024,
+        "n": 480,
+        "lda": 1024,
+        "alpha": 0.5,
+        "incx": 1,
+        "incy": 1,
+        "aiv_cores": 48
+      }
+    },
+    {
+      "case_id": "W010-P05-04",
+      "role": "gallery",
+      "scenario_designation": "benefit",
+      "seed": 100504,
+      "parameters": {
+        "m": 2049,
+        "n": 96,
+        "lda": 2056,
+        "alpha": 0.5,
+        "incx": 1,
+        "incy": 1,
+        "aiv_cores": 48
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W010-P05-GA",
+      "role": "guard",
+      "seed": 100591,
+      "parameters": {
+        "m": 127,
+        "n": 47,
+        "lda": 136,
+        "alpha": 0.5,
+        "incx": 1,
+        "incy": 1,
+        "aiv_cores": 48
+      }
+    },
+    {
+      "case_id": "W010-P05-GB",
+      "role": "guard",
+      "seed": 100592,
+      "parameters": {
+        "m": 1,
+        "n": 1,
+        "lda": 8,
+        "alpha": -0.25,
+        "incx": 1,
+        "incy": 1,
+        "aiv_cores": 48
+      }
+    }
+  ],
+  "contract": {
+    "interface": "Prepared F32 rank-one column-major A += x*(alpha*y). Inputs CPU-owned distinct contiguous F32 flat A[lda*n],x[m],y[n], incx=incy=1; m1..2049,n1..480,lda m..m+16; physical full A storage returned, including untouched row padding. Strict dyadic q/16 integer[-64,64], alpha .5 or-.25, no-autograd. Public dimensions reject source column-overrun partition before cache/build/moves. Original/privateA/P do not alias, private A and P have128B halos. API reusable with reset each time.",
+    "before": "Educational split source derivative: preserve exact pinned class/template buffers/partition/events/chunk6144; eliminate source A input read/dequeue/free and replace Muls(tmp,x,alphaY)+Add with Muls(aOut,x,alphaY), materialize rank-one P active cells, then standalone A+=P vector-add stage. No caller inspection or host vector operations within prepared call.",
+    "after": "Byte-for-byte original pinned source SGER class/kernel/tiling, no math/queue/core/resource fixes. Source x/Ain/Aout doublebuffers and tmpQueue depth1 initialized2 preserved. Native source in-place A update, only wrapper/reset private setup added.",
+    "reset": "COMMON charged native DMA originalA->workingA FULL lda*n each API, then before product+add vs after sourceSGER:3 vs2 kernels. Same actual Torch current ACL stream, originalA/x/y immutable and persistent; P private/uninitialized setup but writes all consumed active cells before add, padding never consumed. Host tiling/allocation/H2D/setup outside API.",
+    "math": "Preserve alpha*y in scalar F32 then x*alphaY via Muls then Add to A; no FMA substitution. Inputs q/16 |q|<=64 and alpha .5 or-.25 imply every represented intermediate/result exact F32 (common denom1024, numerator abs<=12288 <2^24). Independent CPU FP64 outer product in same association added only into row<m of full column-major A copy, castF32. Nonzero bit exact primary, numeric zero exact and sign differences secondary. Fullpadding identity + finite/halo/private/inputimmutable required.",
+    "tiling": "SgerTilingData expected56B align8: A/x/y Q@0/8/16, m/n/lda/useCoreNum/colsPerBlock I@24/28/32/36/40, incx/incy i@44/48,alpha f@52. Both host CABI and device compile staticassert; Python <QQQIIIIIiif. Missing source GetAivCoreCount helper is UNKNOWN. Explicit prepared policy fixed48-AIV, actual driver vector_core_num must equal48 before any scientific math; coreNum=min(n,48),colsPerBlock=ceil(n/coreNum), launch coreNum. Every active block count source useCoreNum-last rule; reject any colStart+colCount>n. Main n48/240/480/96 and guards47/1 proven safe at48, source unsafe suggestionsn256/512/65 excluded prospectively.",
+    "resources": "Source UB192KiB exactly8*24576B fullbuffer budget, source chunk6144F32 with exactbyte DataCopyPad. Baselineproducer preserves budget; add three32KiB localbuf98304B; reset32KiB. Static bounds+compiler acceptance+once bounded correctness, automatic scratch UNKNOWN if not reported; no ISA/decoder/report mandatory gate.",
+    "build_recipe": "Actual SDK find_packageASC CONFIG, LANGUAGES ASC CXX and ascendc_library .cpp --asc-aicore-lang; -O3 --npu-arch=dav-2201 explicit --cce-auto-sync=on -g plus unique auto-sync-log, DRIVER -save-temps=obj. Same flags both, SDK actual includes/linkdirs/libs; source full vendor LICENSE and notices. Retain actual build rule if custom ASC generator omits compile_commands, actual CANN/compiler hashes/device Cube and Vec/text/relocs/selectors.",
+    "protocol": "Freeze BEFORE implementation/math. Fresh BZ1physical0 healthyidle maskedlogical0 under die0lease, bothHOSTexports. C600startup before NPUimport/init/moves, mmapdurablephase/counters, same bounded run+validate/profile. All12 inputonlycode/ABI/resources cells BEFORE6onceCPU payloads, all12oncecorrectness BEFORE80completeAPIprofilecalls8captures4mainpairs; guards0. No warmup/autotune/extratiming/profileIO/retuning/replay. Cache binding exact provider/source/spec; missing CPU payload after generation fails, no regeneration. Stopfirst driver/numeric/profileraccountingfailure, preserve unknowndevicecompletion and handles. Explicit correlations required, no timestamp inference.",
+    "evidence": "All raw10samples per arm/maincase, exact charged reset/allcompute taskcounts/names/PMUCSV/source/compiler/device ELF hashes, taskSUM/union/gap/device-operationSPAN; span includes profiled between-task host gaps, no ordinarylatency/physicaltraffic/occupancy/roofline claim. Cost01/02 risk probes; benefit03/04 expect reduced intermediates/onefewerlaunch, preserve results regardless direction. Knownfusion technique/new source application novelty0.",
+    "lifecycle": "Prepared.close idempotent unregister own weak token only, frees own buffers, restores captureddevice context, runafterclose rejects; allocations/stream/run/validate/ENTIRE capture(events+sync+profiler) all captured device guard restore ambientcaller. Adapter atomic build publication only after wholeprogram/deviceidentity/host exports pass. Compileonly run raises without CPU expected/NPU launch. Functional nonfrozen CPU/mockCABI tests and actual evidence consumer mock boundary beforemath."
+  },
+  "root_admission": "Root explicitly admitted before freeze/code/math fixed48-AIV prepared-component policy equalbotharms, actual driver vector_core_num48 checked before scientific math; exact vendor DEVICEsource, sourceHOST helper unknown. No vendorAPI/host parity or generalhostlatency claim.",
+  "predictions": {
+    "benefit": "03/04 expect lower mean profiled complete device-operation span and taskSUM from eliminating P write/read and one native launch. Profiler before3tasks/API after2 including identical commonreset, sourcecode two-pass\u2192one-pass update. PhysicalHBM/occupancy not inferred from logical bytes.",
+    "cost": "01/02 small/medium shapes may gain little or regress due launch/reset/fused source resource effects; probes not guaranteed slowdown, preserve outcomes without tuning."
+  },
+  "freeze_utc": "2026-10-25T09:05:24.603361+00:00"
+}

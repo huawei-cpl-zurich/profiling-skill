@@ -1,0 +1,121 @@
+{
+  "wave": 9,
+  "approval": "Standing user approval waves003\u2013022; datafirst.",
+  "study_kind": "source-backed-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "query": "61093052e4af41c5b2132db2cd524089",
+  "source_receipts": "bodies.json/tests-license.json/proposals.md; original source inventory full immutable pin; MIT plus Huawei/vLLM/DeepLink third-party notices retained.",
+  "protocol": "Compile/codegen/resource allcasepairs via input-only prototypes BEFORE scientificCPUexpected. Six cached CPU payloads ONCE, numerical correctness ONCE perarm/case/source then exactly10preparedcompleteAPI profilingforwards/arm of4mainpairs; guards0captures. No GPUwarmups/autotune/extraunprofiledtiming/profiledIOinspection. Retainnegative/noop/unsupported/failed results and originalsource/binary/fixture/version bindings. No postdata case/tolerance/flag retuning. Actualtarget/compiler/product/cores queried, never inherited GZ40. Complete operation spans/tasktime/union/gaps/raw10samples/PMUs diagnostic not ordinarylatency/physicaltraffic/roofline proof.",
+  "study_id": "R03",
+  "task": "optimization-w009-rotary-trig-sharing",
+  "title": "Share rotary trigonometry across Q and K heads",
+  "source_files": [
+    "bodies/src/triton_ascend_kernels/index/fused_rotary_emb.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W009-R03-01",
+      "role": "gallery",
+      "seed": 90301,
+      "parameters": {
+        "B": 2,
+        "S": 1536,
+        "Hq": 16,
+        "Hk": 16,
+        "D": 64,
+        "scaling": 4.0
+      }
+    },
+    {
+      "case_id": "W009-R03-02",
+      "role": "gallery",
+      "seed": 90302,
+      "parameters": {
+        "B": 1,
+        "S": 33,
+        "Hq": 8,
+        "Hk": 2,
+        "D": 64,
+        "scaling": 2.0
+      }
+    },
+    {
+      "case_id": "W009-R03-03",
+      "role": "heldout",
+      "seed": 90303,
+      "parameters": {
+        "B": 1,
+        "S": 512,
+        "Hq": 32,
+        "Hk": 8,
+        "D": 128,
+        "scaling": 4.0
+      }
+    },
+    {
+      "case_id": "W009-R03-04",
+      "role": "heldout",
+      "seed": 90304,
+      "parameters": {
+        "B": 2,
+        "S": 128,
+        "Hq": 16,
+        "Hk": 4,
+        "D": 64,
+        "scaling": 2.0
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W009-R03-GA",
+      "role": "guard",
+      "seed": 90391,
+      "parameters": {
+        "B": 2,
+        "S": 17,
+        "Hq": 4,
+        "Hk": 2,
+        "D": 64,
+        "scaling": 2.0,
+        "position_stride": 2
+      }
+    },
+    {
+      "case_id": "W009-R03-GB",
+      "role": "guard",
+      "seed": 90392,
+      "parameters": {
+        "B": 1,
+        "S": 1,
+        "Hq": 1,
+        "Hk": 1,
+        "D": 64,
+        "scaling": 4.0,
+        "zero_position": true
+      }
+    }
+  ],
+  "contract": {
+    "interface": "Forward-only prepared rotary computation contiguousFP32Q[B,S,Hq,D],K[B,S,Hk,D],sameFP32dtype,INT64positions[B,S]nonnegative<=2048,FP32InvFreq[D/2]=(j+1)/1024,positivepower2scaling2or4. D64or128, halfDpower2, no featuretailunsupported; outputsQ/Kprivate samephysicalstrides. No gradients or standalone rope.pybackwardclaim. SourceinputQ/K quantized1/128[-1,1], finite, separate storage.",
+    "before": "Explicit conventional educational TWO independent head-parallel rotarykernels QthenK, eachgrid(B,cdivS/32,H), computespositions/inv_freq/sin/cos perhead withsource FP32trigcast and exactsame pointwiseQ0*cos-Q1*sin,Q1*cos+Q0*sin operationorder. Not claim retrievedunoptimizedvendorbaseline.",
+    "after": "Exactpinned _fused_rotary_emb_kernel singlegrid(B,cdivS/32), computestrigonce/sequence tile andloopsallQheadsthenKheads. Preserve source BLOCK32,FhalfD anddtypecast/arithmetic. Difference compriseslaunchconsolidation+trigreuse+headprogram-to-loop repartition, notpuretrigreduction. SmallS/H tradeoffloweractiveprogramparallelism vsfewerrepeatedtrig/programs; no autotune/tilechange.",
+    "oracle": "ONEindependent CPUFP64provider onexactrepresentedinputs:rotatehalves usingpositions/scaling*invfreq; primaryallQandK fixedatol3e-5rtol2e-5, finite/shape/dtype/tuplearity/canaries/immutable/nonalias. PairIEEEFP32bits andmaxpairerrorreported SECONDARY, no universalbitwiseclaim iftranscendental loweringcontextdiffers. Bothsource expressions/fusionflags same. No extraGPUforward/debugtrigcopies; outputsallchecked oncecorrectness.",
+    "physical": "GApositionsstoredasbacking[B,2*S],useview[:,::2] ACTUALCPUandGPUstride2; prepareGPUbackingthenview, compileprobeempty_strided/backingpreservesphysicalview (doNOTcontiguouscopyawayguard). CPUoracle uses SAMEselectedpositions; maxvalidindex=(B-1)*2S+2*(S-1)<2BS. Q/K/outcontiguousBSHDsameinput/outputstrides, outputhalosprivate. COMMON maskedloads other0 BOTH toavoidundefinedinactive trigvalues, declareportabilitysafety validmathunchanged.",
+    "fixtures": "Mainpositions=arange(S)+32*b+(seed%17), <=2048;GAbacking encodesdistinctvaluesatodd/evenpositions so stridebug detectable. GBposition0, includezero/signedzero/cancellationQ/K; numericidentitywithinprimarytols, recordsourcepairedsignedzeros but doNOTassertbitwiseidentitywithinputzero signs (add/submaychangezero signs). InvalidoddD/nonpowerhalf/dtypes/alias/nonfinite/positionrange/scaling hostrejectbeforecache NONFROZENtests.",
+    "claims": "AllrequiredQ/Krotations INCLUDED before2kernelsafter1; preparedoutputsreuse/hostallocationexcluded BOTH, sourcecontrolledFP32singlepathnotvendorautotunerbest. Compile/code/resources all12cells before6CPUpayloads/math; newoperatorapplication novelty0, no hardwareoccupancy/bandwidth/rooflineorordinarylatencyfromcode-derivedworkcounts."
+  },
+  "source_files_manifest": [
+    {
+      "path": "bodies/src/triton_ascend_kernels/index/fused_rotary_emb.py",
+      "sha256": "01c6363ddcda0701d67fdf41de4ab1230c1771e3434356b8c44c074b38fc7c24"
+    }
+  ],
+  "contract_version": 2,
+  "prospective_clarification": "BEFORE any R03 source implementation/CPUexpected/device work: gallery01 S1536 gives96sequence programs over verifiednative48VEC versus64programs atS1024, providing balancedprospectivefull-corecase. Other3cases retainedparallelismtradeoffs. No R03timing or correctness observations exist; v1unexecutedpreserved. Positionsremain<=2048,source/math/tolerances/tiling unchanged."
+}

@@ -1,0 +1,231 @@
+{
+  "status": "retained-first20-verified-canonicalized",
+  "native_correctness_calls": 12,
+  "source_CPU_fixtures": 6,
+  "profiled_calls": 20,
+  "captures": 2,
+  "remaining_profiled_calls": 60,
+  "remaining_captures": 6,
+  "checks": [
+    {
+      "case_id": "W009-R12-01",
+      "arm": "before",
+      "counter": 1,
+      "report_sha256": "ca770d344701d5d8e8d2e0e7a51d4f33646eff3c38fd2a1daddd32b764a1b060"
+    },
+    {
+      "case_id": "W009-R12-01",
+      "arm": "after",
+      "counter": 1,
+      "report_sha256": "ca770d344701d5d8e8d2e0e7a51d4f33646eff3c38fd2a1daddd32b764a1b060"
+    },
+    {
+      "case_id": "W009-R12-02",
+      "arm": "before",
+      "counter": 1,
+      "report_sha256": "97cedd75a0031f7e310c9328238ea34dcbe9d29cb408282bf54273ce8f15b33f"
+    },
+    {
+      "case_id": "W009-R12-02",
+      "arm": "after",
+      "counter": 1,
+      "report_sha256": "97cedd75a0031f7e310c9328238ea34dcbe9d29cb408282bf54273ce8f15b33f"
+    },
+    {
+      "case_id": "W009-R12-03",
+      "arm": "before",
+      "counter": 1,
+      "report_sha256": "7974a8d254e417793f6404667223c3eb77b25c2375208e54948a8464424a8ea0"
+    },
+    {
+      "case_id": "W009-R12-03",
+      "arm": "after",
+      "counter": 1,
+      "report_sha256": "7974a8d254e417793f6404667223c3eb77b25c2375208e54948a8464424a8ea0"
+    },
+    {
+      "case_id": "W009-R12-04",
+      "arm": "before",
+      "counter": 1,
+      "report_sha256": "7d313a7dcec45a90c1d05ec9983a898b6b2273178dae8e938549d752da68afe1"
+    },
+    {
+      "case_id": "W009-R12-04",
+      "arm": "after",
+      "counter": 1,
+      "report_sha256": "7d313a7dcec45a90c1d05ec9983a898b6b2273178dae8e938549d752da68afe1"
+    },
+    {
+      "case_id": "W009-R12-GA",
+      "arm": "before",
+      "counter": 1,
+      "report_sha256": "ada07392496791e52219762c129b2431a13788e790e23d018f8b3e1beda400bc"
+    },
+    {
+      "case_id": "W009-R12-GA",
+      "arm": "after",
+      "counter": 1,
+      "report_sha256": "ada07392496791e52219762c129b2431a13788e790e23d018f8b3e1beda400bc"
+    },
+    {
+      "case_id": "W009-R12-GB",
+      "arm": "before",
+      "counter": 1,
+      "report_sha256": "29c8be6908fd27e769165afc7aeb0eea2601b2a95cfd6002fd4bd86ca398d913"
+    },
+    {
+      "case_id": "W009-R12-GB",
+      "arm": "after",
+      "counter": 1,
+      "report_sha256": "29c8be6908fd27e769165afc7aeb0eea2601b2a95cfd6002fd4bd86ca398d913"
+    }
+  ],
+  "original_report_sha256": "10f242679fa438da7f7f5d1c88b7392136dbceb365ec836659545d36a7439c62",
+  "normalized_report_sha256": "0d0aa352d575244554283f85e207c37488f5a64d6ade430d4a86d0088f81734c",
+  "bindings": [
+    {
+      "arm": "before",
+      "original_state_sha256": "0dea8a254843c1ae68cd4938e96a9052d2953933ee7c429cbb98abe8183922c2",
+      "canonical": [
+        {
+          "hash": "5ab756e1bb4040a3a6d5f1750beeb794dc5f9e1d5c96dd2344dad2b742771430",
+          "sha256": "5ab756e1bb4040a3a6d5f1750beeb794dc5f9e1d5c96dd2344dad2b742771430",
+          "format": "ELF64LE-hiipu-device",
+          "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+          "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aic",
+          "component": "aic",
+          "binaries": {
+            "elf": "5ab756e1bb4040a3a6d5f1750beeb794dc5f9e1d5c96dd2344dad2b742771430",
+            "selected_text": "2e65bba0fc26fb372b8e607f60c72b56166a47a6f2a5660b4d228ac6a9d6dc01"
+          },
+          "host_shared_library_sha256": "21f2959eabb2aedc462dc6f4eafe5f9399ecdeb7b7ee0e8c9e754f5a60c36830"
+        },
+        {
+          "hash": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+          "sha256": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+          "format": "ELF64LE-hiipu-device",
+          "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+          "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aiv",
+          "component": "aiv",
+          "binaries": {
+            "elf": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+            "selected_text": "99f54142713142badd46293b4f28b50f056796973cac9fa002e3fdbe63713ddf"
+          },
+          "host_shared_library_sha256": "21f2959eabb2aedc462dc6f4eafe5f9399ecdeb7b7ee0e8c9e754f5a60c36830"
+        }
+      ],
+      "latency_sha256": "3de865ce56408ec720fe9d2a250282c38081b13a4068b8096ac49b82ea77ec55",
+      "trace_sha256": "311cace3ccc886ef750396ded328291669084401d1b567e436f3b3ae6dfb767f"
+    },
+    {
+      "arm": "after",
+      "original_state_sha256": "e4c7024be4b8e48c976afbffb17aee1d8b68ca4360b2d569bb01c4f04371ab30",
+      "canonical": [
+        {
+          "hash": "48c7b9b1dce775f6244a441acfbf6c8d91c1ce6297c4da7112069733616efa99",
+          "sha256": "48c7b9b1dce775f6244a441acfbf6c8d91c1ce6297c4da7112069733616efa99",
+          "format": "ELF64LE-hiipu-device",
+          "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+          "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aic",
+          "component": "aic",
+          "binaries": {
+            "elf": "48c7b9b1dce775f6244a441acfbf6c8d91c1ce6297c4da7112069733616efa99",
+            "selected_text": "6ec88ad6528d0d2c8ca500791649089c2d21256abc307abece7973ce05ed3d04"
+          },
+          "host_shared_library_sha256": "6d794dec68ff7d750788bdb67a76e50d9f72d84a9171325b6cf6819a480fcc33"
+        },
+        {
+          "hash": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+          "sha256": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+          "format": "ELF64LE-hiipu-device",
+          "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+          "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aiv",
+          "component": "aiv",
+          "binaries": {
+            "elf": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+            "selected_text": "99f54142713142badd46293b4f28b50f056796973cac9fa002e3fdbe63713ddf"
+          },
+          "host_shared_library_sha256": "6d794dec68ff7d750788bdb67a76e50d9f72d84a9171325b6cf6819a480fcc33"
+        }
+      ],
+      "latency_sha256": "c77ebd12c3e97dfe5f462e3fb3afed2ae62506ba4facbbd2144c3521cd8d9d1f",
+      "trace_sha256": "a8f5fde3932b870784afdaa2caee92ca405f97154f9a665c0c0123c98d8da299"
+    }
+  ],
+  "first_pair_evidence_status": "complete",
+  "event_ms": {
+    "before": 0.23190599977970122,
+    "after": 0.20283600240945815
+  },
+  "device_span_us": {
+    "before": 11.2241,
+    "after": 10.750350000000001
+  },
+  "physical_task_types": {
+    "before": [
+      "UNKNOWN"
+    ],
+    "after": [
+      "UNKNOWN"
+    ]
+  },
+  "new_native_forwards": 0,
+  "new_oracles": 0,
+  "new_captures": 0,
+  "release": {
+    "original_job": {
+      "pid": "2469272",
+      "pgid": "2469272",
+      "exit": "1",
+      "starttime": "321241299"
+    },
+    "group_members": [
+      {
+        "pid": 2469272,
+        "state": "Z",
+        "cmd": ""
+      }
+    ],
+    "no_live_members": true,
+    "die0_lease_acquired": true,
+    "both_exports_acquired": true,
+    "health": [
+      {
+        "kind": "health",
+        "exit": 0,
+        "stdout": "\tHealth Status                  : OK\n\tError Code                     : NA\n\tError Information              : NA\n",
+        "stderr": ""
+      },
+      {
+        "kind": "usages",
+        "exit": 0,
+        "stdout": "\tDDR Capacity(MB)               : 0\n\tDDR Usage Rate(%)              : 0\n\tDDR Hugepages Total(page)      : 0\n\tDDR Hugepages Usage Rate(%)    : 0\n\tHBM Capacity(MB)               : 65536\n\tHBM Usage Rate(%)              : 4\n\tAicore Usage Rate(%)           : 0\n\tAivector Usage Rate(%)         : 0\n\tAicpu Usage Rate(%)            : 0\n\tCtrlcpu Usage Rate(%)          : 7\n\tDDR Bandwidth Usage Rate(%)    : 0\n\tHBM Bandwidth Usage Rate(%)    : 0\n\tNPU Utilization(%)             : 0\n\tAicube Usage Rate(%)           : 0\n",
+        "stderr": ""
+      },
+      {
+        "kind": "memory",
+        "exit": 0,
+        "stdout": "\tDDR Capacity(MB)               : 0\n\tDDR Clock Speed(MHz)           : 0\n\tHBM Capacity(MB)               : 65536\n\tHBM Clock Speed(MHz)           : 1600\n\tHBM Temperature(C)             : 54\n\tHBM Manufacturer ID            : 0x57\n",
+        "stderr": ""
+      },
+      {
+        "kind": "proc-mem",
+        "exit": 0,
+        "stdout": "\tNo process in device.\n",
+        "stderr": ""
+      },
+      {
+        "kind": "board",
+        "exit": 0,
+        "stdout": "\tNPU ID                         : 0\n\tNPU Name                       : 9382\n\tChip ID                        : 0\n\tChip Name                      : Ascend910\n\tChip Version                   : V1\n\tBoard ID                       : 0xb1\n\tPCB ID                         : NA\n\tBOM ID                         : 1\n\tVDie ID                        : 6EDEF66C 00E0B7DF 505AB893 C48B0B56 144301E3\n\tNDie ID                        : 00000000 00000000 00000000 00000000 00000000\n\tChip Position ID               : 0\n\tPCIe Bus Info                  : 0000:9D:00.0\n\tFirmware Version               : 9.0.0.9.220\n",
+        "stderr": ""
+      },
+      {
+        "kind": "ecc",
+        "exit": 0,
+        "stdout": "\tHBM Single Bit Error Count               : 0\n\tHBM Double Bit Error Count               : 0\n\tHBM Single Bit Aggregate Total Err Cnt   : 0\n\tHBM Double Bit Aggregate Total Err Cnt   : 0\n\tHBM Single Bit Isolated Pages Count      : 0\n\tHBM Double Bit Isolated Pages Count      : 0\n\tHBM Single Bit Next-Isolated Pages Count : 0\n\tHBM Double Bit Next-Isolated Pages Count : 0\n",
+        "stderr": ""
+      }
+    ]
+  }
+}

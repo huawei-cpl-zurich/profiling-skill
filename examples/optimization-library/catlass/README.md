@@ -34,3 +34,5 @@ ten forwards per arm. Its original parser rejected native CANN flow accounting;
 strict replay subsequently qualified the existing trace through genuine
 HostToDevice flow IDs and Node launch thread identities, with no extra forwards. No kernel identity is inferred from task
 ordering or device execution time.
+
+Native source-bound [FullLoadA residency pair](L1_A_RESIDENCY.md) retains the selected CATLASS header closure, A3 correctness results, and complete prepared-operation profiling evidence.

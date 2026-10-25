@@ -1,0 +1,16 @@
+{
+  "trace_sha256": "587ebeb010b97b91c92558ab7699add399dbde16366812d3cfcdd3fc5b9bbc70",
+  "normalized_sha256": "e418ecdc99d7833aaa2df3fceea22f412ea0a76c063000d7626ea018b06ab934",
+  "accounting_sha256": "2f4189c6c9881792ca6ef7251a663e103b45e3464198fc46ca3e6405019f0434",
+  "raw_PMU_csv_sha256": "0b6edcfdda73b3539733d1b46b806bde02cc92afbdf83be7faafb42d8cf4356b",
+  "actual_task_types": [
+    "MIX_AIC"
+  ],
+  "Block_Num": [
+    "24"
+  ],
+  "Mix_Block_Num": [
+    "48"
+  ],
+  "all10samples_retained": true
+}

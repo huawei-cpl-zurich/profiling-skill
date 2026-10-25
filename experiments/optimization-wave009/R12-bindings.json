@@ -1,0 +1,722 @@
+{
+  "source_pin": "40aced927fdaaa0f3eaa9c6f5c5d859e06392f55",
+  "matrix_sha256": "87bb7291f91911c19081b6a48eddcd8e04f50ac12fa2fa1005ab1b0e06959852",
+  "original_source_manifest": [
+    {
+      "path": "examples/optimization-library/catlass/l1_a_adapter.py",
+      "sha256": "8a1e29ae40f0c35247e8838acf88d58c7806fde43cc72ff304e8ab3f8f0a673d"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_contract.py",
+      "sha256": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_build.py",
+      "sha256": "cc5601b637151a70b3a7ef74483025ed5bea0c6c7ff6379d05d9e543fad933d4"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/LICENSE-APACHE",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/manifest.json",
+      "sha256": "b1ff005a1860a20f40e6232ac983659209def99ba06ceda7542ef6cc2867ca0e"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/block_mmad.narrow.patch",
+      "sha256": "4904c512cf5f5e9c1bfcc393a0a84acf7fbcc31a2c1a86d5a26af75fb8bd1432"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/block_mmad.original.hpp",
+      "sha256": "4c1c38c42d2e51a09fa3a5d407885fa5a9868820196e1c6f0722d9aeb8265c30"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/LICENSE",
+      "sha256": "89b1c114df62cfd183004f38d18d07f186436c3b37203dd69c3e84becf9d2282"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/Third_Party_Open_Source_Software_Notice",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/examples/25_matmul_full_loadA/matmul_full_loadA.cpp",
+      "sha256": "cd69e2aaac4f2fe9b856a80b935be8ad13d82055d80a657ebba4003aaaf18681"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/tla/layout.hpp",
+      "sha256": "8cb7ea76d8c011ef302a87bb8f4a4bccdee803ce869e8e2cb374ee54151a2237"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/tla/stride.hpp",
+      "sha256": "b5b006b050aa47e75a4be9634e31831b6f8d288b41f609d7311065eef32c141d"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/tla/tensor.hpp",
+      "sha256": "3ce5d2ebb44efd5cae44efd01ba42a9ae2f2aece17f0f2b819ed3803a04a3fd8"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm_coord.hpp",
+      "sha256": "98f6b01c4f03bf3f93f861856c21856b7866919049f587a04069ef3733ebc0e7"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/matrix_coord.hpp",
+      "sha256": "cf55f004e022a97f094f302106134678bd99a2965e354bf058389c46fae32fe8"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/coord.hpp",
+      "sha256": "448483ecec89e51556a76e078ef2b1fdcd1bf4ae9c4e73ce032fc1324ca0dd81"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/catlass.hpp",
+      "sha256": "fe1410d62cf72573f8a3ca97e160bfd4a4520f2752b753f9d701ff927fabec0b"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/status.hpp",
+      "sha256": "cea8bd8cfc3e72bd7ba86b76601cf9825d74cda9ac7a2eddf9ea5b88fa227dd7"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/conv_coord.hpp",
+      "sha256": "5ed16f63df916343010aec57794b8e79cdb258ccd388ad813f9ac796049ec7a7"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/numeric_size.hpp",
+      "sha256": "acf11cd72642d64fc0c711033fb8c6e67ca439462e01502400da6bc50014ec83"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/detail/macros.hpp",
+      "sha256": "ac325efb38493fbe1e39ad1b00298b2b686da01504e8ad06688b67045fe617ea"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/detail/tag_to_layout.hpp",
+      "sha256": "a96709f7c96c26aa1c60c1a3ae6fb05377db596c277990a5f5f1b86373d32a85"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/detail/alignment.hpp",
+      "sha256": "40af79ae86a4892859bd649699b68c3195fb0138288d3fd7835e7b7db85340f0"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/detail/dependent_false.hpp",
+      "sha256": "b2d08ec3485236d8879c82fc4ffa13adf1efa65d9de6e711a1d996cffc77e1cf"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/detail/kernel_adapter.hpp",
+      "sha256": "390f797ea448cfab8911f4dfdd4ec7936724f95cde4f2fa59f926f6c00961107"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/helper.hpp",
+      "sha256": "0062470847b592bccad4664ca8ffb9222b2850c605f24852e5a6c2ebfd192795"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/gemm_type.hpp",
+      "sha256": "ad15a666a48b610c6e35394a1dc9c4039589dca6149b24942ff3c1277587a468"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/dispatch_policy.hpp",
+      "sha256": "0f9c9795b5384f6f211acfaaec9caae62cca99cab3f9c89a8799b337036a38d4"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/arch/local_tensor_buffer.hpp",
+      "sha256": "88e5227c846316e3674dbfceb5a872da829ed605d8f111ec951dbd3a5796a281"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/arch/arch.hpp",
+      "sha256": "42d9c6214ea1028bd48ca0f384da612406e5a251aa841554662998dda2630125"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/arch/resource.hpp",
+      "sha256": "b1b1a6e572e9f018c16aad7289a26d90ff472dde6be0e2ec0b7b70867d47000f"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/layout/matrix.hpp",
+      "sha256": "9721076abec472206f0f1b18f324b2d2c6b141909c862a68f0b4d2675f7662e9"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/layout/layout.hpp",
+      "sha256": "e32fe9ae8aad0098bf90c097d7fbeb808fb6ade8d752192fd0b4a402ce01405c"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/layout/tensor.hpp",
+      "sha256": "96bf7be5f61dc1024a1d765238b27ad37dfdf3e51881cf2aea7c588664ce3bf6"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/layout/vector.hpp",
+      "sha256": "9b826b60cd92a3c3971999c7e69b204d1b6fb301c6c2b4b42a863362290bb788"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/device/device_gemm.hpp",
+      "sha256": "c852a95f933ee54549933f892b67e34b891fa8c7dee19a4871936cc78dc36260"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/kernel/matmul_full_loadA.hpp",
+      "sha256": "1ef9a4caae8cc38559f907d938ced5f4c58d5252601e19abe122b9f6874b7518"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/copy_l1_to_fp.hpp",
+      "sha256": "b1fd0a9997e40a66b4fb6248b2cb0cd356206db4b473eabefa9b3218120946eb"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/copy_gm_to_ub.hpp",
+      "sha256": "922733fc178fb898be9c266a2887e0bc7422985598c58430e07366f5b9a7a65b"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/copy_ub_to_gm.hpp",
+      "sha256": "f8622d6721a4267673d554bb3d75a93a4bb29483cbda90cb0cb19b6e1e3eb29c"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/cast_int4_to_int8.hpp",
+      "sha256": "e89c098b8df65de1733b80175b93b2908807d1ae275cf5af81caef6bde4107d4"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/tile_copy.hpp",
+      "sha256": "953fb37de267514328a5ffb81e8dfa53bc012c718dafcfd1e3f647d6ff9e57e6"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/copy_l1_to_l0a.hpp",
+      "sha256": "0a8efe150a05fe439058a93a74b43d49370ba0066f2cf8fddee2628bb161530c"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/copy_l1_to_l0b.hpp",
+      "sha256": "6a910fee9c5528d4d9a3be446fcffca86cb80d3998fc7c942f53c9f8ed7d9277"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/copy_l0c_to_ub.hpp",
+      "sha256": "2c8a41bb5a8ad412970ddef5103008456f21b02db813caa24b5d9268c0afd5b8"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/tile_mmad.hpp",
+      "sha256": "643a1a73b641d6030208da7afa4ee976e7a5a6f2d773caf67f670f4162914100"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/cast_int8_to_fp16.hpp",
+      "sha256": "5464c4bba31c96ce3bd085cf4af309513ab0b0471f02bbecc570e7af07916fed"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/copy_l0c_to_gm.hpp",
+      "sha256": "3b4ba8d2dc9bd77b34efb0dd5042e16ce8a7a00263b7af1d8fcd304134f6277a"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/copy_gm_to_l1.hpp",
+      "sha256": "0e72281c5e7a2f1e51fc87dfddc3c524139a92d3f4c05ae25e3ef320d6632f9e"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/cast_fp8_to_fp16.hpp",
+      "sha256": "a05933aedfd06bd37293953314d6ca4f6264f38a23e64f0fdda3301dc39a67d2"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/tile_copy_tla.hpp",
+      "sha256": "dde104d423b0e8085a13c0baece9523f1085e797f3c855307899893e0b6eeac9"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/copy_l1_to_bt.hpp",
+      "sha256": "0940ecaf5bb4f16a88ff46450ff604465f7cef93900c9f4d055e16e0acba15dc"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/block/block_mmad.hpp",
+      "sha256": "b7c79d86bdf66e0ee2d1eb0d50f2090a630402729951f96f7e3ce56c00a3fb3a"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/block/block_swizzle.hpp",
+      "sha256": "04ac166dd7f3bf0e57f8eb3dce97c26df88d91e4d169850e899b0502dacf3a14"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/block/block_mmad_pingpong_full_loadA.hpp",
+      "sha256": "5cc15b7a85a68a8c63b68613b9055d5020bb367716c689d1efc7d900cf8d3e74"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/atlasa2/copy_gm_to_ub.hpp",
+      "sha256": "67db1322663edbc5a3c8b1d4b64b96722ce033e0f74d92d311a1fc24f15bed1a"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/atlasa2/copy_ub_to_gm.hpp",
+      "sha256": "e1f8865a11f7884b94517a6d72982db668b437db76864b6cd8da321145331eb3"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/atlasa2/cast_int4_to_int8.hpp",
+      "sha256": "cb559d6c30418a8535bc9f14c3ba2a809d894de68e8e4547fb9be3fed43826ea"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/atlasa2/copy_l1_to_l0a.hpp",
+      "sha256": "455a9cbd53b8d48d0a3c221acca254e97419e25e9215f113568d4a6b721edc5f"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/atlasa2/copy_l1_to_l0b.hpp",
+      "sha256": "8e24286a2d2958dc619f0bf0000b0356a485c373a14594bfb2a58971860a81b7"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/atlasa2/cast_int8_to_fp16.hpp",
+      "sha256": "bdf6bdfbf080969f293826e63e3d428ef338d46a18ace5f60aed4191db098ff6"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/atlasa2/copy_l0c_to_gm.hpp",
+      "sha256": "70e9635c7ea8b17f0c6f8394a4f1c017a46259622f0abb3840b10f78fbaa21fb"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/atlasa2/copy_gm_to_l1.hpp",
+      "sha256": "c96b1383161ff4cd7b6798b4a75c025279b26149db4145ed5085338c02f43db8"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/atlasa2/cast_fp8_to_fp16.hpp",
+      "sha256": "e483234df530d6d43c9dbf4cbfccd28df124a5298535c8ccdf54d9656144c2d9"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/catlass/gemm/tile/atlasa2/copy_l1_to_bt.hpp",
+      "sha256": "de9cef5d308aebd667c1f4665541dafb143a2a83aa5ae96342625219c8b53c73"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/tla/tuple/tuple_algorithms.hpp",
+      "sha256": "ec738c34ca3d6f43f3d1122726826c8563d491d0a764ec9942fcddfdf046c1ca"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/tla/tuple/tuple.hpp",
+      "sha256": "79d4e090a47e64b52008bfdad6dfeb869ad5cb809609e37f4821f84d5e7c4e10"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/tla/tuple/tuple_math.hpp",
+      "sha256": "776bb0c347fe79aff0f4a684f43f0353c581f5262147c9c5efef14b4e743ebe8"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/tla/integral/integral_math.hpp",
+      "sha256": "0f41124b5a65d9d627ad6aa63d39fa5b7bf44cbf6f55b73186d984b0dc345c57"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/tla/integral/integral_sequence.hpp",
+      "sha256": "0778df8cd055a8fa1f9b49823379545ca4603e9256f463eb7b9509f99b657c0f"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/tla/integral/integral_constant.hpp",
+      "sha256": "683e4a170edca3fc161a6f297385d888960b9e136c0364444673d513665a4c3b"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/tla/utils/functional.hpp",
+      "sha256": "7753d6932e14b03b8c30160bcd99a6e8cdae95695308bf886c3000600c51f036"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/tla/utils/math.hpp",
+      "sha256": "1a21e437b2cc6e308d7fac063cebe25f48f099b1574599ec1e06ecde20371c64"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_vendor/include/tla/utils/type_traits.hpp",
+      "sha256": "ed09a88974e7cd1429d532057f1314369f72b411483cc12d0751dab4f99a08cc"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_residency.cpp",
+      "sha256": "f00fb4810125f272e4d579a77fb3c053aecc156133dc418ea1182d8071058c82"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_native.py",
+      "sha256": "7c5885a1f480454964e759dc8c1fce2de4556618ca71de8617a523b582cf1b97"
+    },
+    {
+      "path": "scripts/model_campaign_task.py",
+      "sha256": "3fac98d83465ef9d1b75b8134c5b7603a458b788c7becd1a5325676b6f1005c7"
+    },
+    {
+      "path": "scripts/private_campaign_models.py",
+      "sha256": "efd4da1c4acbae584b5a2b55d4d4afc0ff84f0bda0eaeb8ad80b6ab9436698d5"
+    },
+    {
+      "path": "scripts/qualify_natural_tasks.py",
+      "sha256": "d49e2805c20e7b6cbea8a7005fe702eaf0fbe62c429cd563cabacf8debaec3d6"
+    },
+    {
+      "path": "scripts/model_phase_shutdown.py",
+      "sha256": "674083f7cdd3e970c04595d49625a5062d70fa7010feaccb0252730a70df7375"
+    },
+    {
+      "path": "scripts/a3_managed_bundle.py",
+      "sha256": "8d4d0d1e7264ad40e58b8f69c11e26ee7e9cab7e1896f235a6b6247cc913ca5f"
+    },
+    {
+      "path": "scripts/qualify_bsa_candidate_a3.py",
+      "sha256": "00adc78ed9be299b906be83953f48da9a0507076a2c9b056bf74a063417ddae6"
+    },
+    {
+      "path": "scripts/optimization_library_eval.py",
+      "sha256": "6c3873992f9b2821553e97ee25c6f1a53c3b438c4d3f63c18054955d971544ac"
+    },
+    {
+      "path": "scripts/a3_timeline_probe.py",
+      "sha256": "4537fb3097c788b9b22357b95233128e34691afe7751e640730aced216ad9230"
+    },
+    {
+      "path": "scripts/blind_optimization_launcher.py",
+      "sha256": "cfca7c82a057b3d7aa4a3cdfb69700e79c61f1071ac98000ee666f55f6756c77"
+    },
+    {
+      "path": "scripts/analyzer_profile_acquisition.py",
+      "sha256": "6d16f9b7e0e8b3956feeda3e727bdd788d1d44c8c834e3a5a1f17cda4cdb88b0"
+    },
+    {
+      "path": "scripts/export_pipe_evidence_packets.py",
+      "sha256": "c4cade82270d3e3f23a314bc0cbce2b5fa179e709658c9e1c00b5625ea694b13"
+    },
+    {
+      "path": "scripts/simple_experiment_runner.py",
+      "sha256": "3cc3108050233105f24756303911994c8fdc0127ff450c51683d596415c52a43"
+    },
+    {
+      "path": "scripts/model_campaign_warm.py",
+      "sha256": "452cc4a307756326fe302017898ec023ea3e5e71ac99710b91667f6acf6b4eba"
+    },
+    {
+      "path": "scripts/comparison_bsa.py",
+      "sha256": "1811768f8940dd2e29c2fe64282a60595e507c2fba13936f12f56881638614c6"
+    },
+    {
+      "path": "scripts/gz_a3_job_client.py",
+      "sha256": "0a163dd8942820bb358408c86a2fb344055eba29069445da78b6e9ce36736a6f"
+    },
+    {
+      "path": "scripts/a3_memory_batch.py",
+      "sha256": "7e2724a5a905dcde2f84fe09240accfc7e16ed1d42f59d3b6872c49eeac3f38e"
+    },
+    {
+      "path": "scripts/recover_a3_profile_campaign.py",
+      "sha256": "3ddca9c8f2f98849aca6fca834d1451fd58951fecc7921384609c5c0ea5dce5f"
+    },
+    {
+      "path": "scripts/bz_a3_diagnostic_client.py",
+      "sha256": "ada4d2eb22832e55c1b01f21db05ba7e63f8b0588a321299e0179c84c0ea00a8"
+    },
+    {
+      "path": "scripts/profile_behavioral_gate.py",
+      "sha256": "17f697154c76f6ccd7b5fbe4707a258ea7c54943d63a5160e835bd0648b23098"
+    },
+    {
+      "path": "scripts/a3_mlir_retrospective.py",
+      "sha256": "daba95744d7847a22c91f6bd4d6911cf098edb4ae6f43a207bcf4b9e11dc3fbd"
+    },
+    {
+      "path": "scripts/comparison_gdn.py",
+      "sha256": "6409bc7d35c5dc3c6ce957486932ffc3708bae7d385868ab894ebe9669555611"
+    },
+    {
+      "path": "scripts/model_campaign_native.py",
+      "sha256": "1b90044e9487a5e4016b968cb2f7946acb34d4f792d0fa0faf0cd5453d2b1329"
+    },
+    {
+      "path": "scripts/a3_controlled_memory_batch.py",
+      "sha256": "803e36aa459f288dac723821431f0630eb3fe3b6151fe0156d3d325071c7af23"
+    },
+    {
+      "path": "scripts/run_compiler_evidence_ablation.py",
+      "sha256": "a877c2ecfc57d8d990ef94a7a7e8276beb2d05a9c0152998b53c9690c80ce961"
+    },
+    {
+      "path": "scripts/model_benchmark_profiled.py",
+      "sha256": "df3125aa480c08020ffec615018c557d6ed2c7270681612c728a266b64b9e085"
+    },
+    {
+      "path": "scripts/actor_analyzer_controller.py",
+      "sha256": "0bcc8bdb507e771860a472d1f57cfb5d72bed773003cb1684fd571fbc61547ce"
+    },
+    {
+      "path": "scripts/blind_optimization_tools.py",
+      "sha256": "3a9666ea7169856a2cb49e546ec98e9c70e292fcf85329165a2f671556b7d7a3"
+    },
+    {
+      "path": "scripts/model_campaign_tools.py",
+      "sha256": "4170bc6d49449ed8d466ca9f61f113267e7452db14b8563bf43e188ff9acee95"
+    },
+    {
+      "path": "scripts/profile_behavioral_launcher.py",
+      "sha256": "f63ab0eb2f6548ddc7688487e7e6fd1aaf9a1e164a859d204c739b23183d0ada"
+    },
+    {
+      "path": "scripts/bsa_candidate_a3_executor.py",
+      "sha256": "754fad3e5569080072f102d28f74175a55dc257156edf7e9fa806619934e7383"
+    },
+    {
+      "path": "scripts/run_pipe_evidence_diagnostic.py",
+      "sha256": "3234f6a1b3ed04e45a024b5fedfde776b67ca827374a02085d79f000fc0c8a1c"
+    },
+    {
+      "path": "scripts/a3_profile_amplified_campaign.py",
+      "sha256": "1b1c509f7a74f3c59d6bff79388a6158e5dc40e99a757ddde15144b351c1d2f2"
+    },
+    {
+      "path": "scripts/acquire_profile.py",
+      "sha256": "5b9a0b2c6f0b8c85ff88385aea365db3eaeaff64b92e30f11e44c80afe384d3b"
+    },
+    {
+      "path": "scripts/a3_wait_cost_batch.py",
+      "sha256": "51e6c3310479699738b92fbffba9a2a365e7cc38639f37f24f33872909c1d4cd"
+    },
+    {
+      "path": "scripts/profile_device.py",
+      "sha256": "59581ad119482eca12a995c452e245205aa1a80253ed30f80f47855173ec1ef8"
+    },
+    {
+      "path": "scripts/model_benchmark_repeated.py",
+      "sha256": "f63fd860d89c26a02719ea6206bd23ae032bb3a00d4e267d960ba95af29809a2"
+    },
+    {
+      "path": "scripts/private_campaign_cases.py",
+      "sha256": "c28b7ddf83e10b9435a0ebc81e38bda8da1bfb7ef6cfa383a8e7d7263e59d01f"
+    },
+    {
+      "path": "scripts/run_blind_optimization_pilot.py",
+      "sha256": "17ead596122404ff31c175fe304d136e9c090fc7af70b26e459099b7521f2e9f"
+    },
+    {
+      "path": "scripts/analyzer_report_repair.py",
+      "sha256": "0729b8220069210243a099e2735a51f147344256674f0a23b1f1aa0fdd095950"
+    },
+    {
+      "path": "scripts/a3_benchmark_runner.py",
+      "sha256": "120bb24e822583f15529bddb0bcdbfc8a10acf7b6d7a8b88d93af43187307c48"
+    },
+    {
+      "path": "scripts/a3_sanitizer_batch.py",
+      "sha256": "4a32488aeb38002c9e4e064a876fe0097186f4d3cab5779879ea536eb065f28b"
+    },
+    {
+      "path": "scripts/optimization_native_bridge.py",
+      "sha256": "ec67231d0e2850f74a399b6ea22ffe4ae2a8cdc2964e2ae2cd3a466e93d58804"
+    },
+    {
+      "path": "scripts/optimization_profile_evidence.py",
+      "sha256": "820cec72587387221ebfab2adcc5beff71d28fabcd97787c5e82f4c58784e6a3"
+    },
+    {
+      "path": "scripts/production_launcher.py",
+      "sha256": "b0f44810c0f638aead80cc4661cb6a07de90ea19b9e634e54f6f20b461427021"
+    },
+    {
+      "path": "scripts/model_campaign_worker.py",
+      "sha256": "e84b51d3dbac9e90bfece6c8d96834cc209747c58e7fb0637796e86c2374ef42"
+    },
+    {
+      "path": "scripts/profiling_planning_smoke.py",
+      "sha256": "9baccd9d6ef6d2c87eb92608d50a01d17d6e3179fdbb90c04150baa6315e6efa"
+    },
+    {
+      "path": "scripts/planning_tool_client.py",
+      "sha256": "c8544892b6a66b6f342d2ea71c55626dde6d97ff191ded20c38eb9d9214371ed"
+    },
+    {
+      "path": "scripts/model_campaign_service.py",
+      "sha256": "d83292193faefdc364c83dce6f65465a7e2ad5a0a2516ee0ec7a219f38b1b03e"
+    },
+    {
+      "path": "scripts/build_profile_reverse_report.py",
+      "sha256": "62cd5d5457c72a839316e5aea0b7e8cb20525130ea0eb9e85fbfdbdbee4e31dd"
+    },
+    {
+      "path": "scripts/bz_a5_job_client.py",
+      "sha256": "91fbb60e8561f2eea4596370e43f36b1866c5bece9330f33f52ba666cbf2dd1a"
+    },
+    {
+      "path": "scripts/mte2_compiler_evidence.py",
+      "sha256": "b79915519edb569d803efb0dae7edfe43edd5092dae73fdba6825305a068d9e1"
+    },
+    {
+      "path": "scripts/fully_fused_contract.py",
+      "sha256": "6bc13e2be9ac17fbce0e2b8c6cd54d4ad0abfde658ebcfb2916802bdd74737ea"
+    },
+    {
+      "path": "scripts/bsa_candidate_profiler.py",
+      "sha256": "f097d8db7b18ec3e077bac63402c06b1aa3e1c1107a01539c55d7aee71e82038"
+    },
+    {
+      "path": "scripts/bz_a3_job_client.py",
+      "sha256": "c247a8d650990774cb0c749e116474203a6abaf763306c7aba8bba5faf6dcc09"
+    },
+    {
+      "path": "scripts/campaign_batch.py",
+      "sha256": "a457be5f80ea73be2e53485b221a12c77d4f54f0e3f704552e10fb03fe8e9033"
+    },
+    {
+      "path": "scripts/phase_deadline.py",
+      "sha256": "959403593f69e7cf0137127a12646c5582cbd8329d031d847ba6d42328f48a06"
+    },
+    {
+      "path": "scripts/analyzer_history.py",
+      "sha256": "1de616169050fa0992fc891176942deafb8c483c8d12c86a6f0ff18b0baf73cb"
+    },
+    {
+      "path": "scripts/optimization_pair.py",
+      "sha256": "122f66c588c6e37048523cfb0d8f0bfb19e96b7e9d2b6bd29d0215e4a20aaddd"
+    },
+    {
+      "path": "scripts/a3_wait_timeline.py",
+      "sha256": "7df49b4921d5a697d18ab95fad7c298dc41c4c5580bfab0616a9d934955092f2"
+    },
+    {
+      "path": "scripts/benchmark_backend.py",
+      "sha256": "ebaf5fa0be36dad01d008efc57330d15b195b99c403427f91f0934c03f90bd29"
+    },
+    {
+      "path": "scripts/model_benchmark.py",
+      "sha256": "e09f82f95e7902477f9939342f9490f37c3ac2994ea766b54aadb52076784a7e"
+    },
+    {
+      "path": "scripts/batch_profile_a3.py",
+      "sha256": "4e716cd55aa3a5b8ad040c2aa32bc8494d667c500a566417d588584f0e4d0d1e"
+    },
+    {
+      "path": "scripts/model_device.py",
+      "sha256": "254b0745dc52b38456d5dad058d4033065078d6ebcfc08934b5b7a3da8ed9f37"
+    },
+    {
+      "path": "scripts/a3_profile_microbench_campaign.py",
+      "sha256": "f1d74c52898288691e5d9f85db48fc7143d5103331f202930ccc2d4e21bf318f"
+    },
+    {
+      "path": "scripts/actor_analyzer_contract.py",
+      "sha256": "b6ec2c8ebdf7f8b59ee17c1af2b02dfed1be752ab8ac14f3ad3c0e08c1bcf2ee"
+    },
+    {
+      "path": "skills/ascend-model-benchmarking/scripts/model_execution.py",
+      "sha256": "a4a199a79313fa6ce0aa6dd5b424928ff084ce6a89a4fc37234dc72de9e7b576"
+    },
+    {
+      "path": "skills/ascend-model-benchmarking/scripts/profile_ten.py",
+      "sha256": "e2e10fe0a38a0ae9bdaa65089960ec9d5f7d6f0aef7cc102d0aa243a8826717e"
+    },
+    {
+      "path": "skills/ascend-model-benchmarking/scripts/candidate_probe.py",
+      "sha256": "15a273f575698bb31596e33a7ecad4ae53dbdd767be66431ea9ec7eadfb2d2b1"
+    },
+    {
+      "path": "skills/ascend-model-benchmarking/scripts/profile_accounting.py",
+      "sha256": "2b3516c09a6bd31260c1dd311404c645abda02ce49da7a0e191b6cc9277e0047"
+    },
+    {
+      "path": "skills/ascend-model-benchmarking/scripts/profile_capture.py",
+      "sha256": "991d05af49828dd69f3157e044d166664bbf89acaecd6cc36ef310721a6697d9"
+    },
+    {
+      "path": "tests/test_optimization_l1_a_residency.py",
+      "sha256": "c3f4ba4124d1e56a4a3711839829ba9073964113f3e69f4bb99d8cb4773ed88a"
+    },
+    {
+      "path": "experiments/optimization-wave009/R12-schedule-resource-proof.json",
+      "sha256": "32b93be67abac34501e94fb6d74ae334e1aa1072c235c5a98f34438436bd6c70"
+    },
+    {
+      "path": "experiments/optimization-wave009/R12.json",
+      "sha256": "87bb7291f91911c19081b6a48eddcd8e04f50ac12fa2fa1005ab1b0e06959852"
+    },
+    {
+      "path": "experiments/optimization-wave009/R12-inventory.json",
+      "sha256": "5c70def58ce256d8a26efee81fc04e97dcd5f5e3edf873fd3cc4131f2ae858b9"
+    }
+  ],
+  "host_versions": {
+    "science-host-manifest.json": [
+      {
+        "path": "examples/optimization-library/catlass/l1_a_adapter.py",
+        "sha256": "54a32d0a4528d7cd887b0f8381a2ed4fd070c5c77e7b05098458217290411f63"
+      },
+      {
+        "path": "examples/optimization-library/catlass/l1_a_native.py",
+        "sha256": "c3c23a408a97bbcc73944d56dea4458f0f0ed708dd96187771c1f5910aa664b5"
+      },
+      {
+        "path": "tests/test_optimization_l1_a_residency.py",
+        "sha256": "2665de1c9ad899fc1f3cee2034aa2aa6c0ca1c3d7866c0432f4f891303448590"
+      }
+    ],
+    "science-host-manifest-v4.json": [
+      {
+        "path": "examples/optimization-library/catlass/l1_a_adapter.py",
+        "sha256": "54a32d0a4528d7cd887b0f8381a2ed4fd070c5c77e7b05098458217290411f63"
+      },
+      {
+        "path": "examples/optimization-library/catlass/l1_a_native.py",
+        "sha256": "c3c23a408a97bbcc73944d56dea4458f0f0ed708dd96187771c1f5910aa664b5"
+      },
+      {
+        "path": "tests/test_optimization_l1_a_residency.py",
+        "sha256": "a78afcb92dc8a9cb2a6634aa6c4ad7e6369cc1814f96dfb428bd9d7a60307c5d"
+      }
+    ],
+    "science-host-manifest-v3.json": [
+      {
+        "path": "examples/optimization-library/catlass/l1_a_adapter.py",
+        "sha256": "54a32d0a4528d7cd887b0f8381a2ed4fd070c5c77e7b05098458217290411f63"
+      },
+      {
+        "path": "examples/optimization-library/catlass/l1_a_native.py",
+        "sha256": "c3c23a408a97bbcc73944d56dea4458f0f0ed708dd96187771c1f5910aa664b5"
+      },
+      {
+        "path": "tests/test_optimization_l1_a_residency.py",
+        "sha256": "a78afcb92dc8a9cb2a6634aa6c4ad7e6369cc1814f96dfb428bd9d7a60307c5d"
+      }
+    ],
+    "profile-host-manifest-v5.json": [
+      {
+        "path": "examples/optimization-library/catlass/l1_a_adapter.py",
+        "sha256": "7a023e02f236d479a1de418cecce5ac3f490c5e1e17f1c465ca6752b0febbb46"
+      },
+      {
+        "path": "examples/optimization-library/catlass/l1_a_native.py",
+        "sha256": "d3632d19d3ae34b184a7e181a0524f626467dca4214f28b7c70d1e99702210c5"
+      },
+      {
+        "path": "tests/test_optimization_l1_a_residency.py",
+        "sha256": "dc5f78ce1f25b964af9ec1e2edbec91dc5873f04e1206b80c3be493808fb42f1"
+      },
+      {
+        "path": "tests/test_optimization_profile_evidence.py",
+        "sha256": "3eca6fa12423fd730dba739c4526c6cdac4aed3958397f8bb266852b52a8d9bb"
+      },
+      {
+        "path": "tests/fixtures/native_flow/after.json",
+        "sha256": "179abc59ad7ece8043ad488e486af55205555e1f5761d20bb1472f4f829752d0"
+      }
+    ]
+  },
+  "publication_host": [
+    {
+      "path": "examples/optimization-library/catlass/l1_a_adapter.py",
+      "sha256": "7a023e02f236d479a1de418cecce5ac3f490c5e1e17f1c465ca6752b0febbb46"
+    },
+    {
+      "path": "examples/optimization-library/catlass/l1_a_native.py",
+      "sha256": "d3632d19d3ae34b184a7e181a0524f626467dca4214f28b7c70d1e99702210c5"
+    },
+    {
+      "path": "tests/test_optimization_l1_a_residency.py",
+      "sha256": "dc5f78ce1f25b964af9ec1e2edbec91dc5873f04e1206b80c3be493808fb42f1"
+    },
+    {
+      "path": "tests/test_optimization_profile_evidence.py",
+      "sha256": "3eca6fa12423fd730dba739c4526c6cdac4aed3958397f8bb266852b52a8d9bb"
+    },
+    {
+      "path": "tests/fixtures/native_flow/after.json",
+      "sha256": "179abc59ad7ece8043ad488e486af55205555e1f5761d20bb1472f4f829752d0"
+    }
+  ],
+  "SDK": {
+    "CANN": "9.1.0",
+    "product": "9382 Ascend910V1 A3",
+    "actual_cube_cores": 24,
+    "actual_vector_cores": 48,
+    "torch": "2.10.0+cpu",
+    "torch_npu": "2.10.0",
+    "triton_imported": "3.2.0",
+    "triton_distribution": "3.5.0",
+    "triton_ascend": "3.2.2"
+  },
+  "uncertainties": [
+    "compiler-managed scratch/spills UNKNOWN",
+    "device ISA disassembly undecoded; host text excluded",
+    "dynamic conditional A-reuse branch execution not directly observed",
+    "no physical traffic, roofline or occupancy estimate"
+  ],
+  "collection_split": {
+    "correctness12_and_first20_host_manifest": "science-host-manifest-v4.json",
+    "remaining60_host_manifest": "profile-host-manifest-v5.json",
+    "metadata_change": "canonical actual AIC/AIV ELF identity list; native forward/CPP/provider/binaries unchanged"
+  },
+  "archive": {
+    "files": 1307,
+    "uncompressed_bytes": 208253785,
+    "bytes": 53363288,
+    "sha256": "f17454d7c9d7551f695cedcb4a6d60449ec2c991cfe77b8ef2c004ad5dc09523"
+  }
+}

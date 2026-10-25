@@ -1,0 +1,101 @@
+{
+  "cases": [
+    {
+      "name": "W009-R12-01",
+      "performance": true,
+      "scenario": [
+        "native-CATLASS-FullLoadA",
+        "{'M': 128, 'N': 256, 'K': 256}"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "Source row-major A/B/C layouts; actual Torch-NPU ND/storage-span audits before native Params initialization; private contiguous FP16 output/canaries/immutable inputs passed sole correctness. See retained correctness records and source ABI proof."
+      }
+    },
+    {
+      "name": "W009-R12-02",
+      "performance": true,
+      "scenario": [
+        "native-CATLASS-FullLoadA",
+        "{'M': 128, 'N': 12288, 'K': 512}"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "Source row-major A/B/C layouts; actual Torch-NPU ND/storage-span audits before native Params initialization; private contiguous FP16 output/canaries/immutable inputs passed sole correctness. See retained correctness records and source ABI proof."
+      }
+    },
+    {
+      "name": "W009-R12-03",
+      "performance": true,
+      "scenario": [
+        "native-CATLASS-FullLoadA",
+        "{'M': 128, 'N': 16384, 'K': 512}"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "Source row-major A/B/C layouts; actual Torch-NPU ND/storage-span audits before native Params initialization; private contiguous FP16 output/canaries/immutable inputs passed sole correctness. See retained correctness records and source ABI proof."
+      }
+    },
+    {
+      "name": "W009-R12-04",
+      "performance": true,
+      "scenario": [
+        "native-CATLASS-FullLoadA",
+        "{'M': 128, 'N': 24576, 'K': 768}"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "Source row-major A/B/C layouts; actual Torch-NPU ND/storage-span audits before native Params initialization; private contiguous FP16 output/canaries/immutable inputs passed sole correctness. See retained correctness records and source ABI proof."
+      }
+    },
+    {
+      "name": "W009-R12-GA",
+      "performance": false,
+      "scenario": [
+        "native-CATLASS-FullLoadA",
+        "{'M': 127, 'N': 12304, 'K': 512}"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "Source row-major A/B/C layouts; actual Torch-NPU ND/storage-span audits before native Params initialization; private contiguous FP16 output/canaries/immutable inputs passed sole correctness. See retained correctness records and source ABI proof."
+      }
+    },
+    {
+      "name": "W009-R12-GB",
+      "performance": false,
+      "scenario": [
+        "native-CATLASS-FullLoadA",
+        "{'M': 128, 'N': 256, 'K': 1024}"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "Source row-major A/B/C layouts; actual Torch-NPU ND/storage-span audits before native Params initialization; private contiguous FP16 output/canaries/immutable inputs passed sole correctness. See retained correctness records and source ABI proof."
+      }
+    }
+  ],
+  "scope": "Audits selected candidate dispatch, compile/layout and numeric coverage. Source A-reuse branch predicate execution was not directly observed."
+}

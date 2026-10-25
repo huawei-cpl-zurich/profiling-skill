@@ -1,0 +1,67 @@
+{
+  "scope": "Post-review host lifecycle/device binding only; new host wrapper not scientifically remeasured",
+  "original_measured_head": "a85a5a84d0c482671a48e7ac25c680f0dd1a1f66",
+  "original_scientific_archive_SHA256": "f17454d7c9d7551f695cedcb4a6d60449ec2c991cfe77b8ef2c004ad5dc09523",
+  "original_science": {
+    "CPU_fixtures": 6,
+    "correctness": 12,
+    "profiled_APIs": 80,
+    "captures": 8,
+    "unchanged": true,
+    "replays": 0
+  },
+  "validation": {
+    "target": "bz-a3-2",
+    "runtime": "py311-torch",
+    "handle": "remote:bz-a3-2:job:20261025T063940Z-54f536ed7a27",
+    "terminal_exit": 0,
+    "CPU_only": true,
+    "gate_result_SHA256": "4500b075866a9881aa20f2e10026b843d9f2595335fdb10c62ced8e3fe7520ae",
+    "result": {
+      "status": "passed",
+      "tests": 6,
+      "errors": 0,
+      "failures": 0,
+      "forbidden_calls": {
+        "real_compile": 0,
+        "real_native_library": 0,
+        "real_NPU": 0,
+        "frozen_expected": 0,
+        "profile": 0
+      },
+      "source_hashes": {
+        "examples/optimization-library/catlass/l1_a_adapter.py": "a60dc2c519bc3eb9280a7931b16fc61c2ec8677d1f2da95110f2209e8f2c9c16",
+        "examples/optimization-library/catlass/l1_a_native.py": "e2da9140215c6f7be16456dd4febd5d88325d7720487f97fd2abbc7b72c6bcaa",
+        "tests/test_optimization_l1_a_residency.py": "e3cf52a0762451ad5972808f52c66ba592271eb34367ec94774999938a150026"
+      }
+    }
+  },
+  "source_hashes": {
+    "examples/optimization-library/catlass/l1_a_adapter.py": {
+      "measured_original_head_SHA256": "7a023e02f236d479a1de418cecce5ac3f490c5e1e17f1c465ca6752b0febbb46",
+      "publication_host_SHA256": "a60dc2c519bc3eb9280a7931b16fc61c2ec8677d1f2da95110f2209e8f2c9c16"
+    },
+    "examples/optimization-library/catlass/l1_a_native.py": {
+      "measured_original_head_SHA256": "d3632d19d3ae34b184a7e181a0524f626467dca4214f28b7c70d1e99702210c5",
+      "publication_host_SHA256": "e2da9140215c6f7be16456dd4febd5d88325d7720487f97fd2abbc7b72c6bcaa"
+    },
+    "tests/test_optimization_l1_a_residency.py": {
+      "measured_original_head_SHA256": "dc5f78ce1f25b964af9ec1e2edbec91dc5873f04e1206b80c3be493808fb42f1",
+      "publication_host_SHA256": "e3cf52a0762451ad5972808f52c66ba592271eb34367ec94774999938a150026"
+    }
+  },
+  "review_findings": {
+    "single_wave": "three local lenses",
+    "cleanup": "fixed; all three local lenses and original GitHub comment4369895689",
+    "device_binding": "fixed; interfaces lens",
+    "GH_original": "actionable cleanup P2 fixed; no claim original had no findings"
+  },
+  "behavior": [
+    "idempotent prepared.close destroys only its own native context and drops its input/output/buffer references",
+    "generic run_pair cleanup is exercised through success and launch error",
+    "partial Native creation errors destroy allocated handle exactly once",
+    "independently live items remain runnable and retain adapter state when another item closes",
+    "explicit prepared device0 allocations/context/stream with caller1/2 restored on success/error",
+    "closed prepared objects reject execution"
+  ]
+}

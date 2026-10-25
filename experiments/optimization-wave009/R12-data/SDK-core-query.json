@@ -1,0 +1,623 @@
+{
+  "headers": [
+    {
+      "path": "<CANN-SDK>/cann-9.1.0/include/acl/acl_base_rt.h",
+      "sha256": "4055d6b9d3a96face0efb5d68aafb68900a1d9c78c6a877ae21381688dd8b529",
+      "lines": [
+        {
+          "line": 218,
+          "text": "} aclCannAttr;"
+        },
+        {
+          "line": 219,
+          "text": ""
+        },
+        {
+          "line": 220,
+          "text": "typedef enum {"
+        },
+        {
+          "line": 221,
+          "text": "  ACL_DEVICE_INFO_UNDEFINED = -1,"
+        },
+        {
+          "line": 222,
+          "text": "  ACL_DEVICE_INFO_AI_CORE_NUM = 0,"
+        },
+        {
+          "line": 223,
+          "text": "  ACL_DEVICE_INFO_VECTOR_CORE_NUM = 1,"
+        },
+        {
+          "line": 224,
+          "text": "  ACL_DEVICE_INFO_L2_SIZE = 2"
+        },
+        {
+          "line": 225,
+          "text": "} aclDeviceInfo;"
+        },
+        {
+          "line": 226,
+          "text": ""
+        },
+        {
+          "line": 227,
+          "text": "/**"
+        },
+        {
+          "line": 228,
+          "text": " * @ingroup AscendCL"
+        },
+        {
+          "line": 229,
+          "text": " * @brief Converts data of type aclFloat16 to data of type float"
+        },
+        {
+          "line": 230,
+          "text": " *"
+        }
+      ]
+    },
+    {
+      "path": "<CANN-SDK>/cann-9.1.0/include/acl/acl_op_compiler.h",
+      "sha256": "d8d922ba31689901f28bc777f715c1320a8b6841a97e6c76525a39e9f6b04157",
+      "lines": [
+        {
+          "line": 24,
+          "text": "} aclopCompileType;"
+        },
+        {
+          "line": 25,
+          "text": ""
+        },
+        {
+          "line": 26,
+          "text": "typedef enum {"
+        },
+        {
+          "line": 27,
+          "text": "    ACL_PRECISION_MODE,"
+        },
+        {
+          "line": 28,
+          "text": "    ACL_AICORE_NUM,"
+        },
+        {
+          "line": 29,
+          "text": "    ACL_AUTO_TUNE_MODE, // The auto_tune_mode has been discarded"
+        },
+        {
+          "line": 30,
+          "text": "    ACL_OP_SELECT_IMPL_MODE,"
+        },
+        {
+          "line": 31,
+          "text": "    ACL_OPTYPELIST_FOR_IMPLMODE,"
+        },
+        {
+          "line": 32,
+          "text": "    ACL_OP_DEBUG_LEVEL,"
+        },
+        {
+          "line": 33,
+          "text": "    ACL_DEBUG_DIR,"
+        },
+        {
+          "line": 34,
+          "text": "    ACL_OP_COMPILER_CACHE_MODE,"
+        },
+        {
+          "line": 35,
+          "text": "    ACL_OP_COMPILER_CACHE_DIR,"
+        }
+      ]
+    },
+    {
+      "path": "<CANN-SDK>/cann-9.1.0/include/acl/acl_rt.h",
+      "sha256": "22c603cb80ab582006d4f26697ceb14c059d7f3613cf13b3c72aeb0d3d36e3c1",
+      "lines": [
+        {
+          "line": 469,
+          "text": "    ACL_RT_THREAD_LEVEL = 0,"
+        },
+        {
+          "line": 470,
+          "text": "} aclrtLastErrLevel;"
+        },
+        {
+          "line": 471,
+          "text": ""
+        },
+        {
+          "line": 472,
+          "text": "#define ACL_RT_BINARY_MAGIC_ELF_AICORE      0x43554245U"
+        },
+        {
+          "line": 473,
+          "text": "#define ACL_RT_BINARY_MAGIC_ELF_VECTOR_CORE 0x41415246U"
+        },
+        {
+          "line": 474,
+          "text": "#define ACL_RT_BINARY_MAGIC_ELF_CUBE_CORE   0x41494343U"
+        },
+        {
+          "line": 475,
+          "text": ""
+        },
+        {
+          "line": 476,
+          "text": "typedef enum aclrtBinaryLoadOptionType {"
+        },
+        {
+          "line": 477,
+          "text": "    ACL_RT_BINARY_LOAD_OPT_LAZY_LOAD = 1,"
+        },
+        {
+          "line": 478,
+          "text": "    ACL_RT_BINARY_LOAD_OPT_LAZY_MAGIC = 2,"
+        },
+        {
+          "line": 479,
+          "text": "    ACL_RT_BINARY_LOAD_OPT_MAGIC = 2,"
+        },
+        {
+          "line": 480,
+          "text": "    ACL_RT_BINARY_LOAD_OPT_CPU_KERNEL_MODE = 3,"
+        },
+        {
+          "line": 481,
+          "text": "} aclrtBinaryLoadOptionType;"
+        },
+        {
+          "line": 634,
+          "text": "    };"
+        },
+        {
+          "line": 635,
+          "text": "} aclmdlRITaskParams;"
+        },
+        {
+          "line": 636,
+          "text": ""
+        },
+        {
+          "line": 637,
+          "text": "typedef enum {"
+        },
+        {
+          "line": 638,
+          "text": "    ACL_DEV_ATTR_AICPU_CORE_NUM  = 1,    // number of AI CPUs"
+        },
+        {
+          "line": 639,
+          "text": ""
+        },
+        {
+          "line": 640,
+          "text": "    ACL_DEV_ATTR_AICORE_CORE_NUM = 101,  // number of AI Cores"
+        },
+        {
+          "line": 641,
+          "text": "    ACL_DEV_ATTR_CUBE_CORE_NUM   = 102,  // number of Cube Cores"
+        },
+        {
+          "line": 642,
+          "text": ""
+        },
+        {
+          "line": 643,
+          "text": "    ACL_DEV_ATTR_VECTOR_CORE_NUM = 201,  // number of Vector Cores"
+        },
+        {
+          "line": 644,
+          "text": "    ACL_DEV_ATTR_WARP_SIZE       = 202,  // number of threads in a Warp"
+        },
+        {
+          "line": 645,
+          "text": "    ACL_DEV_ATTR_MAX_THREAD_PER_VECTOR_CORE = 203,    // maximum number of concurrent threads per Vector Core"
+        },
+        {
+          "line": 646,
+          "text": "    ACL_DEV_ATTR_LOCAL_MEM_PER_VECTOR_CORE"
+        },
+        {
+          "line": 647,
+          "text": "        ACL_DEPRECATED_MESSAGE(\"Use ACL_DEV_ATTR_UBUF_PER_VECTOR_CORE instead\") = 204,    // DEPRECATED: Use ACL_DEV_ATTR_UBUF_PER_VECTOR_CORE"
+        },
+        {
+          "line": 648,
+          "text": "    ACL_DEV_ATTR_UBUF_PER_VECTOR_CORE  = 204,    // maximum available local memory per Vector Core, in Bytes"
+        },
+        {
+          "line": 649,
+          "text": "    ACL_DEV_ATTR_MAX_GRID_DIM_X = 205,"
+        },
+        {
+          "line": 650,
+          "text": "    ACL_DEV_ATTR_MAX_GRID_DIM_Y = 206,"
+        },
+        {
+          "line": 651,
+          "text": "    ACL_DEV_ATTR_MAX_GRID_DIM_Z = 207,"
+        },
+        {
+          "line": 652,
+          "text": "    ACL_DEV_ATTR_MAX_BLOCK_PER_GRID = 208,"
+        },
+        {
+          "line": 653,
+          "text": "    ACL_DEV_ATTR_MAX_THREADS_PER_BLOCK = 209,"
+        },
+        {
+          "line": 654,
+          "text": "    ACL_DEV_ATTR_MAX_BLOCK_DIM_X = 210,"
+        },
+        {
+          "line": 655,
+          "text": "    ACL_DEV_ATTR_MAX_BLOCK_DIM_Y = 211,"
+        },
+        {
+          "line": 685,
+          "text": "    ACL_RT_MEMCPY_SDMA_AUTOMATIC_EQUAL = 13,"
+        },
+        {
+          "line": 686,
+          "text": "} aclrtReduceKind;"
+        },
+        {
+          "line": 687,
+          "text": ""
+        },
+        {
+          "line": 688,
+          "text": "typedef enum {"
+        },
+        {
+          "line": 689,
+          "text": "    ACL_RT_DEV_RES_CUBE_CORE = 0,"
+        },
+        {
+          "line": 690,
+          "text": "    ACL_RT_DEV_RES_VECTOR_CORE,"
+        },
+        {
+          "line": 691,
+          "text": "} aclrtDevResLimitType;"
+        },
+        {
+          "line": 692,
+          "text": ""
+        },
+        {
+          "line": 693,
+          "text": "typedef enum {"
+        },
+        {
+          "line": 694,
+          "text": "    ACL_RT_EQUAL = 0,"
+        },
+        {
+          "line": 695,
+          "text": "    ACL_RT_NOT_EQUAL,"
+        },
+        {
+          "line": 696,
+          "text": "    ACL_RT_GREATER,"
+        },
+        {
+          "line": 697,
+          "text": "    ACL_RT_GREATER_OR_EQUAL,"
+        },
+        {
+          "line": 3886,
+          "text": " * @param [out] value    the device info"
+        },
+        {
+          "line": 3887,
+          "text": " * @retval ACL_SUCCESS The function is successfully executed."
+        },
+        {
+          "line": 3888,
+          "text": " * @retval OtherValues Failure"
+        },
+        {
+          "line": 3889,
+          "text": " */"
+        },
+        {
+          "line": 3890,
+          "text": "ACL_FUNC_VISIBILITY aclError aclrtGetDeviceInfo(uint32_t deviceId, aclrtDevAttr attr, int64_t *value);"
+        },
+        {
+          "line": 3891,
+          "text": ""
+        },
+        {
+          "line": 3892,
+          "text": "/**"
+        },
+        {
+          "line": 3893,
+          "text": " * @ingroup AscendCL"
+        },
+        {
+          "line": 3894,
+          "text": " * @brief get priority range of current device"
+        },
+        {
+          "line": 3895,
+          "text": " * @param [out] leastPriority     least priority"
+        },
+        {
+          "line": 3896,
+          "text": " * @param [out] greatestPriority  greatest priority"
+        },
+        {
+          "line": 3897,
+          "text": " * @retval ACL_SUCCESS The function is successfully executed."
+        }
+      ]
+    },
+    {
+      "path": "<CANN-SDK>/cann-9.1.0/include/acl/acl_platform.h",
+      "sha256": "928acccf41f2eee97d5e65dab6cffec15a9043ca9934adca783a925ec778f5e3",
+      "lines": [
+        {
+          "line": 29,
+          "text": ""
+        },
+        {
+          "line": 30,
+          "text": "typedef enum aclplatformDevInfo {"
+        },
+        {
+          "line": 31,
+          "text": "    ACL_PLATFORM_AICORE_CNT        = 0,"
+        },
+        {
+          "line": 32,
+          "text": "    ACL_PLATFORM_AICORE_UB_SIZE    = 1,"
+        },
+        {
+          "line": 33,
+          "text": "    ACL_PLATFORM_CUBE_CORE_CNT     = 2,"
+        },
+        {
+          "line": 34,
+          "text": "    ACL_PLATFORM_VECTOR_CORE_CNT   = 3,"
+        },
+        {
+          "line": 35,
+          "text": "    ACL_PLATFORM_L2_SIZE           = 4,"
+        },
+        {
+          "line": 36,
+          "text": "    ACL_PLATFORM_MEMORY_SIZE       = 5,"
+        },
+        {
+          "line": 37,
+          "text": "    ACL_PLATFORM_CUBE_FREQ         = 6,"
+        },
+        {
+          "line": 38,
+          "text": "    ACL_PLATFORM_VEC_FREQ          = 7,"
+        },
+        {
+          "line": 39,
+          "text": "    ACL_PLATFORM_BT_SIZE           = 8,"
+        },
+        {
+          "line": 40,
+          "text": "    ACL_PLATFORM_L0_A_SIZE         = 9,"
+        },
+        {
+          "line": 41,
+          "text": "    ACL_PLATFORM_L0_B_SIZE         = 10,"
+        },
+        {
+          "line": 48,
+          "text": "} aclplatformDevInfo;"
+        },
+        {
+          "line": 49,
+          "text": ""
+        },
+        {
+          "line": 50,
+          "text": "typedef enum aclplatformCoreType {"
+        },
+        {
+          "line": 51,
+          "text": "    ACL_PLATFORM_CORE_TYPE_AI_CORE     = 0,  /**< AI Core (cube core) */"
+        },
+        {
+          "line": 52,
+          "text": "    ACL_PLATFORM_CORE_TYPE_VECTOR_CORE = 1,  /**< Vector core */"
+        },
+        {
+          "line": 53,
+          "text": "} aclplatformCoreType;"
+        },
+        {
+          "line": 54,
+          "text": ""
+        },
+        {
+          "line": 55,
+          "text": "aclError aclplatformGetDeviceInfo(aclplatformDevInfo infoType, char *value, uint32_t maxLen);"
+        },
+        {
+          "line": 56,
+          "text": ""
+        },
+        {
+          "line": 57,
+          "text": "aclError aclplatformGetInstructionInfo(aclplatformCoreType type,"
+        },
+        {
+          "line": 58,
+          "text": "                                        const char *instruction,"
+        },
+        {
+          "line": 59,
+          "text": "                                        char *value,"
+        },
+        {
+          "line": 60,
+          "text": "                                        uint32_t maxLen);"
+        },
+        {
+          "line": 61,
+          "text": ""
+        },
+        {
+          "line": 62,
+          "text": "typedef enum aclplatformNpuArch {"
+        }
+      ]
+    },
+    {
+      "path": "/opt/a3-py311-torch/lib/python3.11/site-packages/triton/backends/ascend/driver.py",
+      "sha256": "b39118053062f3fc6d7f1047f8c9eb229de47a2b6106d8119cc7087f5b38818e",
+      "lines": [
+        {
+          "line": 136,
+          "text": "        if mix_mode is None:"
+        },
+        {
+          "line": 137,
+          "text": "            name, mix_mode = name.rsplit(\"_\", 1)"
+        },
+        {
+          "line": 138,
+          "text": "        return self._load_mod().load_kernel_binary(name, kernel, shared, device, mix_mode)"
+        },
+        {
+          "line": 139,
+          "text": ""
+        },
+        {
+          "line": 140,
+          "text": "    @functools.lru_cache()"
+        },
+        {
+          "line": 141,
+          "text": "    def get_device_properties(self, device):"
+        },
+        {
+          "line": 142,
+          "text": "        # temperoarily added \"max_shared_mem\" properties to avoid triton-compiler complain"
+        },
+        {
+          "line": 143,
+          "text": "        # fetch available memory at runtime"
+        },
+        {
+          "line": 144,
+          "text": "        num_aic = self.get_aicore_num()"
+        },
+        {
+          "line": 145,
+          "text": "        num_aiv = num_aic * 2"
+        },
+        {
+          "line": 146,
+          "text": "        return {\"max_shared_mem\": 1, \"num_aicore\": num_aic, \"num_vectorcore\": num_aiv}"
+        },
+        {
+          "line": 147,
+          "text": ""
+        },
+        {
+          "line": 148,
+          "text": "    @functools.lru_cache()"
+        },
+        {
+          "line": 149,
+          "text": "    def get_arch(self):"
+        },
+        {
+          "line": 150,
+          "text": "        # temporarily return empty arch descriptor"
+        },
+        {
+          "line": 151,
+          "text": "        return self._load_mod().get_arch()"
+        },
+        {
+          "line": 152,
+          "text": ""
+        },
+        {
+          "line": 153,
+          "text": "    @functools.lru_cache()"
+        },
+        {
+          "line": 154,
+          "text": "    def get_aicore_num(self):"
+        },
+        {
+          "line": 155,
+          "text": "        # temporarily return empty arch descriptor"
+        },
+        {
+          "line": 156,
+          "text": "        return self._load_mod().get_aicore_num()"
+        },
+        {
+          "line": 157,
+          "text": ""
+        },
+        {
+          "line": 158,
+          "text": "    @functools.lru_cache()"
+        },
+        {
+          "line": 159,
+          "text": "    def get_aivector_core_num(self):"
+        },
+        {
+          "line": 160,
+          "text": "        return self.get_device_properties(\"npu\")[\"num_vectorcore\"]"
+        },
+        {
+          "line": 161,
+          "text": ""
+        },
+        {
+          "line": 162,
+          "text": ""
+        },
+        {
+          "line": 163,
+          "text": "class NPULauncher(object):"
+        },
+        {
+          "line": 164,
+          "text": "    def __init__(self, src, metadata):"
+        },
+        {
+          "line": 165,
+          "text": "        self.compile_only = os.getenv(\"TRITON_COMPILE_ONLY\", 'false').lower() in ('true', '1')"
+        },
+        {
+          "line": 166,
+          "text": "        self.enable_msprof_register_tensor = os.getenv(\"TRITON_REGISTER_TENSOR_MSPROF\", 'false').lower() in ('true', '1')"
+        },
+        {
+          "line": 167,
+          "text": "        self.src = src"
+        },
+        {
+          "line": 168,
+          "text": "        self.metadata = metadata"
+        },
+        {
+          "line": 169,
+          "text": "        self.so_launcher_path = self._make_launcher_stub_path()"
+        }
+      ]
+    }
+  ],
+  "new_device_forwards": 0
+}

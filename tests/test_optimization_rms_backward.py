@@ -63,11 +63,16 @@ class RMSBackwardTests(unittest.TestCase):
             self.assertFalse((Path(tmp)/'bad').exists())
 
     def test_public_compile_reuse_routes_and_private_outputs(self):
-        calls=[];compiles=[]
+        calls=[];compiles=[];fail_next=[]
         artifact=SimpleNamespace(hash='a'*64,asm={'npubin':b'code'})
         class Kernel:
             def __init__(self,name):self.fn=SimpleNamespace(__name__=name)
-            def warmup(self,*args,**kwargs):compiles.append(self.fn.__name__);return artifact
+            def warmup(self,*args,**kwargs):
+                compiles.append(self.fn.__name__)
+                if fail_next and fail_next[0] == self.fn.__name__:
+                    fail_next.pop(0)
+                    raise RuntimeError('mock late compile failure')
+                return artifact
             def __getitem__(self,grid):
                 def launch(*args,**kw):calls.append((self.fn.__name__,grid,kw));return artifact
                 return launch
@@ -95,6 +100,25 @@ class RMSBackwardTests(unittest.TestCase):
             wide=dict(seed=99,rows=2,D=2048,offset=0,eps=1e-6)
             item=adapter.prepare('after',wide,make_case(wide),Path('.'));item.run()
             self.assertEqual(calls[-2][2]['BLOCK_ROW'],1)
+            for failing in ('bwd','sum'):
+                with self.subTest(failing_component=failing):
+                    retry=adapter.prepare('after',spec(),make_case(spec()),Path('.'))
+                    previous_calls=len(calls)
+                    for qualify in (retry.compile_only,retry.run):
+                        fail_next.append(failing)
+                        with self.assertRaisesRegex(RuntimeError,'mock late compile failure'):
+                            qualify()
+                        self.assertEqual(retry.compilation_state(),[])
+                        self.assertEqual(len(calls),previous_calls)
+                    previous_compiles=len(compiles)
+                    retry.run()
+                    self.assertEqual(compiles[previous_compiles:],['zero','bwd','sum'])
+                    self.assertEqual([c[0] for c in calls[previous_calls:]],['zero','bwd','sum'])
+                    self.assertEqual(len(retry.compilation_state()),3)
+                    previous_compiles=len(compiles)
+                    retry.run()
+                    self.assertEqual(len(compiles),previous_compiles)
+
 
     def test_external_cwd_cli_metadata_and_standalone(self):
         with tempfile.TemporaryDirectory() as tmp:

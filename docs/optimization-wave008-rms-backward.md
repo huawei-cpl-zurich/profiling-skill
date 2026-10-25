@@ -62,3 +62,11 @@ correctness errors, fixture/source/binary/trace hashes and codegen receipts.
 The verified compact archive binds the original raw supported PMU fields,
 compiler/cache artifacts, CPU fixtures and reports. Full vendor trees remain
 in the retained remote evidence; no extra timing or scientific replay was used.
+
+A review follow-up makes the host compilation cache transactional: failed later
+component qualification publishes no partial cache, and retry qualifies every
+component before any launch. CPU-only mocked tests cover failures in backward
+and final reduction through both compile-only and run paths. The original JIT
+kernel, CPU provider, six scientific fixtures and measured results remain
+unchanged. `T02-publication.json` distinguishes the measured adapter source hash
+from the published host fix; no scientific replay accompanies that fix.

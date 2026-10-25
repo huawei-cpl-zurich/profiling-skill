@@ -51,8 +51,10 @@ class Adapter:
         compiled = {}
         def compile_only():
             if not compiled:
+                pending = {}
                 for i,(fn,a,grid,kw) in enumerate(launches):
-                    compiled[i] = fn.warmup(*a,grid=grid,**kw,**flags)
+                    pending[i] = fn.warmup(*a,grid=grid,**kw,**flags)
+                compiled.update(pending)  # Publish qualification atomically after all succeed.
             return list(compiled.values())
         def run():
             compile_only()  # Public first launch qualifies all three kernels before math.

@@ -1,0 +1,221 @@
+{
+  "study": "W011-02",
+  "task": "optimization-w011-dsa-indexer-fusion",
+  "schema": "source-application-frozen-v1",
+  "novelty_credit": 0,
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "query_id": "fdc4f358bc174023a0557b89c87a7eb8",
+  "citation": "ref://profiling-skill/triton-ascend/perf-analysis/repos/optimization-wave1-triton-kernels-scope-7acb9c40a6ca#src/triton_ascend_kernels/attention/dsa_lightning_indexer.py",
+  "source_files": {
+    "kernel": {
+      "path": ".agent-state/runtime/optimization-wave011-research/bodies/src/triton_ascend_kernels/attention/dsa_lightning_indexer.py",
+      "sha256": "30324f483024ebb1451bd6bbfe24557b54e555e4559150da55f26608e34827bf"
+    },
+    "NPU_test": {
+      "path": ".agent-state/runtime/optimization-wave011-research/bodies/tests/attention/test_dsa_lightning_indexer_forward.py",
+      "sha256": "b6376628dee2c259fbec20f716a0408c19e9c38f8d78c06aa250eebde33eb2cb"
+    },
+    "public_exports": {
+      "path": ".agent-state/runtime/optimization-wave011-research/bodies/src/triton_ascend_kernels/attention/__init__.py",
+      "sha256": "4ca095b47df1bbb1b4be7eec2b30d34e90b35c8e40c03fc9bef79bfb380fdfd3"
+    },
+    "MIT_license": {
+      "path": ".agent-state/runtime/optimization-wave010-research/replacement-triton/bodies/LICENSE",
+      "sha256": "e3e715e6d251c826acf0fbbce5971bc71f3616ab99f7a1c290ce10964bfed86e"
+    },
+    "third_party_notice": {
+      "path": ".agent-state/runtime/optimization-wave010-research/replacement-triton/bodies/Third_Party_Open_Source_Software_Notice",
+      "sha256": "99d2a9d965eba1e90e0a69ca844822ef22eaf146ec832c5e62433edf8000569c"
+    }
+  },
+  "closure": "Selected kernel imports only torch/triton/triton.language; actual NPU tests and public export retained. No external math helpers.",
+  "source_type_audit": "Stale FP8 docstring is not type contract. Actual upstream tests use FP16/BF16 Q,K and FP32 weights. This study fixes Q,K FP16; tl.dot default accumulator/output FP32 and no intermediate cast in source; compiler IR must verify before math.",
+  "cases": [
+    {
+      "case_id": "W011-02-01",
+      "role": "main",
+      "seed": 112201,
+      "parameters": {
+        "B": 1,
+        "M": 1,
+        "H": 64,
+        "D": 128,
+        "N": 128,
+        "dtype": "float16"
+      },
+      "weight_pattern": "independent_integer_per_query_head",
+      "performance": true
+    },
+    {
+      "case_id": "W011-02-02",
+      "role": "main",
+      "seed": 112202,
+      "parameters": {
+        "B": 1,
+        "M": 32,
+        "H": 64,
+        "D": 128,
+        "N": 1024,
+        "dtype": "float16"
+      },
+      "weight_pattern": "independent_integer_per_query_head",
+      "performance": true
+    },
+    {
+      "case_id": "W011-02-03",
+      "role": "main",
+      "seed": 112203,
+      "parameters": {
+        "B": 2,
+        "M": 64,
+        "H": 64,
+        "D": 128,
+        "N": 4096,
+        "dtype": "float16"
+      },
+      "weight_pattern": "independent_integer_per_query_head",
+      "performance": true
+    },
+    {
+      "case_id": "W011-02-04",
+      "role": "main",
+      "seed": 112204,
+      "parameters": {
+        "B": 1,
+        "M": 128,
+        "H": 32,
+        "D": 64,
+        "N": 2048,
+        "dtype": "float16"
+      },
+      "weight_pattern": "independent_integer_per_query_head",
+      "performance": true
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W011-02-GA",
+      "role": "guard",
+      "seed": 112291,
+      "parameters": {
+        "B": 2,
+        "M": 3,
+        "H": 32,
+        "D": 64,
+        "N": 129,
+        "dtype": "float16"
+      },
+      "weight_pattern": "independent_integer_per_query_head",
+      "performance": false,
+      "scenario": "batch_index_and_N_tail_one"
+    },
+    {
+      "case_id": "W011-02-GB",
+      "role": "guard",
+      "seed": 112292,
+      "parameters": {
+        "B": 1,
+        "M": 2,
+        "H": 16,
+        "D": 32,
+        "N": 17,
+        "dtype": "float16"
+      },
+      "weight_pattern": "materialized_broadcast_heads_rows_0_and_minus4_over16",
+      "performance": false,
+      "scenario": "broadcast_VALUES_contiguous_storage_zero_weights_negative_weights_small_H_D_N_tail"
+    }
+  ],
+  "common": {
+    "BLOCK_SIZE_N": 128,
+    "num_warps": 4,
+    "num_stages": 1,
+    "multibuffer": false,
+    "grid": "(B*M,)",
+    "outer": "one program per batch/query; serial ceil(N/128) blocks",
+    "configuration_scope": "first source autotune candidate N128 preselected prospectively; common explicit stages1/multibufferFalse/warps4; not upstream best/default/autotuned throughput",
+    "autotune": false,
+    "warmup_forwards": 0
+  },
+  "before": {
+    "origin": "educational source-derived materialization ablation, not upstream implementation",
+    "kernel_count": 3,
+    "steps": [
+      "same source QK dot/input addressing and serial N loop; store FP32 [B,M,H,N] scores",
+      "load FP32 score; same maximum(dot,0.0) then multiply FP32 query/head weight; store FP32 [B,M,H,N] weighted activation",
+      "load weighted activation with source [H,128] tile and same tl.sum(axis=0); store FP32 [B,M,N]"
+    ],
+    "all_steps_charged": true,
+    "free_precomputation": false
+  },
+  "after": {
+    "origin": "exact retained source fused kernel body with outer autotune removed, function renamed only",
+    "kernel_count": 1,
+    "math": "tl.sum(tl.maximum(tl.dot(q,tl.trans(k)),0.0)*q_s[:,None],axis=0)",
+    "same_QK_and_head_tree": true
+  },
+  "physical": {
+    "q": "contiguous [B,M,H,D], strides[M*H*D,H*D,D,1]",
+    "k": "contiguous [B,N,D], shared across heads and queries within batch, strides[N*D,D,1]",
+    "weights": "contiguous FP32[B,M,H], strides[M*H,H,1]; source pointer math assumes this despite wrapper only asserting Q/K contiguous",
+    "output": "private contiguous FP32[B,M,N], both inputs immutable; before score/activation scratch private FP32",
+    "unsupported": "zero-stride/overlapping/broadcast VIEW weights, noncontiguous Q/K/weights, non-FP16 Q/K, non-FP32 weights, device mismatch, aliasing and nonfinite/out-of-dyadic-domain rejected before cache/compile/backend; NONFROZEN tests exercise them",
+    "broadcast_guard_scope": "GB is broadcast-valued weights MATERIALIZED contiguously. It does not certify actual zero-stride broadcast input.",
+    "H_D": "positive powers of2,16<=H<=64,32<=D<=128, M>=1/N>=1/B>=1 within published bounded maxima",
+    "mask": "Only N tail is masked in source. H/D exact constexpr powers2. Valid-address maxima below allocation; masked padded pointer expressions separately bounded below signed32 limit."
+  },
+  "oracle": {
+    "provider": "separate immutable independent CPU FP64 batched matmul -> ReLU -> FP64 head-weight sum -> FP32 expected; no GPU forward",
+    "qk_input": "torch.randint(-4,5)/64 quantized FP16 once",
+    "weights": "torch.randint(-4,5)/16 FP32, except GB fixed materialized rows0/-4 divided16",
+    "certificate": "Integer QK dot partial absolute <=D*16<=2048. Weighted head sum absolute <=D*16*4*H<=524288<2^24. Denominator65536, all nonzero values normal FP32; source FP32 operations exact if compiled types confirm. Independent FP64 integer/dyadic products and partials <2^53 exact.",
+    "comparison": "finite numeric FP32 exact with CPU reference (atol0,rtol0); paired arms ALL FP32bits identical including signedzero. CPU zero sign is secondary diagnostic, no mathematical signedzero guarantee.",
+    "generation": "ALL12 input-only compile/ABI/effective binary/resources first; six scientific payloads once cached, correctness once each arm/case, sole validation transfer retains mismatch counts/coordinates/bits/nonfinites; no oracle/test-data after failure retuning"
+  },
+  "API": {
+    "public": "complete prepared DSA score: output FP32[B,M,N]; before3kernel calls vs after1, all stages charged",
+    "setup_outside_both": "CPU validation/cache/expected; private initial device copies; output and before scratch allocation; no allocation/zeros inside repeated prepared API. Source torch.zeros is common setup elided because both overwrite every valid output.",
+    "reuse": "prepared outputs/scratch reused; no per-profile input/output inspection/reset",
+    "cleanup": "idempotent close releases only owned buffers; independently live items preserved; allocations/current_stream/context same explicit prepared logical0 with deviceguard restoring caller",
+    "probe": "input-only compile_only no execution; probe.run must raise before any kernel; cache atomic/retry only host failures"
+  },
+  "protocol": {
+    "compile_cells": 12,
+    "scientific_CPU_payloads": 6,
+    "numerical_calls": 12,
+    "numerical_once": true,
+    "all_numeric_before_profile": true,
+    "profile_API_calls": 80,
+    "captures": 8,
+    "API_calls_per_capture": 10,
+    "guards_profile_calls": 0,
+    "warmups": 0,
+    "autotune": 0,
+    "extra_timing": 0,
+    "profile_IO_checks": 0,
+    "startup_run_validate_profile_C_watchdog_s": 600,
+    "all_counter_directories_precreated": true,
+    "failure": "STOP no retune/reset/replays; preserve compile/type/resource/noop/numeric/runtime failures and unattempted cells; negative publication failclosed before expected/backend"
+  },
+  "target": {
+    "profile": "gz-a3",
+    "physical_candidate": 0,
+    "logical": 0,
+    "assignment": "root explicit released physical0, fresh bounded underlease mapping/health/runtime still mandatory",
+    "observed_cores_required": "query actual driver num_aicore/num_vectorcore, root reports20Cube40Vec; no default/guess",
+    "leases": "registryROOT die-0 and BOTH canonical host exports0/1",
+    "transport": "installed current remote-access client targets/capabilities/preflight/upload/runfile/observe-same/logs/download; registry runtime/cwd only",
+    "no_other_study_replay": true
+  },
+  "claims": {
+    "measured": "complete prepared operation spans, supported raw PMUs, actual per-stage binary dispatch, numeric correctness",
+    "not_established": [
+      "new mechanism novelty",
+      "vendor-best autotuning",
+      "ordinary uninstrumented latency",
+      "physical traffic/roofline/occupancy without supported denominators",
+      "full upstream/model behavior"
+    ]
+  },
+  "failure_policy": "No post-data tuning; syntax/controller-only pre-math fixes retain original versions; ABI comparison uses ordered runtime types, not Python argument names."
+}

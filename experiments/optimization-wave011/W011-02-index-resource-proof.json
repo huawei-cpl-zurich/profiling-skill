@@ -1,0 +1,74 @@
+{
+  "cases": [
+    {
+      "case_id": "W011-02-01",
+      "resident_both_arms_logical_bytes": 167424,
+      "source_dot_integer_bound": 2048,
+      "weighted_sum_integer_bound": 524288,
+      "denominator": 65536,
+      "largest_valid_score_index": 8191,
+      "largest_padded_score_expression": 8318,
+      "signed32_safe": true,
+      "largest_padded_score_byte_offset": 33272
+    },
+    {
+      "case_id": "W011-02-02",
+      "resident_both_arms_logical_bytes": 18630656,
+      "source_dot_integer_bound": 2048,
+      "weighted_sum_integer_bound": 524288,
+      "denominator": 65536,
+      "largest_valid_score_index": 2097151,
+      "largest_padded_score_expression": 2097278,
+      "signed32_safe": true,
+      "largest_padded_score_byte_offset": 8389112
+    },
+    {
+      "case_id": "W011-02-03",
+      "resident_both_arms_logical_bytes": 281085952,
+      "source_dot_integer_bound": 2048,
+      "weighted_sum_integer_bound": 524288,
+      "denominator": 65536,
+      "largest_valid_score_index": 33554431,
+      "largest_padded_score_expression": 33554558,
+      "signed32_safe": true,
+      "largest_padded_score_byte_offset": 134218232
+    },
+    {
+      "case_id": "W011-02-04",
+      "resident_both_arms_logical_bytes": 70813696,
+      "source_dot_integer_bound": 1024,
+      "weighted_sum_integer_bound": 131072,
+      "denominator": 65536,
+      "largest_valid_score_index": 8388607,
+      "largest_padded_score_expression": 8388734,
+      "signed32_safe": true,
+      "largest_padded_score_byte_offset": 33554936
+    },
+    {
+      "case_id": "W011-02-GA",
+      "resident_both_arms_logical_bytes": 323120,
+      "source_dot_integer_bound": 1024,
+      "weighted_sum_integer_bound": 131072,
+      "denominator": 65536,
+      "largest_valid_score_index": 24767,
+      "largest_padded_score_expression": 24894,
+      "signed32_safe": true,
+      "largest_padded_score_byte_offset": 99576
+    },
+    {
+      "case_id": "W011-02-GB",
+      "resident_both_arms_logical_bytes": 13200,
+      "source_dot_integer_bound": 512,
+      "weighted_sum_integer_bound": 32768,
+      "denominator": 65536,
+      "largest_valid_score_index": 543,
+      "largest_padded_score_expression": 670,
+      "signed32_safe": true,
+      "largest_padded_score_byte_offset": 2680
+    }
+  ],
+  "total_resident_prepared_logical_bytes": 371034048,
+  "compiler_allocator_runtime_overhead": "unmeasured; logical bytes not physical peak memory",
+  "literal_buffers": "both arms resident throughout capture; per-after-item has no explicit score/activation scratch; no measured global-capacity/occupancy opportunity-cost claim",
+  "basis": "Index-only arithmetic over frozen source dimensions; no tensor/oracle evaluation."
+}

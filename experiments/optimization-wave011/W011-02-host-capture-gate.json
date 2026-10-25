@@ -1,0 +1,16 @@
+{
+  "status": "passed",
+  "tests": 6,
+  "errors": 0,
+  "failures": 0,
+  "forbidden_calls": {
+    "real_compile": 0,
+    "real_NPU": 0,
+    "frozen_expected": 0,
+    "real_profile": 0
+  },
+  "source_hashes": {
+    "examples/optimization-library/triton/dsa_indexer.py": "fb714b743a22ca1a0dd0de26bfc3797b0fbe624493a3bb6650359a4d8c0adbe4",
+    "tests/test_optimization_dsa_indexer_fusion.py": "7a059132136014494803ee409c3142c3c2f81778268f0eb257647197f1aec8ee"
+  }
+}

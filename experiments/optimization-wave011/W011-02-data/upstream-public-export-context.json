@@ -1,0 +1,5 @@
+{
+  "citation": "ref://profiling-skill/triton-ascend/perf-analysis/repos/optimization-wave1-triton-kernels-scope-7acb9c40a6ca#src/triton_ascend_kernels/attention/__init__.py",
+  "sha256": "4ca095b47df1bbb1b4be7eec2b30d34e90b35c8e40c03fc9bef79bfb380fdfd3",
+  "content": "from .nsa_topk_sparse_attention import topk_sparse_attention\nfrom .paged_attention import paged_attention_fwd\nfrom .decoder_mha_attention import decode_attention_fwd\nfrom .dsa_lightning_indexer import dsa_lightning_indexer_forward\nfrom .compressor import compressor\n\n__all__ = [\n    \"topk_sparse_attention\",\n    \"paged_attention_fwd\",\n    \"decode_attention_fwd\",\n    \"dsa_lightning_indexer_forward\",\n    \"compressor\",\n]\n"
+}

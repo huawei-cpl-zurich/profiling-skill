@@ -1,0 +1,123 @@
+{
+  "wave": 9,
+  "approval": "Standing user approval waves003\u2013022; datafirst.",
+  "study_kind": "source-backed-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "query": "61093052e4af41c5b2132db2cd524089",
+  "source_receipts": "bodies.json/tests-license.json/proposals.md; original source inventory full immutable pin; MIT plus Huawei/vLLM/DeepLink third-party notices retained.",
+  "protocol": "Compile/codegen/resource allcasepairs via input-only prototypes BEFORE scientificCPUexpected. Six cached CPU payloads ONCE, numerical correctness ONCE perarm/case/source then exactly10preparedcompleteAPI profilingforwards/arm of4mainpairs; guards0captures. No GPUwarmups/autotune/extraunprofiledtiming/profiledIOinspection. Retainnegative/noop/unsupported/failed results and originalsource/binary/fixture/version bindings. No postdata case/tolerance/flag retuning. Actualtarget/compiler/product/cores queried, never inherited GZ40. Complete operation spans/tasktime/union/gaps/raw10samples/PMUs diagnostic not ordinarylatency/physicaltraffic/roofline proof.",
+  "study_id": "R10",
+  "task": "optimization-w009-ce-eager-gradient",
+  "title": "Eagerly compute cross-entropy gradient only when backward will consume it",
+  "source_files": [
+    "bodies/src/triton_ascend_kernels/loss/cross_entropy.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W009-R10-01",
+      "role": "gallery",
+      "seed": 91001,
+      "parameters": {
+        "rows": 8,
+        "V": 1024,
+        "needs_grad": true,
+        "upstream": 1.0,
+        "smoothing": 0.0
+      },
+      "scenario_designation": "gallery-benefit"
+    },
+    {
+      "case_id": "W009-R10-02",
+      "role": "gallery",
+      "seed": 91002,
+      "parameters": {
+        "rows": 32,
+        "V": 4097,
+        "needs_grad": false,
+        "upstream": null,
+        "smoothing": 0.1
+      },
+      "scenario_designation": "gallery-cost"
+    },
+    {
+      "case_id": "W009-R10-03",
+      "role": "heldout",
+      "seed": 91003,
+      "parameters": {
+        "rows": 64,
+        "V": 8192,
+        "needs_grad": true,
+        "upstream": -0.5,
+        "smoothing": 0.1
+      },
+      "scenario_designation": "heldout-benefit"
+    },
+    {
+      "case_id": "W009-R10-04",
+      "role": "heldout",
+      "seed": 91004,
+      "parameters": {
+        "rows": 128,
+        "V": 16384,
+        "needs_grad": false,
+        "upstream": null,
+        "smoothing": 0.0
+      },
+      "scenario_designation": "heldout-cost"
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W009-R10-GA",
+      "role": "guard",
+      "seed": 91091,
+      "parameters": {
+        "rows": 3,
+        "V": 17,
+        "needs_grad": true,
+        "upstream": -2.0,
+        "smoothing": 0.1,
+        "targets": [
+          0,
+          -100,
+          16
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R10-GB",
+      "role": "guard",
+      "seed": 91092,
+      "parameters": {
+        "rows": 2,
+        "V": 33,
+        "needs_grad": false,
+        "upstream": null,
+        "smoothing": 0.0,
+        "all_ignored": true
+      }
+    }
+  ],
+  "contract": {
+    "interface": "PreparedFP32meanCE loss andOPTIONALfullFP32dx: immutablecontiguouslogits[rows,V],I64targets[rows],return(lossFP32scalar,dx[rows,V]ifneeds_gradelseNone). ignore_index=-100, smoothing0or.1, no classweight/softcap/zloss, normalmeannumerator dividedbyn_non_ignore. scalarupstreamonlywhenneeds_gradtrue; scalesdxNOTloss. Thisisboundedmanualforward/backwardcomponent, notgenericPyTorchautograd/higherorder/repeatedbackwardsupport.",
+    "before": "Educational delayed-gradient source-derivedsplit: forwardusesSAMEpinnedonline max/sum andlossformula, storesper-rowFP32m/d ONLYifneeds_grad; separatebackwardreadsprivateinplace-logitsworkspace+savedm/d andexecutesEXACTsame source second-passgradientformula, writesdxinplace. Whenneeds_gradtrue, privateworkspacecopiedfromoriginalimmutablelogits EVERYAPI; sameinplacestoragepolicy asafter isolates eagerness, not genericvendorCEbestbaseline. Whenneeds_gradfalse, forwardreadsORIGINALimmutablelogits directly,no privatecopy/no savedstats/no gradientkernel. All losszeros/sum/neededupstreamscale charged.",
+    "after": "Exactpinned cross_entropy_kernel ALWAYS computeslossanddxinplace duringforward, regardlesswhethercallerwillconsumegrad; preserveonlineformula, ignorezero writes/smoothing/reductionmean. Copyimmutableoriginallogits toprivateworkspace EVERYAPI, chargecopy thenlossbufferzero thenjointkernel thenlossreduction. ReturndxviewONLYifneeds_gradtrue; loss-onlycostcases discardinternalunneededgradient andstillchargefullsecondpass/store/copy. Actualproductionrecommendation isapplyeageronlywhengradneeded, notalways-useafter. No log-probmaterialization/sufficient-statisticsoptimization frominitialE10 isbeingrecounted: BOTHarmsalreadyuseonline stats, experiment movesgradient betweenstages/removeskernel whenneeded.",
+    "setup": "Common source-controlled BLOCK=min(2048,nextpow2V), NOTpublicMAX_FUSED_SIZE3840heuristic(nonpower2). FixedBOTHbeforecode, no postdataretiling. Commonstage1/multibufferFalse/fusionFalse; sourceelement_mulcallnum_warps32 forneedednonunitCPU-prevalidatedupstream, skipwhenexact1withouttorch.equal/profileIO. n_non_ignore/labelboundsCPUvalidatedONCEprepare. Allprivatebufferspreallocated. COMMONexplicitTritonRESET/COPY helper everyAPI whenprivateworkspaceused: copyimmutablelogits->workspace ANDzeroeachrowloss viaunique tile0; noGradBEFORE insteadexplicitTritonloss-zero helper ONLY, readingoriginallogits directly. Thesehelpers arecharged andsource-controlledcommonsetup, NOTtestednewoptimization. afterALWAYSreset-copy evennoGrad; beforeonlyifneeds_grad. No freeinput/lossreset outsideAPI. TorchlossSUM(dim0,out=privateScalar) INCLUDED allarms. ThispreparedkernelcomparisondoesNOTmeasureupstreamTorchcopy_/zero_implementation orfreshallocator/autogradlatency.",
+    "oracle": "ONECPUFP64 stable softmax/logsumexp meanCE+analyticdxprovider percase, representedlogitsseededinteger/16[-64,64], targetsseeduniformvalid plus every7throw=-100 (unlessexplicit/allignored). SmoothinguniformoverV; lossvalidrows[-(1-eps)*logp_y - eps/V*sumlogp]/n_valid, dx=(p-eps/V-(1-eps)*onehot)/n_valid timesupstream, ignore rowsallzero. Sourceallignored convention LOSS0/DX0, explicitlyDIFFERSfromPyTorchallignoredmeanNaN; nozero-denominator divisionexecutedsourceignoreearlyreturn. Fixedlossatol2e-5rtol2e-5, gradientatol3e-6rtol2e-5, alloutputs/Nonearity/dtype/shape/privatealias/halos/immutableoriginal+targets, sourcepairedmaxerror/bitssecondary. No extra GPUgradient/autograd probes. SixCPUcachedpayloadsonce AFTERall12inputonlysourcecompile/resource/codecells, numericONCEperarmcase BEFORE80APIprofiles8caps guards0.",
+    "qualification": "AllrequiredTRITONcomponents(reset-copy/loss-zero/statsforward/delayedgrad/joint/needed elementmul) inputonlycompiled BEFORECPUexpected, transactionalcache/probe.run0launch. CommonTorchSUM vendorlibrary/actualselector/type boundasavailable, no fabricatedJITbinaryforvendorop. ALLactualtasks/hostassociations accountedfromrawcapture, no filteringunknown kinds. Guardsnegativeupstream/ignoredrows/tailV17/allignoredsourceconvention; invalidtargets/dtype/layout/alias/nonfinite/smoothing/upstream/needs_grad rejectBEFOREcache viaNONFROZENtests. costexpectedgradNoneboth; internalafterunusedgradnotextra publicresult. StrictJSONCLIartifactsandfailurediagnosticsfromsoleCPUvalidationtransfer, noGPUdebugreplays.",
+    "claims": "Benefitcases01/03 backwardconsumed sourceeagercouplesstats/grad andsaveskernel+globalstats. Costcases02/04 no backward sourceeagerdoesunneededgradient/copy work. CompletepreparedlogicalAPI includesallnecessarysteps/chargedcopies/zeros/scaling/reduction, rawten samples/PMUs/hashbindings/sourcecompiledtypes retained. No warmup/autotune/extra timings/profileIO/postdataretune. DistinctfrominitialE10logprobmaterializationelimination althoughsamepinnedsourceinspiration; knownfusion/producerconsumer technique novelty0. Noordinarylatency/physicaltraffic/occupancy/rooflineproof fromspans. MIT/LinkedIn sourceandthirdpartynoticesretained."
+  },
+  "source_files_manifest": [
+    {
+      "path": "bodies/src/triton_ascend_kernels/loss/cross_entropy.py",
+      "sha256": "88a6cb0d9cd08076461c9f9bc2fe025d57c04d416c50993614ece042976ee271"
+    }
+  ],
+  "contract_version": 2,
+  "prospective_clarification": "BEFORE ANYR10source/compile/CPUexpected/NPU: baseprofile_capture.TASK_KINDS supportscompute tasktypes butNOvalidatedMEMCPY/SDMA schema. ChooseexplicitTritoncommoncopy/loss-resethelpers sochargedsetuphasknownAI_VECTOR_CORE taskidentity; doNOTpretendthisisupstreamTorchcopybackendthroughput. SourceCE body/math/cases/needs_grad/tradeoff/upstream/tolerancesunchanged, commonsetupchoiceBOTHarms andincluded everyAPI. Oldv1retainedUNEXECUTED; thisispre-codeimplementationdefinition, notpost-timingretune. No commonprofiler capability fabricated."
+}

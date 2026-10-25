@@ -1,0 +1,46 @@
+{
+  "status": "publication-host-review-fix-validated",
+  "previous_head": "c61a8dfeabc1442c2db126a309594463c66fb985",
+  "change": "Public Adapter.capture explicitly forwards metric_group=PipeUtilization. Functional mocked capture test asserts actual forwarded group and prepared-device scope. No scientific replay.",
+  "review": "Single mandated wave: behavior/tests same P2 fixed; interfaces no actionable findings. GH running/no inline findings at inspection. No recursive wave or new review comment.",
+  "changed_host_files": {
+    "docs/optimization-wy-shared-operands.md": {
+      "previous_sha256": "684fb641e5c298ee2e128df100b779aebcc73d78fd7ec986ab310dcfb09642bd",
+      "updated_sha256": "d455970f84bb872b525bc466d67801e32cc5291af40e4f9808dc64b363b074df"
+    },
+    "examples/optimization-library/triton/wy_shared/wy_shared.py": {
+      "previous_sha256": "a152ec724fbca5d742752c435f28e860eb09e1f72537fe27d77ffe57272e325e",
+      "updated_sha256": "c3d5cb07cc0f5af4997f9861a8489d1d93204eff3144f562c490df0977625750"
+    },
+    "tests/test_optimization_wy_shared.py": {
+      "previous_sha256": "b37c1f5f564c4e1ec6967a5244728d0ee3906a8d9ee8d04dac430e04b2154566",
+      "updated_sha256": "9c107e521099ecc02610ab9872971ab4ad4b6fe2ccb99e560e2bc4ab7f6dc1fb"
+    }
+  },
+  "gate": {
+    "handle": "remote:bz-a3-2:job:20261025T130138Z-6b2d2559cd62",
+    "result": {
+      "status": "complete",
+      "tests": 5,
+      "real_backend_imports": [],
+      "real_compile_calls": 0,
+      "npu_forwards": 0,
+      "scientific_frozen_fixtures": 0,
+      "profiles": 0,
+      "scope": "CPU-only public host compatibility gate; original scientific qualification unchanged",
+      "bundle_sha256": "8395bc92ede4e563cba80b9b648f7da9569e1c8b522d3a3b7ad7b00e0d718728"
+    },
+    "runtime": "py311-torch",
+    "target": "bz-a3-2",
+    "CPU_only": true
+  },
+  "original_result_sha256": "9459d7c6a55cee03a0cc966b5c8eec925eb17f3ddd84b123618c369c471ee736",
+  "all_other_tracked_files_identical_to_previous_head": true,
+  "immutable_measured_bindings": "Original P05-result/fixtures/provider/generated kernels/compiler artifacts/scientific source/profile data unchanged. Updated publication host hashes only in this receipt.",
+  "allowlist": [
+    "docs/optimization-wy-shared-operands.md",
+    "examples/optimization-library/triton/wy_shared/wy_shared.py",
+    "tests/test_optimization_wy_shared.py",
+    "experiments/optimization-wave011/P05-publication-followup.json"
+  ]
+}

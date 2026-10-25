@@ -99,3 +99,10 @@ do not establish ordinary-latency speedups or statistical significance. All
 ten samples and available PMU rows remain retained without first-sample
 removal. Only this explicit supported-path prepared component is qualified;
 general source hazards and the open admission miss remain unresolved.
+
+The single review wave found that the public capture override omitted the
+base collector's PipeUtilization metric group. The hook now explicitly passes
+that group; its functional mocked capture test asserts the forwarded setting.
+This follow-up changes only publication host code/test behavior. The original
+result, measured binaries, provider and fixtures remain byte-identical;
+P05-publication-followup.json binds the updated host hashes and CPU-only gate.

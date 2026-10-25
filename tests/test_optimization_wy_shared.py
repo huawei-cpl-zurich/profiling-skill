@@ -122,11 +122,11 @@ class WYTests(unittest.TestCase):
             finally:state[0]=old
         def run():seen.append(('forward',state[0]))
         def capture(run,output,**kw):
-            seen.append(('setup',state[0]));run();seen.append(('teardown',state[0]));return dict(status='complete',kernels=kw['expected_kernel'])
+            self.assertEqual(kw['metric_group'],'PipeUtilization');seen.append(('setup',state[0]));run();seen.append(('teardown',state[0]));return dict(status='complete',kernels=kw['expected_kernel'],metric_group=kw['metric_group'])
         item=SimpleNamespace(outputs=(SimpleNamespace(device='prepared0'),),expected_kernels=['wy_fused_kernel'])
         with patch.object(torch,'npu',SimpleNamespace(device=device),create=True),patch.dict(sys.modules,{'profile_ten':SimpleNamespace(capture_ten=capture)}):
             result=api.Adapter().capture(run,item,None)
-            self.assertEqual(result,dict(status='complete',kernels=['wy_fused_kernel']));self.assertEqual(seen,[('setup','prepared0'),('forward','prepared0'),('teardown','prepared0')]);self.assertEqual(state[0],'caller1')
+            self.assertEqual(result,dict(status='complete',kernels=['wy_fused_kernel'],metric_group='PipeUtilization'));self.assertEqual(seen,[('setup','prepared0'),('forward','prepared0'),('teardown','prepared0')]);self.assertEqual(state[0],'caller1')
             def failed(*a,**kw):
                 self.assertEqual(state[0],'prepared0');raise RuntimeError('export failed')
             with patch.dict(sys.modules,{'profile_ten':SimpleNamespace(capture_ten=failed)}),self.assertRaisesRegex(RuntimeError,'export failed'):api.Adapter().capture(run,item,None)

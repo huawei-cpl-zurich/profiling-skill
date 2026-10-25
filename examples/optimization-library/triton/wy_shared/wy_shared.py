@@ -101,7 +101,7 @@ class Adapter:
             helpers=HERE.parents[3]/'skills/ascend-model-benchmarking/scripts'
             if str(helpers) not in sys.path:sys.path.insert(0,str(helpers))
             from profile_ten import capture_ten
-            return capture_ten(run,output,expected_kernel=item.expected_kernels)
+            return capture_ten(run,output,expected_kernel=item.expected_kernels,metric_group='PipeUtilization')
 
     def validate(self,arm,actual,fixture,spec):
         item=self.items[arm];check_fixture(spec,fixture);shape=(1,dimensions(spec)[0],8,128)

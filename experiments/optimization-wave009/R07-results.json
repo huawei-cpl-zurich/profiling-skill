@@ -1,0 +1,312 @@
+{
+  "study": "R07",
+  "status": "unqualified-paired-bit-gate-failed",
+  "qualification": false,
+  "target": "bz-a3-2",
+  "product": "board9382 Ascend910V1",
+  "physical_device": 0,
+  "logical_device": 0,
+  "cube_cores": 24,
+  "vector_cores": 48,
+  "original_compile_handle": "remote:bz-a3-2:job:20261025T041139Z-d868976266ac",
+  "host_loader_error_handle": "remote:bz-a3-2:job:20261025T041836Z-6bd55c0ba680",
+  "first_math_handle": "remote:bz-a3-2:job:20261025T042041Z-5c10e479025b",
+  "summary": {
+    "status": "paired-bit-gate-failed",
+    "scientific_oracle_payloads": 1,
+    "numeric_correctness_calls": 2,
+    "correctness_counters": {
+      "compile/W009-R07-01/after/correctness-api-counter.bin": 1,
+      "compile/W009-R07-01/before/correctness-api-counter.bin": 1
+    },
+    "profiled_calls": 0,
+    "captures": 0,
+    "diagnostics": {
+      "paired_mismatch_count": 18,
+      "paired_first_mismatches": [
+        {
+          "coordinate": [
+            0,
+            1
+          ],
+          "actual_bits": 1077515182,
+          "other_bits": 1077515183,
+          "actual_float": 2.8996386528015137,
+          "before_float": 2.8996388912200928
+        },
+        {
+          "coordinate": [
+            0,
+            4
+          ],
+          "actual_bits": 1077578639,
+          "other_bits": 1077578640,
+          "actual_float": 2.9147679805755615,
+          "before_float": 2.9147682189941406
+        },
+        {
+          "coordinate": [
+            0,
+            10
+          ],
+          "actual_bits": -1078444529,
+          "other_bits": -1078444528,
+          "actual_float": -1.4393938779830933,
+          "before_float": -1.4393939971923828
+        },
+        {
+          "coordinate": [
+            0,
+            14
+          ],
+          "actual_bits": 1079604301,
+          "other_bits": 1079604302,
+          "actual_float": 3.397723436355591,
+          "before_float": 3.39772367477417
+        },
+        {
+          "coordinate": [
+            1,
+            1
+          ],
+          "actual_bits": 1077515182,
+          "other_bits": 1077515183,
+          "actual_float": 2.8996386528015137,
+          "before_float": 2.8996388912200928
+        },
+        {
+          "coordinate": [
+            1,
+            4
+          ],
+          "actual_bits": 1077578639,
+          "other_bits": 1077578640,
+          "actual_float": 2.9147679805755615,
+          "before_float": 2.9147682189941406
+        },
+        {
+          "coordinate": [
+            1,
+            10
+          ],
+          "actual_bits": -1078444529,
+          "other_bits": -1078444528,
+          "actual_float": -1.4393938779830933,
+          "before_float": -1.4393939971923828
+        },
+        {
+          "coordinate": [
+            1,
+            14
+          ],
+          "actual_bits": 1079604301,
+          "other_bits": 1079604302,
+          "actual_float": 3.397723436355591,
+          "before_float": 3.39772367477417
+        }
+      ],
+      "passed": false,
+      "mismatch_count": 0,
+      "first_mismatches": [],
+      "nonfinite_count": 0,
+      "max_absolute_error": 1.5172091405446508e-07,
+      "atol": 2e-05,
+      "rtol": 2e-05,
+      "input_immutable": true,
+      "canaries": true,
+      "duplicate_rows_bits": true,
+      "paired_exact_bits": false,
+      "zero_sign_gate": "paired int32 bits including signed zero; FP64 oracle numerical tolerance"
+    },
+    "compiled_cells": 12,
+    "original_screen_stop_oracles": 0,
+    "v2_host_error_oracles": 0,
+    "unattempted_math_case_ids": [
+      "W009-R07-02",
+      "W009-R07-03",
+      "W009-R07-04",
+      "W009-R07-GA",
+      "W009-R07-GB"
+    ]
+  },
+  "source_bindings": {
+    "mean_inner.py": {
+      "original_attempt_sha256": "fe021d7185dfc8e882364802f83d468d3f21321c98a992c8a4d121063f67b5ff",
+      "publication_sha256": "f3e451b85666763e7104ee89128cfa33c04d980429e43359710d2cddc8bca877",
+      "unchanged": false
+    },
+    "mean_inner_source.py": {
+      "original_attempt_sha256": "491ddacff928af9fbebdd0ddd6a8be2880e94fe7bbe3694e528118c6c81ff012",
+      "publication_sha256": "491ddacff928af9fbebdd0ddd6a8be2880e94fe7bbe3694e528118c6c81ff012",
+      "unchanged": true
+    },
+    "mean_inner_contract.py": {
+      "original_attempt_sha256": "75be5711798e3cb11e19f17c4812da3232ce50a614a6d13f4469d3d6cb5fc909",
+      "publication_sha256": "75be5711798e3cb11e19f17c4812da3232ce50a614a6d13f4469d3d6cb5fc909",
+      "unchanged": true
+    },
+    "mean_inner_kernels.py": {
+      "original_attempt_sha256": "6c9f317fbf07f5c8c8b3328a6be9ee32ebfdcc43caa352bb0fcebd1bf3b6a99e",
+      "publication_sha256": "6c9f317fbf07f5c8c8b3328a6be9ee32ebfdcc43caa352bb0fcebd1bf3b6a99e",
+      "unchanged": true
+    },
+    "mean_inner_screen.py": {
+      "original_attempt_sha256": "c20fac77c9648c0bb79ee780849e94bc1cb7f5061ec222fe5bd863318ae189a0",
+      "publication_sha256": "c20fac77c9648c0bb79ee780849e94bc1cb7f5061ec222fe5bd863318ae189a0",
+      "unchanged": true
+    }
+  },
+  "screens": [
+    {
+      "case_id": "W009-R07-01",
+      "original_status": "inconclusive-code-or-ABI",
+      "ordered_types_equal": true,
+      "metadata_equal": true,
+      "elf_abi_equal": true,
+      "loader_metadata_equal": true,
+      "text_sizes": [
+        1692,
+        1940
+      ],
+      "text_equal": false,
+      "relocations": [
+        [],
+        []
+      ],
+      "allocated": [
+        [],
+        []
+      ]
+    },
+    {
+      "case_id": "W009-R07-02",
+      "original_status": "inconclusive-code-or-ABI",
+      "ordered_types_equal": true,
+      "metadata_equal": true,
+      "elf_abi_equal": true,
+      "loader_metadata_equal": true,
+      "text_sizes": [
+        1692,
+        1940
+      ],
+      "text_equal": false,
+      "relocations": [
+        [],
+        []
+      ],
+      "allocated": [
+        [],
+        []
+      ]
+    },
+    {
+      "case_id": "W009-R07-03",
+      "original_status": "inconclusive-code-or-ABI",
+      "ordered_types_equal": true,
+      "metadata_equal": true,
+      "elf_abi_equal": true,
+      "loader_metadata_equal": true,
+      "text_sizes": [
+        1692,
+        1940
+      ],
+      "text_equal": false,
+      "relocations": [
+        [],
+        []
+      ],
+      "allocated": [
+        [],
+        []
+      ]
+    },
+    {
+      "case_id": "W009-R07-04",
+      "original_status": "inconclusive-code-or-ABI",
+      "ordered_types_equal": true,
+      "metadata_equal": true,
+      "elf_abi_equal": true,
+      "loader_metadata_equal": true,
+      "text_sizes": [
+        1692,
+        1940
+      ],
+      "text_equal": false,
+      "relocations": [
+        [],
+        []
+      ],
+      "allocated": [
+        [],
+        []
+      ]
+    },
+    {
+      "case_id": "W009-R07-GA",
+      "original_status": "compiler-noop-full-ELF",
+      "ordered_types_equal": true,
+      "metadata_equal": true,
+      "elf_abi_equal": true,
+      "loader_metadata_equal": true,
+      "text_sizes": [
+        1328,
+        1328
+      ],
+      "text_equal": true,
+      "relocations": [
+        [],
+        []
+      ],
+      "allocated": [
+        [],
+        []
+      ]
+    },
+    {
+      "case_id": "W009-R07-GB",
+      "original_status": "compiler-noop-full-ELF",
+      "ordered_types_equal": true,
+      "metadata_equal": true,
+      "elf_abi_equal": true,
+      "loader_metadata_equal": true,
+      "text_sizes": [
+        1440,
+        1440
+      ],
+      "text_equal": true,
+      "relocations": [
+        [],
+        []
+      ],
+      "allocated": [
+        [],
+        []
+      ]
+    }
+  ],
+  "screen_resolution": "v1 host dictionary parameter-name comparison defect; normalized ordered runtime types/arity with actual fn argument order in v3; guard fullELFidentity expected",
+  "v2_error": "host binder initialized after dependent field read; zero scientific work",
+  "recompiles_after_initial": 0,
+  "retained_binding_cells": 12,
+  "compact": {
+    "files": 265,
+    "bytes": 292635,
+    "sha256": "07122a7fceffc89c2efdd1bb7674499930b6ab36a098709bb203ee07a22919c7"
+  },
+  "release_proof_sha256": "2df5c639b6a6300130b39da3fcf41b9db5d42e0096cd474cfe6d282301a8844a",
+  "interpretation": "Required source paired FP32 bit identity failed; ordinary mean FP64 accuracy tolerance passed. No claim batch invariance violated, mathematical mean incorrect, compiler-noop, ordinary latency or performance.",
+  "publication_host_receipt": "R07-publication.json",
+  "retained_binding_preparations": 14,
+  "fixture_bindings": [
+    {
+      "file": "fixture.pt",
+      "sha256": "a6b57cbaf1603a4aa9aac337b6a2b3ff01418213530880ad912c1b3ccf6a9b92",
+      "bytes": 10789
+    },
+    {
+      "file": "manifest.json",
+      "sha256": "b8254841dd4fea74e5138f7ff86ac8dc0bbdcd222b9f5dfed946dde0ecb7dd6e",
+      "bytes": 772
+    }
+  ]
+}

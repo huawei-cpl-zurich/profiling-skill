@@ -1,0 +1,112 @@
+{
+  "cases": [
+    {
+      "name": "W009-R07-01",
+      "performance": true,
+      "scenario": [
+        "gallery",
+        "middle-axis-mean",
+        "MNK-contiguous"
+      ],
+      "route": "optimized",
+      "compile_probe": true,
+      "correct": false,
+      "qualification": "paired-bit-failed",
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "compiled actual source strides preserved; full positive-stride MNK or MKN backing bounds M*N*K-1; N/K masks; canary/outputprivate checks passed ONLYfirstcase once; other numeric checks unattempted"
+      }
+    },
+    {
+      "name": "W009-R07-02",
+      "performance": true,
+      "scenario": [
+        "gallery",
+        "middle-axis-mean",
+        "MNK-contiguous"
+      ],
+      "route": "unattempted",
+      "compile_probe": true,
+      "correct": false,
+      "qualification": "mathematical-unattempted",
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "compiled actual source strides preserved; full positive-stride MNK or MKN backing bounds M*N*K-1; N/K masks; canary/outputprivate checks passed ONLYfirstcase once; other numeric checks unattempted"
+      }
+    },
+    {
+      "name": "W009-R07-03",
+      "performance": true,
+      "scenario": [
+        "heldout",
+        "middle-axis-mean",
+        "MNK-contiguous"
+      ],
+      "route": "unattempted",
+      "compile_probe": true,
+      "correct": false,
+      "qualification": "mathematical-unattempted",
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "compiled actual source strides preserved; full positive-stride MNK or MKN backing bounds M*N*K-1; N/K masks; canary/outputprivate checks passed ONLYfirstcase once; other numeric checks unattempted"
+      }
+    },
+    {
+      "name": "W009-R07-04",
+      "performance": true,
+      "scenario": [
+        "heldout",
+        "middle-axis-mean",
+        "MNK-contiguous"
+      ],
+      "route": "unattempted",
+      "compile_probe": true,
+      "correct": false,
+      "qualification": "mathematical-unattempted",
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "compiled actual source strides preserved; full positive-stride MNK or MKN backing bounds M*N*K-1; N/K masks; canary/outputprivate checks passed ONLYfirstcase once; other numeric checks unattempted"
+      }
+    },
+    {
+      "name": "W009-R07-GA",
+      "performance": false,
+      "scenario": [
+        "guard",
+        "middle-axis-mean",
+        "MNK-contiguous"
+      ],
+      "route": "unattempted",
+      "compile_probe": true,
+      "correct": false,
+      "qualification": "mathematical-unattempted",
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "compiled actual source strides preserved; full positive-stride MNK or MKN backing bounds M*N*K-1; N/K masks; canary/outputprivate checks passed ONLYfirstcase once; other numeric checks unattempted"
+      }
+    },
+    {
+      "name": "W009-R07-GB",
+      "performance": false,
+      "scenario": [
+        "guard",
+        "middle-axis-mean",
+        "MKN-backing-strided"
+      ],
+      "route": "unattempted",
+      "compile_probe": true,
+      "correct": false,
+      "qualification": "mathematical-unattempted",
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "compiled actual source strides preserved; full positive-stride MNK or MKN backing bounds M*N*K-1; N/K masks; canary/outputprivate checks passed ONLYfirstcase once; other numeric checks unattempted"
+      }
+    }
+  ]
+}

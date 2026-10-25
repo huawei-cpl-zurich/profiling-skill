@@ -1,0 +1,126 @@
+{
+  "study": "W010-P13",
+  "task": "optimization-w010-request-sentinel-expansion",
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "query_id": "fdc4f358bc174023a0557b89c87a7eb8",
+  "novelty": "known technique, new operator/application; replaces retiredP02SDOT slot without double counting",
+  "sources": {
+    "LICENSE": "e3e715e6d251c826acf0fbbce5971bc71f3616ab99f7a1c290ce10964bfed86e",
+    "Third_Party_Open_Source_Software_Notice": "99d2a9d965eba1e90e0a69ca844822ef22eaf146ec832c5e62433edf8000569c",
+    "src/triton_ascend_kernels/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/triton_ascend_kernels/postprocess/__init__.py": "2856b2e334f2f1db21a02e7a51225ac62fa7bcb1bd5ea5193bd930e6eb27e530",
+    "src/triton_ascend_kernels/postprocess/expand_batch_to_tokens.py": "1de034ad52caa69873a6a73fc6decf8aca4101afe5959f448f07771fc6040e18",
+    "tests/postprocess/test_expand_batch_to_tokens.py": "50940a20e1cf181d73c7e2f387537b64166fde8b59a32ee02cab14ccc0d79cff"
+  },
+  "license": "MIT plus verbatim full thirdparty notice",
+  "before": "Educational exact expand_kernel derivative omitting only request-scalar replacement, then separate in-place tokenwise int32 replacement kernel; both included each preparedAPI",
+  "after": "Exact selected source expand_kernel replaces request scalar once before maskedbroadcast; MAX_NUM_TOKENS32/gridbatch/source default launch configuration",
+  "configuration": {
+    "MAX_NUM_TOKENS": 32,
+    "expand_grid": "batch",
+    "expand_kwargs": "source-default, no tuning/autotune",
+    "replace_BLOCK": 256,
+    "replace_num_warps": 4,
+    "replace_grid": "ceil(num_tokens/256)",
+    "runtime_replace_scalars": "do_not_specialize; exactI32"
+  },
+  "domain": "CPU-owned fixtures int32 contiguous1D x/cumulative endpoints equally sized batch1..65536; nonnegative monotone endpoints, interval0..32, last endpoint exactly num_tokens>0<=2097152; int32 arithmetic incl end+31 bounded. Exactint32 distinct replacement values, actual storage offset32 and32int32halos eachside, no alias/grad. Reject invalid domain BEFOREcache/backend/H2D; boundedpreparedcomponent, notfullupstreamwrappervalidation.",
+  "inputs": "length_mode one=all1,full=all32,sparse128=one at i%128==0 else0,mixed=[0,1,31,32,0,1,32,0]. x[i]=replace_from if i%3==0 else deterministic seeded nonmatch (i*17+seed)%101-50 with accidentalmatch remapped14. Empty requests still carry sentinel/nonmatch scalars. No posttimingretune.",
+  "oracle": "Independent CPU Python loop from original integer x/endpoints: list repetition then exact sentinel replacement; torch.tensor int32 result, noTorchNPU/Triton call. Scientific provider calledONCE/case cache. Bitwise allmatrixoutputs+bothhalos; wholeinputbacking immutable and outputnonalias. SoleoutputCPUtransfer retain mismatchcount/firstcoords expectedactual/maxabs/nonfinite0(integer) without replay.",
+  "buffers": "Common private prepared output poisonedonce, reused; immutableinputs/precomputedendpoints prepared outsideAPI; no prefix scan, allocation, transfer,IO or expected computation inprofile. EveryAPI completewrites output. output start128B; allmaskedpointer expressions end+31 bounded by32halo. ActualNDphysicalbytes verified inputonly andrealprepared; no free extra GPUchecks.",
+  "protocol": {
+    "input_only_case_arm_compile_ABI_screens": 12,
+    "before_CPU_expected": 6,
+    "correctness_per_arm_case": 1,
+    "all_correctness_before_profile": true,
+    "main_profile_API_per_arm": 10,
+    "profile_API_total": 80,
+    "captures": 8,
+    "guard_profiles": 0,
+    "warmups": 0,
+    "autotune": false,
+    "extra_timing": false,
+    "profile_IO": false,
+    "fatal": "STOPfamily, preserve no reset/retry/source/tol/case retune",
+    "watchdog_seconds": 600,
+    "counter_before_NPU_imports": true,
+    "all12_correctness_dirs_upfront": true,
+    "both_HOST_export_locks": true
+  },
+  "cases": [
+    {
+      "case_id": "W010-P13-01",
+      "role": "cost",
+      "seed": 101301,
+      "parameters": {
+        "batch": 8,
+        "length_mode": "one",
+        "num_tokens": 8,
+        "replace_from": -7,
+        "replace_to": 13
+      }
+    },
+    {
+      "case_id": "W010-P13-02",
+      "role": "benefit",
+      "seed": 101302,
+      "parameters": {
+        "batch": 128,
+        "length_mode": "full",
+        "num_tokens": 4096,
+        "replace_from": -7,
+        "replace_to": 13
+      }
+    },
+    {
+      "case_id": "W010-P13-03",
+      "role": "benefit",
+      "seed": 101303,
+      "parameters": {
+        "batch": 4096,
+        "length_mode": "full",
+        "num_tokens": 131072,
+        "replace_from": -7,
+        "replace_to": 13
+      }
+    },
+    {
+      "case_id": "W010-P13-04",
+      "role": "cost",
+      "seed": 101304,
+      "parameters": {
+        "batch": 65536,
+        "length_mode": "sparse128",
+        "num_tokens": 512,
+        "replace_from": -7,
+        "replace_to": 13
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W010-P13-GA",
+      "role": "guard",
+      "seed": 101391,
+      "parameters": {
+        "batch": 8,
+        "length_mode": "mixed",
+        "num_tokens": 97,
+        "replace_from": -7,
+        "replace_to": 13
+      }
+    },
+    {
+      "case_id": "W010-P13-GB",
+      "role": "guard",
+      "seed": 101392,
+      "parameters": {
+        "batch": 1,
+        "length_mode": "full",
+        "num_tokens": 32,
+        "replace_from": -2147483648,
+        "replace_to": 2147483647
+      }
+    }
+  ]
+}

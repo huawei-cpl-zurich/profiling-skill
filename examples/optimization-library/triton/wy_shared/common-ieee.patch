@@ -1,0 +1,11 @@
+--- source-kernel
++++ common-ieee-kernel
+@@ -76,7 +76,7 @@
+             b_k = tl.load(ptr_k, mask=mask_k, other=0.0).to(tl.float32)
+ 
+             b_kb = b_k * b_beta[:, None] * b_g[:, None]
+-            b_w = tl.dot(b_A, b_kb)
++            b_w = tl.dot(b_A, b_kb, allow_tf32=False)
+ 
+             ptr_w = w + (bos * H + i_h) * K + offs_t_2d * (H * K) + offs_k * 1
+             tl.store(ptr_w, b_w.to(ptr_w.dtype.element_ty), mask=mask_k)

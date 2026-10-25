@@ -1,0 +1,21 @@
+{
+  "original-full": {
+    "exit": 1,
+    "output": {
+      "errors": [
+        "cases omit expected names: W008-T09-GB"
+      ],
+      "ok": false
+    },
+    "expected_exit": 1
+  },
+  "numeric-subset": {
+    "exit": 0,
+    "output": {
+      "errors": [],
+      "ok": true
+    },
+    "expected_exit": 0
+  },
+  "scope": "Original generic auditor cannot represent the legitimate host-denial scenario; original full inventory preserved. Numeric subset covers five device cases; separate host receipt records actual original before/after rejection once, reused unchanged."
+}

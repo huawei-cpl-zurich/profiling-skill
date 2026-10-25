@@ -1,0 +1,94 @@
+{
+  "wave": 8,
+  "approval": "Standing user approval waves003\u2013022; datafirst optionalmodeldemonstrationsdeferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "snapshot_digest": "d4d58dabf81053a641187974ab638ccc7217607524a4080b86f02eeb592678ce",
+  "query": "c4b83c49cd88401a86f27c8a303a605c",
+  "source_receipts": "proposal.md/triton-leads.json/triton-tests-license.json/utils-query1.json +priorinventory fullpin; preserveMIT/thirdparty/Huawei/LinkedIn/vLLM notices, no rawlibrary traversal.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T09",
+  "task": "optimization-w008-l2-backward-scale-factor",
+  "title": "Factor reciprocal multiplication in L2 normalization backward",
+  "source_files": [
+    "src__triton_ascend_kernels__norm__l2_norm_fla.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W008-T09-01",
+      "role": "gallery",
+      "seed": 80901,
+      "parameters": {
+        "rows": 128,
+        "D": 1024
+      }
+    },
+    {
+      "case_id": "W008-T09-02",
+      "role": "gallery",
+      "seed": 80902,
+      "parameters": {
+        "rows": 1,
+        "D": 1024
+      }
+    },
+    {
+      "case_id": "W008-T09-03",
+      "role": "heldout",
+      "seed": 80903,
+      "parameters": {
+        "rows": 512,
+        "D": 2048
+      }
+    },
+    {
+      "case_id": "W008-T09-04",
+      "role": "heldout",
+      "seed": 80904,
+      "parameters": {
+        "rows": 33,
+        "D": 4096
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W008-T09-GA",
+      "role": "guard",
+      "seed": 80991,
+      "parameters": {
+        "rows": 3,
+        "D": 513,
+        "zero_parallel_cancel": true
+      }
+    },
+    {
+      "case_id": "W008-T09-GB",
+      "role": "guard",
+      "seed": 80992,
+      "parameters": {
+        "rows": 17,
+        "D": 64,
+        "unsupported": true
+      }
+    }
+  ],
+  "contract": {
+    "interface": "Provided-SAVEDSTATE backward COMPONENT: FP32 Y[rows,D],RSTD[rows],DY[rows,D] inputs, privateDX same; accepted D513..4096, rows1..512, finite bounded. Fixture Y/RSTD CPU derived from dyadic X[-1,1], FP64 r=1/sqrt(sumX2+1e-6)castFP32 then Y=(X*R32)castFP32; no hiddenGPUforward, NOTunmodifiedsourceforward claim. SaveCPUreference derivative given actualFP32Y/R32; source backward is given-stateAPI. D64guard hostunsupportedrejection, no fake expectedlessfixture or GPUlaunch/profile;5numericCPUfixtures plus1hostscenario.",
+    "before": "Exact selected l2norm_bwd_kernel1 for sourcepublic D>512: DX=DY*R - sum(DY*Y)*Y*R same source reduction/parens, outputstore.",
+    "after": "Only arithmetic reassociation DX=(DY-sum(DY*Y)*Y)*R; all addresses/gridD/tile/reduction/flags same. No rsqrt/epsilon/forward changes, no disabled optimizer forcingcontrast. Compiler may alreadyfactor: compile/noop gate beforemath; retain codegen-noop with0math iffullselectedcodeidentity.",
+    "oracle": "One CPUFP64 given-state expression R32*(DY-Y32*sum(DY*Y32)), expected alloutputs, fixed atol2e-6 rtol2e-5. DY/X quantized1/128[-1,1]; GA firstXrowzero,second DY parallelY,third cancellation. DXfinite/shape/dtype/canaries/immutable/noalias; numeric equivalence notpairedbits. Separate fullidealnormalization error mayderivefromsamecachedFP64source expected, no additionalforward. HostGBD64withT17 explicitlyrejectoriginalblockedtailcoveragebug (source T//BT), no unsupportedpubliccorrectnessclaim. NONFROZEN shapemismatch/rstd dtype/inputvalue rejects beforecache.",
+    "claims": "Source tests onlyforward with different F.normalize eps semantics; no borrowed backwardgateclaim. Preserve rootMIT/FLAattribution. Source two multiplications potential lowering alreadycanonicalized, actual artifacts/rawIR resources before math, undecodedinstructionsnotcountproof; neutral/slower/unsupported retained. Component notfulltraining speed."
+  },
+  "source_files_manifest": [
+    {
+      "path": "src__triton_ascend_kernels__norm__l2_norm_fla.py",
+      "sha256": "dd7aaa48f606c3060394b0ea8c6545c314cbed1e55dbb40aba1e37377fc93e99"
+    }
+  ]
+}

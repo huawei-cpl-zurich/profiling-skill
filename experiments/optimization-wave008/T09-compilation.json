@@ -1,0 +1,422 @@
+[
+  {
+    "case_id": "W008-T09-01",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "7532df2d8fd0f1efc969b031501795dfd0e8d34cf001082220243f5ad130ddbf",
+        "name": "l2norm_bwd_kernel1",
+        "binaries": {
+          "ttir": "f4349d6915f2b931361afb5ba9fffd9fa7421ac2153e5298ac702698dfa7f555",
+          "ttadapter": "1e1bf5eec3d39d90734b64c94d44e65fbeb4f117fce26ae62f12333b2f36f1e4",
+          "npubin": "90d20e4f3097afc5b2a3b4967633c51bdac1e54bc664905c74b4b3d21953aa51"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "provided-saved-state L2 backward only",
+      "configuration": {
+        "BD": 1024,
+        "num_warps": 4
+      },
+      "grid": [
+        128
+      ],
+      "device_kernel_calls": 1,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "y": [
+          1024,
+          1
+        ],
+        "rstd": [
+          1
+        ],
+        "dy": [
+          1024,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T09-01",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "6e4ba76b764ca735d341475b719250e7343fce3c0fcd4f017e132e23338c0f67",
+        "name": "l2norm_bwd_factored",
+        "binaries": {
+          "ttir": "7c1c96c894d1a72c6d16a8b882ef8a2eb20cede76f8abc1698e8956e94d3d330",
+          "ttadapter": "2d995fe11e7df3dcf6820ce714826502ea713fac52cbdec73ccad181c090020d",
+          "npubin": "7604f4837a7b258d18898997c4334eac79a87992ec5dd49396803deb39a21d1c"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "provided-saved-state L2 backward only",
+      "configuration": {
+        "BD": 1024,
+        "num_warps": 4
+      },
+      "grid": [
+        128
+      ],
+      "device_kernel_calls": 1,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "y": [
+          1024,
+          1
+        ],
+        "rstd": [
+          1
+        ],
+        "dy": [
+          1024,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T09-02",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "7532df2d8fd0f1efc969b031501795dfd0e8d34cf001082220243f5ad130ddbf",
+        "name": "l2norm_bwd_kernel1",
+        "binaries": {
+          "ttir": "f4349d6915f2b931361afb5ba9fffd9fa7421ac2153e5298ac702698dfa7f555",
+          "ttadapter": "1e1bf5eec3d39d90734b64c94d44e65fbeb4f117fce26ae62f12333b2f36f1e4",
+          "npubin": "90d20e4f3097afc5b2a3b4967633c51bdac1e54bc664905c74b4b3d21953aa51"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "provided-saved-state L2 backward only",
+      "configuration": {
+        "BD": 1024,
+        "num_warps": 4
+      },
+      "grid": [
+        1
+      ],
+      "device_kernel_calls": 1,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "y": [
+          1024,
+          1
+        ],
+        "rstd": [
+          1
+        ],
+        "dy": [
+          1024,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T09-02",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "6e4ba76b764ca735d341475b719250e7343fce3c0fcd4f017e132e23338c0f67",
+        "name": "l2norm_bwd_factored",
+        "binaries": {
+          "ttir": "7c1c96c894d1a72c6d16a8b882ef8a2eb20cede76f8abc1698e8956e94d3d330",
+          "ttadapter": "2d995fe11e7df3dcf6820ce714826502ea713fac52cbdec73ccad181c090020d",
+          "npubin": "7604f4837a7b258d18898997c4334eac79a87992ec5dd49396803deb39a21d1c"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "provided-saved-state L2 backward only",
+      "configuration": {
+        "BD": 1024,
+        "num_warps": 4
+      },
+      "grid": [
+        1
+      ],
+      "device_kernel_calls": 1,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "y": [
+          1024,
+          1
+        ],
+        "rstd": [
+          1
+        ],
+        "dy": [
+          1024,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T09-03",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "3d2efda3f9c1c9523cfd486505f846d7801d0aedfe0e6cf0b10a759c57e7ae11",
+        "name": "l2norm_bwd_kernel1",
+        "binaries": {
+          "ttir": "6b20b26128270d6301dd24986240d47046d3b1285a79110a24d08be20c17946b",
+          "ttadapter": "577219042cce76eb4068b85a74229625a24bf3b52c4a10586bdfcf0e625718b1",
+          "npubin": "47993d346dad1218fd559657e6cf1e1e3c2ca32891f6dc5e8caa14edd9796d79"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "provided-saved-state L2 backward only",
+      "configuration": {
+        "BD": 2048,
+        "num_warps": 4
+      },
+      "grid": [
+        512
+      ],
+      "device_kernel_calls": 1,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "y": [
+          2048,
+          1
+        ],
+        "rstd": [
+          1
+        ],
+        "dy": [
+          2048,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T09-03",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "3fcd679635079fb55b52cc75edd5b16115f3c9fe12189d6203cfc619269a2363",
+        "name": "l2norm_bwd_factored",
+        "binaries": {
+          "ttir": "d85885df15ecb6dd0234aa1125cfcedc5d57d2740bffdeb6860715b6e57da110",
+          "ttadapter": "be17575401956640b4b186d8d9b61035554ead1c70e89d4f3942754676f8862a",
+          "npubin": "463e2cf5c9369614a2f2460b2549c33c479aee36b91dd3150644f1852596f22e"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "provided-saved-state L2 backward only",
+      "configuration": {
+        "BD": 2048,
+        "num_warps": 4
+      },
+      "grid": [
+        512
+      ],
+      "device_kernel_calls": 1,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "y": [
+          2048,
+          1
+        ],
+        "rstd": [
+          1
+        ],
+        "dy": [
+          2048,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T09-04",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "9960d2b272482d703d98712e28168650aeb93bc716739e4cdf369c646e41f506",
+        "name": "l2norm_bwd_kernel1",
+        "binaries": {
+          "ttir": "f162298216174aa9d88b23f5efcbb8524328a9be63165df3c583dd09780874fd",
+          "ttadapter": "1d76abe43430f208d90ceabef03cda68a18861cd143c4684952c1e4c5441af01",
+          "npubin": "6d7a49400ff93569dce87ce17f00874a4ee32150a14b5894000ef7139f7e96d9"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "provided-saved-state L2 backward only",
+      "configuration": {
+        "BD": 4096,
+        "num_warps": 4
+      },
+      "grid": [
+        33
+      ],
+      "device_kernel_calls": 1,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "y": [
+          4096,
+          1
+        ],
+        "rstd": [
+          1
+        ],
+        "dy": [
+          4096,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T09-04",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "dc5fa5e20c691985bd3357cf22f3ab1b392bc451bed42e187a2e6b5c77b23673",
+        "name": "l2norm_bwd_factored",
+        "binaries": {
+          "ttir": "d59694969f08d0ea59c6c7ae58c6858ece59df6bcb0d5573aae5d631541e1cbc",
+          "ttadapter": "a5f1289cb0c0ef03cf4fe4e59efa838b43c143df207af99196733173977f3de4",
+          "npubin": "82f2d891d1a6ae9b3f863d5a681d8f16a455837ef0512da1f9d9c692404f7747"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "provided-saved-state L2 backward only",
+      "configuration": {
+        "BD": 4096,
+        "num_warps": 4
+      },
+      "grid": [
+        33
+      ],
+      "device_kernel_calls": 1,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "y": [
+          4096,
+          1
+        ],
+        "rstd": [
+          1
+        ],
+        "dy": [
+          4096,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T09-GA",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "6204a9374be1d7827e5a3df55a8ffefdcda17c50c63008e13f5d6f2e50e8f5cb",
+        "name": "l2norm_bwd_kernel1",
+        "binaries": {
+          "ttir": "0696df1a74dfc76fcbd4d48511d104763f65a640d076adc275ed3423d30d9ab6",
+          "ttadapter": "d1a82859fc47ce9d6b78efec91af3185d774fbb894baf8e6e7e951917271a7d3",
+          "npubin": "90d20e4f3097afc5b2a3b4967633c51bdac1e54bc664905c74b4b3d21953aa51"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "provided-saved-state L2 backward only",
+      "configuration": {
+        "BD": 1024,
+        "num_warps": 4
+      },
+      "grid": [
+        3
+      ],
+      "device_kernel_calls": 1,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "y": [
+          513,
+          1
+        ],
+        "rstd": [
+          1
+        ],
+        "dy": [
+          513,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T09-GA",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "a7a5465fef63a909b67cdf4f382e51fe1c704fab4631c7bda87141aa45afc15c",
+        "name": "l2norm_bwd_factored",
+        "binaries": {
+          "ttir": "b2dd218c836b81f7827dd70b9a2b48b9784ab040e7b478431d2cfbfd9684ec76",
+          "ttadapter": "3f75f5a351d8a8d2f76c00db0d02993d6dfa7654f027e6ddf6cefea6543b004a",
+          "npubin": "7604f4837a7b258d18898997c4334eac79a87992ec5dd49396803deb39a21d1c"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "provided-saved-state L2 backward only",
+      "configuration": {
+        "BD": 1024,
+        "num_warps": 4
+      },
+      "grid": [
+        3
+      ],
+      "device_kernel_calls": 1,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "y": [
+          513,
+          1
+        ],
+        "rstd": [
+          1
+        ],
+        "dy": [
+          513,
+          1
+        ]
+      }
+    }
+  }
+]

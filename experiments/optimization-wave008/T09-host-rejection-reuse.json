@@ -1,0 +1,18 @@
+{
+  "original_handle": "remote:bz-a3-1:job:20261025T003850Z-1c34167f90fb",
+  "original_receipt_sha256": "64dda214999ef19e3c9789a37947b8fe63f96cfe91cb0eecbc434ef37d9cca0c",
+  "original_provenance_sha256": "fbf9fdbe046852b49f529cb268c3b4866cd118c0080a9f2376af79a92f1c4fc3",
+  "matrix_sha256": "5ee96582c0924b6d7918e5b29f4382b9400ce8472aee4789c71e6a44c4e42770",
+  "host_spec": {
+    "case_id": "W008-T09-GB",
+    "role": "guard",
+    "seed": 80992,
+    "parameters": {
+      "rows": 17,
+      "D": 64,
+      "unsupported": true
+    }
+  },
+  "reused_original_logical_checks": 2,
+  "new_logical_checks": 0
+}

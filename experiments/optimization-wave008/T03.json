@@ -1,0 +1,134 @@
+{
+  "wave": 8,
+  "approval": "Standing user approval waves003\u2013022; datafirst optionalmodeldemonstrationsdeferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "snapshot_digest": "d4d58dabf81053a641187974ab638ccc7217607524a4080b86f02eeb592678ce",
+  "query": "c4b83c49cd88401a86f27c8a303a605c",
+  "source_receipts": "proposal.md/triton-leads.json/triton-tests-license.json/utils-query1.json +priorinventory fullpin; preserveMIT/thirdparty/Huawei/LinkedIn/vLLM notices, no rawlibrary traversal.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T03",
+  "task": "optimization-w008-scaled-mm-factor",
+  "title": "Guard scalar power-of-two scale factoring in INT8 matmul",
+  "source_files": [
+    "source__src__triton_ascend_kernels__gemm__triton_scaled_mm.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W008-T03-01",
+      "role": "gallery",
+      "seed": 80301,
+      "parameters": {
+        "M": 32,
+        "N": 64,
+        "K": 128,
+        "scale_mode": "scalar",
+        "exp_a": -2,
+        "exp_b": 2,
+        "bias": false
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospectiveonly; retain slower/equal/uncertain/unsupported/noop outcomes, no retuning based ondata."
+    },
+    {
+      "case_id": "W008-T03-02",
+      "role": "gallery",
+      "seed": 80302,
+      "parameters": {
+        "M": 64,
+        "N": 128,
+        "K": 512,
+        "scale_mode": "scalar",
+        "exp_a": -8,
+        "exp_b": 4,
+        "bias": true
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospectiveonly; retain slower/equal/uncertain/unsupported/noop outcomes, no retuning based ondata."
+    },
+    {
+      "case_id": "W008-T03-03",
+      "role": "heldout",
+      "seed": 80303,
+      "parameters": {
+        "M": 8,
+        "N": 128,
+        "K": 128,
+        "scale_mode": "scalar",
+        "exp_a": 3,
+        "exp_b": -3,
+        "bias": false
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospectiveonly; retain slower/equal/uncertain/unsupported/noop outcomes, no retuning based ondata."
+    },
+    {
+      "case_id": "W008-T03-04",
+      "role": "heldout",
+      "seed": 80304,
+      "parameters": {
+        "M": 128,
+        "N": 64,
+        "K": 256,
+        "scale_mode": "scalar",
+        "exp_a": 8,
+        "exp_b": -8,
+        "bias": true
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospectiveonly; retain slower/equal/uncertain/unsupported/noop outcomes, no retuning based ondata."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W008-T03-GA",
+      "role": "guard",
+      "seed": 80391,
+      "parameters": {
+        "M": 17,
+        "N": 65,
+        "K": 128,
+        "scale_mode": "nonpower_scalar",
+        "scale_a": 0.3,
+        "scale_b": 0.7,
+        "bias": true
+      },
+      "expected": "RUNTIMEdevicepow2guardFALSE, exactsource sequentialF32scale epilogue+postcastbias, M/Ntailmasks, allFP32bitsexpected.0captures; no free host D2H scale reads."
+    },
+    {
+      "case_id": "W008-T03-GB",
+      "role": "guard",
+      "seed": 80392,
+      "parameters": {
+        "M": 17,
+        "N": 65,
+        "K": 256,
+        "scale_mode": "row_col",
+        "bias": true
+      },
+      "expected": "Compiletime scalarshapeFALSE: EXACTsequentialsource row/colscales(dyadicvariedpositive .25+i/64,.5+j/128), alltails/optionalbias exact,0captures; nofactoringvectorrows/cols."
+    }
+  ],
+  "contract": {
+    "interface": "DirectboundedSOURCEkernelpreparedAPI, nofalsepublicuse_heuristic=False(tile_shapeUNDEFINEDsourcebug): contiguousINT8A[M,K],B[K,N], M/N1..128,Kpositive<=512andmultiple128,allint8values[-8,8]. FP32positivefinite scaleA1orM,scaleB1orN in[2^-8,2^8], FP32output[M,N], optionalFP32bias[N]dyadichalves; no f16/bf16outputclaiminthisstudy. BM16,BN64,BK128 SAMEboth declaredSOURCEsignaturedefaults(noheuristic/autotune),sourceint64indices unchanged(noT10combine).",
+    "before": "Exactsourceepilogue afterINT32dot: F32scaleA*acc.toF32 thenF32scaleB*..., castOUTPUTdtype(F32here), THENaddbias inOUTPUTdtype. Keeporder/noreassociation/nonpowerfallback; commonenable_fp_fusionFalse. Kmultiple128 noKtailpollution,sourceM/Nmasks unchanged(permittedCOMMONother0 onlyifneededbothbeforemath disclose).",
+    "after": "ONLYifSCALARAandSCALARB shapes1: useSAMEscalevaluesloadedALREADYNecessaryepilogue, runtimeGPUF32bitguard signpositive,normal,mantissa0,exponents[-8,8] BEFOREbroadcast. Iftrue scalarproductsa*sb then ONEper-outputaccF32*product; iffalse EXACTsource2stepseq. Non-scalarEXACTsourcefallback. No newCPU/D2Hreads/freehostvalueguard, no skip-product1extraoptimization, no accumulator-valueGPUreduction. Hostboundedint8/Kprecondition ensures |acc|<=32768<2^24 exactconversion andallpower2scalingsnormal/exactzero,nooverflow/underflow.",
+    "oracle": "IndependentCPUint64matmul exact, float32conversionexact, prescribedsequentialF32scale/cast/bias reference once/case primaryBITWISEFP32ALLoutputs; alsoreuseintdottoFP64idealifdesired/reportroundingnotprimaryrelaxation. Mainsdyadicpowersfactoringexactproof; fallbacksF32roundsequence preserved, no silentlyreplacewithidealrealmath. SourceTLdotINT32overflowdomain rejectbeforecache; outputdtype/layout/arity/canary/inputsimmutable/nonalias checked.",
+    "codegen": "Compile/codegen-beforemath; compilerMAYalreadyfactor baseline. FullELFidenticalstrongnoop0measurementwhereappropriate; .textDIFFfromguardcontrol doesNOTprovephysicalMulcountreduced. InspectalreadyavailableIRifpossible; ifinstructionsundecodedlabelSOURCElogical2\u21921 notverifiedmachineopcount. Retainneutralslower/noop/inconclusive, no flagsforcecontrast. Allsourcecasecellsfrozenbeforecode; noautotuner/perfselection.",
+    "metrics": "DotCube+epilogueVEC profile rawsupportedfields/taskunion/span/gaps. Onlyboundedscaledoperator epilogue comparison, nofullmodelquantizationorordinarylatencyspeedclaims. Preparedprivateoutputsreuse/allocatorcostexclusion sameboth.",
+    "dispatch_proof": "BEFORE any sourcecode/timing, version2 adds COMMON private int32 dispatch-proof output[gridprograms] to BOTHkernels, one4Bstore/program EVERYAPI. Baselinewrites0; candidatewrites1forGPUfactoredbranch,2forreferencefallback. CheckactualGPUflagONCEduringcorrectness(andcanaries), NEVERread/inspectflagduring10profileforwards. Sameflagwritefootprintbothside; disclose instrumentationoverhead/notunmodifiedvendorbinary. Mainsexpectmode1, bothguardsmode2, validatebeforecapture; excludeproofflagsfromnumericmatrixbitcomparison. PublicoutputremainsM\u00d7Ntensor, auxiliaryprivatevalidationstorage. This makes optimized-dispatch observed, not onlyCPU inferred."
+  },
+  "source_files_manifest": [
+    {
+      "path": "source__src__triton_ascend_kernels__gemm__triton_scaled_mm.py",
+      "sha256": "5529c180236ec71d0dc1f9c960f222c9fbdf6eaad7d55bcc27711658e6469c80"
+    }
+  ],
+  "scientific_contract_version": 2,
+  "supersedes_before_implementation": "T03.json retainedversion1; no code, compilation, CPUoracle orNPUdata existed beforethisversion2 amendment."
+}

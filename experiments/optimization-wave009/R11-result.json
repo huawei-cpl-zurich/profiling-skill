@@ -1,0 +1,2753 @@
+{
+  "schema_version": 1,
+  "study_id": "R11",
+  "status": "native-runtime-failed-before-numerical-validation",
+  "cause": "unresolved; no inference of UB scratch, kernel arithmetic, infrastructure or general fusion impossibility",
+  "source_pin": "c2332551586763f8c2d27621f8bc119bd1c3a301",
+  "native_source_sha256": "e3da7d0ee01f9cf38bd76bb1bb9477ba02895e7ca777d66931ad8142466596bf",
+  "source_citation": "ref://profiling-skill/ascendc/perf-analysis/repos/gitcode-cann-ops-blas-curated-text#blas/dot/arch22/sdot_kernel.cpp",
+  "authoritative_contract": {
+    "file": "R11-v2.json",
+    "sha256": "962baf57ecf88d662eacc449e813d26726ee240bcf1ab32b7ba044f6de4779c5",
+    "amended_before_any_scientific_expected_or_numeric_API": true,
+    "original_file": "R11.json",
+    "original_sha256": "8a2f822a87de7456d98038374833d5804d06d2e90f4e922f1fab3418a40345d1",
+    "original_scientific_forwards": 0,
+    "change": "Compiler acceptance/static source bounds permit bounded once correctness; automatic scratch/peak remains unknown. No math, tile, flags, fixture, tolerance or source body changed."
+  },
+  "inventory_sha256": "fa7cf2bf8ce6490678df136f049d4feb4979729732ccb6ce652e8a7149722e3a",
+  "measured_source_sha256": {
+    "examples/optimization-library/ascendc/sdot/LICENSE": "cb282ac2b66d7d6734c3fb354db792b28cf23ab29fbc16d5cfd8bd542bedeb1e",
+    "examples/optimization-library/ascendc/sdot/native.cpp": "361b5f742a91a7ed120695c67b766b20bad95d07ca949f52124b46495c2a1604",
+    "examples/optimization-library/ascendc/sdot/sdot.py": "971a50d1c311308c599e9cac8d1d1932ae24aee5505be06bd512c083000806bf",
+    "examples/optimization-library/ascendc/sdot/sdot_compile.py": "53264f1c53807723c880380955b195089aeb197a13dd06e258bf029f42c841b5",
+    "examples/optimization-library/ascendc/sdot/sdot_contract.py": "418875756bcbd5cfaf9f50b6e32d4770907005ddb5a835fd09aee6ccd9441fbf",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/arch/hardware.h": "c383733463a1eff5f5a1a748aebbe5648a413efd9e52676c7c1d2a50efc5c4cd",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/arch/layout.h": "7274db54776ed9cbf5943fd698db263f1a796ad6317207ac6b2dbe2a7eeb1c8c",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/compute/simd.h": "1ff8aaf85a3bf69a2bb785d0c6cac1b14b509c3fe5421fde470ed25cbf9ef1b2",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/helper/kernel_utils.h": "42abf3b79150f1b645d62890c0f60a4a738d3eed162d6ba760c1838e45225e2b",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterator.h": "27ce6aee72d71e2437cc75498687a9198cadfd573933a555e3bf3aba2e4f0d94",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/gm_to_l1_iterator.inc": "97a87bc2f88c230d5a43d435ca3174ba32f3dcfa53e626dd6a98a6fdaf0d147f",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/gm_to_ub_iterator.inc": "3132ac92d6b8daabd6350636b4b750da9ecc5f88b9733e204447f197e8e279d0",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/l0c_to_gm_iterator.inc": "b0d76d99f8fb34990ae6297b7ff32a676437499fe9143401448859ce83b5ce4e",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/l0c_to_l1_iterator.inc": "affe489bbf79a3f8b45c46340e74f8f8894103f8ee807afa10425386ea67af0e",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/l0c_to_ub_iterator.inc": "3019dbc9b523b8e05bc3cd8039a7ada69ea8a5d7c00eda4e6cd1cf44499874a3",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/l1_to_bt_iterator.inc": "8ddc039a219aecd1672703d0ab0f69794a124367e5cc07d9d9a44be74e90b6e3",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/l1_to_fb_iterator.inc": "df8fda8791ee9f30de0ad2922cafdcc077cef0e385e96ce1ccfc74c0bd06f68c",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/l1_to_l0_iterator.inc": "9d84779dedeb3d0292e9e02ecbfe6b821f86662efe742cbb4690a8890bd90cc4",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/l1_to_ub_iterator.inc": "29cf5b0c62f254814dbac86c46cb66a0eedca996bb36ed513710a96bd83ad974",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/memory/mem.h": "45326f6c03704121758d3ca1ba3a13113cef1498b5df855143f15cc2513cd1d5",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/dot/arch22/sdot_kernel.cpp": "e3da7d0ee01f9cf38bd76bb1bb9477ba02895e7ca777d66931ad8142466596bf",
+    "examples/optimization-library/ascendc/sdot/vendor/include/cann_ops_blas_common.h": "e9b5f32066123a558823145dc3d39a0021fd34b26145b22225ad8066549377ae",
+    "examples/optimization-library/ascendc/sdot/vendor-manifest.json": "39ac3a783c079815cf2a78808c5249e03d6d0b563dbdb20b8015162d1898efb1",
+    "tests/test_optimization_native_sdot.py": "2598c6e7dc88aa587850f3ea684aee1feafb98ad39ffb0aeebeffdceb9797353"
+  },
+  "publication_host_sha256": {
+    "examples/optimization-library/ascendc/sdot/LICENSE": "cb282ac2b66d7d6734c3fb354db792b28cf23ab29fbc16d5cfd8bd542bedeb1e",
+    "examples/optimization-library/ascendc/sdot/native.cpp": "361b5f742a91a7ed120695c67b766b20bad95d07ca949f52124b46495c2a1604",
+    "examples/optimization-library/ascendc/sdot/sdot.py": "35b7926aee4600a72d5f501de31dd40e304b898f743c3aba60cd9bb5863d97c8",
+    "examples/optimization-library/ascendc/sdot/sdot_compile.py": "53264f1c53807723c880380955b195089aeb197a13dd06e258bf029f42c841b5",
+    "examples/optimization-library/ascendc/sdot/sdot_contract.py": "418875756bcbd5cfaf9f50b6e32d4770907005ddb5a835fd09aee6ccd9441fbf",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/arch/hardware.h": "c383733463a1eff5f5a1a748aebbe5648a413efd9e52676c7c1d2a50efc5c4cd",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/arch/layout.h": "7274db54776ed9cbf5943fd698db263f1a796ad6317207ac6b2dbe2a7eeb1c8c",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/compute/simd.h": "1ff8aaf85a3bf69a2bb785d0c6cac1b14b509c3fe5421fde470ed25cbf9ef1b2",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/helper/kernel_utils.h": "42abf3b79150f1b645d62890c0f60a4a738d3eed162d6ba760c1838e45225e2b",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterator.h": "27ce6aee72d71e2437cc75498687a9198cadfd573933a555e3bf3aba2e4f0d94",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/gm_to_l1_iterator.inc": "97a87bc2f88c230d5a43d435ca3174ba32f3dcfa53e626dd6a98a6fdaf0d147f",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/gm_to_ub_iterator.inc": "3132ac92d6b8daabd6350636b4b750da9ecc5f88b9733e204447f197e8e279d0",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/l0c_to_gm_iterator.inc": "b0d76d99f8fb34990ae6297b7ff32a676437499fe9143401448859ce83b5ce4e",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/l0c_to_l1_iterator.inc": "affe489bbf79a3f8b45c46340e74f8f8894103f8ee807afa10425386ea67af0e",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/l0c_to_ub_iterator.inc": "3019dbc9b523b8e05bc3cd8039a7ada69ea8a5d7c00eda4e6cd1cf44499874a3",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/l1_to_bt_iterator.inc": "8ddc039a219aecd1672703d0ab0f69794a124367e5cc07d9d9a44be74e90b6e3",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/l1_to_fb_iterator.inc": "df8fda8791ee9f30de0ad2922cafdcc077cef0e385e96ce1ccfc74c0bd06f68c",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/l1_to_l0_iterator.inc": "9d84779dedeb3d0292e9e02ecbfe6b821f86662efe742cbb4690a8890bd90cc4",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/iterator/iterators/l1_to_ub_iterator.inc": "29cf5b0c62f254814dbac86c46cb66a0eedca996bb36ed513710a96bd83ad974",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/common/memory/mem.h": "45326f6c03704121758d3ca1ba3a13113cef1498b5df855143f15cc2513cd1d5",
+    "examples/optimization-library/ascendc/sdot/vendor/blas/dot/arch22/sdot_kernel.cpp": "e3da7d0ee01f9cf38bd76bb1bb9477ba02895e7ca777d66931ad8142466596bf",
+    "examples/optimization-library/ascendc/sdot/vendor/include/cann_ops_blas_common.h": "e9b5f32066123a558823145dc3d39a0021fd34b26145b22225ad8066549377ae",
+    "examples/optimization-library/ascendc/sdot/vendor-manifest.json": "39ac3a783c079815cf2a78808c5249e03d6d0b563dbdb20b8015162d1898efb1",
+    "tests/test_optimization_native_sdot.py": "ae996a5e12e963ab78614520f4d99372cf3a2b293b962a4b1c3ecda504df483c"
+  },
+  "header_closure": {
+    "pin": "c2332551586763f8c2d27621f8bc119bd1c3a301",
+    "files": [
+      {
+        "path": "vendor/blas/common/arch/hardware.h",
+        "sha256": "c383733463a1eff5f5a1a748aebbe5648a413efd9e52676c7c1d2a50efc5c4cd"
+      },
+      {
+        "path": "vendor/blas/common/arch/layout.h",
+        "sha256": "7274db54776ed9cbf5943fd698db263f1a796ad6317207ac6b2dbe2a7eeb1c8c"
+      },
+      {
+        "path": "vendor/blas/common/compute/simd.h",
+        "sha256": "1ff8aaf85a3bf69a2bb785d0c6cac1b14b509c3fe5421fde470ed25cbf9ef1b2"
+      },
+      {
+        "path": "vendor/blas/common/helper/kernel_utils.h",
+        "sha256": "42abf3b79150f1b645d62890c0f60a4a738d3eed162d6ba760c1838e45225e2b"
+      },
+      {
+        "path": "vendor/blas/common/iterator/iterator.h",
+        "sha256": "27ce6aee72d71e2437cc75498687a9198cadfd573933a555e3bf3aba2e4f0d94"
+      },
+      {
+        "path": "vendor/blas/common/iterator/iterators/gm_to_l1_iterator.inc",
+        "sha256": "97a87bc2f88c230d5a43d435ca3174ba32f3dcfa53e626dd6a98a6fdaf0d147f"
+      },
+      {
+        "path": "vendor/blas/common/iterator/iterators/gm_to_ub_iterator.inc",
+        "sha256": "3132ac92d6b8daabd6350636b4b750da9ecc5f88b9733e204447f197e8e279d0"
+      },
+      {
+        "path": "vendor/blas/common/iterator/iterators/l0c_to_gm_iterator.inc",
+        "sha256": "b0d76d99f8fb34990ae6297b7ff32a676437499fe9143401448859ce83b5ce4e"
+      },
+      {
+        "path": "vendor/blas/common/iterator/iterators/l0c_to_l1_iterator.inc",
+        "sha256": "affe489bbf79a3f8b45c46340e74f8f8894103f8ee807afa10425386ea67af0e"
+      },
+      {
+        "path": "vendor/blas/common/iterator/iterators/l0c_to_ub_iterator.inc",
+        "sha256": "3019dbc9b523b8e05bc3cd8039a7ada69ea8a5d7c00eda4e6cd1cf44499874a3"
+      },
+      {
+        "path": "vendor/blas/common/iterator/iterators/l1_to_bt_iterator.inc",
+        "sha256": "8ddc039a219aecd1672703d0ab0f69794a124367e5cc07d9d9a44be74e90b6e3"
+      },
+      {
+        "path": "vendor/blas/common/iterator/iterators/l1_to_fb_iterator.inc",
+        "sha256": "df8fda8791ee9f30de0ad2922cafdcc077cef0e385e96ce1ccfc74c0bd06f68c"
+      },
+      {
+        "path": "vendor/blas/common/iterator/iterators/l1_to_l0_iterator.inc",
+        "sha256": "9d84779dedeb3d0292e9e02ecbfe6b821f86662efe742cbb4690a8890bd90cc4"
+      },
+      {
+        "path": "vendor/blas/common/iterator/iterators/l1_to_ub_iterator.inc",
+        "sha256": "29cf5b0c62f254814dbac86c46cb66a0eedca996bb36ed513710a96bd83ad974"
+      },
+      {
+        "path": "vendor/blas/common/memory/mem.h",
+        "sha256": "45326f6c03704121758d3ca1ba3a13113cef1498b5df855143f15cc2513cd1d5"
+      },
+      {
+        "path": "vendor/include/cann_ops_blas_common.h",
+        "sha256": "e9b5f32066123a558823145dc3d39a0021fd34b26145b22225ad8066549377ae"
+      },
+      {
+        "path": "vendor/blas/dot/arch22/sdot_kernel.cpp",
+        "sha256": "e3da7d0ee01f9cf38bd76bb1bb9477ba02895e7ca777d66931ad8142466596bf"
+      }
+    ],
+    "full_repository_dependency": "UNRESOLVED ops-tensor.cmake pin; miss36e66c893c045e8e634f2530e5a364a6; selected16headerclosure only"
+  },
+  "license": "Exact CANN Open Software License Agreement2.0 and per-file notices retained",
+  "full_repository_build": {
+    "claimed": false,
+    "unresolved_dependency": "ops-tensor.cmake origin/revision",
+    "miss_id": "36e66c893c045e8e634f2530e5a364a6"
+  },
+  "counts": {
+    "current_compile_case_ABI_cells": 12,
+    "current_reused_native_shared_builds": 2,
+    "historical_native_compiler_invocations": 7,
+    "historical_native_compiler_successes": 7,
+    "scientific_cpu_expected_payloads_generated_once": 6,
+    "correctness_API_entered": 1,
+    "correctness_passes": 0,
+    "first_before_API_returned_to_validation": true,
+    "native_host_launch_calls_from_completed_CABI_control_flow": 2,
+    "native_enqueue_success": "unknown; source host launch wrappers do not propagate status",
+    "native_completion": "unknown",
+    "after_API_forwards": 0,
+    "other_case_API_forwards": 0,
+    "profiled_API_forwards": 0,
+    "captures": 0,
+    "event_samples": 0,
+    "PMU_samples": 0,
+    "guard_forwards": 0,
+    "oracle_regenerations": 0,
+    "scientific_replays": 0,
+    "warmups": 0,
+    "unprofiled_timing_runs": 0
+  },
+  "failure": {
+    "case_id": "W009-R11-01",
+    "arm": "before",
+    "phase": "sole output-storage CPU transfer/synchronization before numeric comparison",
+    "error_code": 507035,
+    "error": "ACL stream synchronize failed",
+    "device_diagnostic": "vector core exception; scalar instruction accesses an invalid GM address OR cross-device memory access times out",
+    "device_retCode": "0x31",
+    "actual_output": null,
+    "mismatch_count": null,
+    "max_absolute_error": null,
+    "canaries_and_input_immutability": "not reached; no passing GPU validation claim",
+    "next_11_arm_case_numerical_cells": "unattempted",
+    "profiles": "unattempted",
+    "no_retry_or_reset": true
+  },
+  "handles": {
+    "SDK_probe": "remote:gz-a3:job:24622417-6658-4341-a361-f13d3ed2ad5c",
+    "initial_selector_failed_stage": "remote:gz-a3:job:af46aaba-eef4-46f9-9bc5-635aef916843",
+    "corrected_compile_stage": "remote:gz-a3:job:fbc5e291-c2ac-4929-a0a0-d102e0f2502f",
+    "compiler_help": "remote:gz-a3:job:c8101728-6dc6-4bf7-99ab-e56f46fab827",
+    "resource_diagnostic_v1": "remote:gz-a3:job:2cb72644-9631-495a-b060-d08ec5338f59",
+    "resource_diagnostic_v2": "remote:gz-a3:job:9405693f-3ccd-4d21-9c8e-1bfc6dc8ff53",
+    "resource_readout": "remote:gz-a3:job:68ea897f-38a4-4a46-b12a-0e836450f2e6",
+    "first_science": "remote:gz-a3:job:10aa425c-1f8e-4439-9c3c-a30b9584ba57",
+    "science_readout_release": "remote:gz-a3:job:bef44dde-fdf9-4aa1-9fe6-ccaf5721ae5c",
+    "science_download": "remote:gz-a3:transfer:ab99e75c-656c-414c-8668-e80213514be5",
+    "publication_cpu_gate": "remote:gz-a3:job:aa7f4157-f1c0-4829-9d33-63974eb664da",
+    "publication_cpu_upload": "remote:gz-a3:transfer:7926b95c-bcf6-4a0c-96de-55fc3fb47afa"
+  },
+  "runtime": {
+    "target": "gz-a3",
+    "physical_npu": 0,
+    "chip": 0,
+    "application_logical_device": 0,
+    "actual_product": "Ascend910B4-1",
+    "driver_properties": {
+      "max_shared_mem": 1,
+      "num_aicore": 20,
+      "num_vectorcore": 40
+    },
+    "packages": {
+      "torch": "2.10.0",
+      "torch-npu": "2.10.0",
+      "triton": "3.5.0",
+      "triton-ascend": "3.2.2"
+    },
+    "imported_triton": "3.2.0",
+    "triton_scope": "Property query only; no Triton kernels or rewrite",
+    "tools": {
+      "msprof": {
+        "path": "<runtime-path>",
+        "sha256": "75541a2535f1dc9b39484b833b0454a002d0eabd68d7673006f52cb00e73dc82",
+        "command": [
+          "<runtime-path>",
+          "--version"
+        ],
+        "exit": 255,
+        "stdout": "\nUsage:\n      msprof [--options]\n\nThis is subcommand for operator optimization situation:\n      op                                Use binary msopprof to operator optimization (msprof op ...)\n\nOptions:\n      --output                          <Optional> Specify the directory that is used for storing data results.\n      --application                     <Optional> Specify application path, considering the risk of privilege escalation, please pay attention to\n\t\t\t\t\t\t   the group of the application and confirm whether it is the same as the user currently.\n\t\t\t\t\t\t   [Note] This option will be discarded in later versions.\n\t\t\t\t\t\t   you can try to use: msprof [msprof arguments] <app> [app arguments]\n      --ascendcl                        <Optional> Show acl profiling data, the default value is on.\n      --ge-api                          <Optional> Specify if report GE event, the default value is off. The possible parameters are 'l0', 'l1' or 'off'.\n      --runtime-api                     <Optional> Show runtime api profiling data, the default value is off.\n      --task-time                       <Optional> Show task profiling data, the default value is on. The possible parameters are 'l0', 'l1', 'l2', 'l3', 'on' or 'off'.\n      --task-memory                     <Optional> Show the memory usage of the operator, the default value is off. The possible parameters are 'on' or 'off'.\n      --ai-core                         <Optional> Turn on / off the ai core profiling, the default value is on when collecting app Profiling.\n      --aic-mode                        <Optional> Set the aic profiling mode to task-based or sample-based.\n\t\t\t\t\t\t   In task-based mode, profiling data will be collected by tasks.\n\t\t\t\t\t\t   In sample-based mode, profiling data will be collected in a specific interval.\n\t\t\t\t\t\t   The default value is task-based in AI task mode, sample-based in system mode.\n      --aic-freq                        <Optional> The aic sampling frequency in hertz, the default value is 100 Hz, the range is 1 to 100 Hz.\n      --environment                     <Optional> User app custom environment variable configuration.\n      --sys-period                      <Optional> Set total sampling period of system profiling in seconds.\n      --sys-devices                     <Optional> Specify the profiling scope by device ID when collect sys profiling.The value is all or ID list (split with ',').\n      --msproftx                        <Optional> Show msproftx and mstx data, the default value is off.\n      --mstx-domain-include             <Optional> Choose to only include mstx events from a comma separated list of domains;\n\t\t\t\t\t\t   `default` filters the mstx default domain;\n\t\t\t\t\t\t   The switch is only applicable when parameter msproftx is set to on;\n\t\t\t\t\t\t   The switch cannot be set with mstx-domain-exclude at the same time.\n      --mstx-domain-exclude             <Optional> Choose to exclude mstx events from a comma separated list of domains;\n\t\t\t\t\t\t   `default` excludes the mstx default domain;\n\t\t\t\t\t\t   The switch is only applicable when parameter msproftx is set to on;\n\t\t\t\t\t\t   The switch cannot be set with mstx-domain-include at the same time.\n      --storage-limit                   <Optional> Specify the output directory volume. range 200MB ~ 4294967295MB.\n      --hccl                            <Optional> Show hccl profiling data, the default value is off. [Note] This option will be discarded in later versions.\n      --model-execution                 <Optional> Show ge model execution profiling data, the default value is off. [Note] This option will be discarded in later versions.\n      --aic-metrics                     <Optional> The aic metrics groups, include ArithmeticUtilization, PipeUtilization, Memory, MemoryL0, ResourceConflictRatio, MemoryUB, L2Cache, MemoryAccess.\n\t\t\t\t\t\t   the default value is PipeUtilization.\n      --python-path                     <Optional> Specify the python interpreter path that is used for analysis, please ensure the python version is 3.7.5 or later.\n      --parse                           <Optional> Switch for using msprof to parse collecting data, the default value is off.\n      --query                           <Optional> Switch for using msprof to query collecting data, the default value is off.\n      --export                          <Optional> Switch for using msprof to export collecting data, the default value is off.\n      --clear                           <Optional> Switch for using msprof to analyze or export data in clear mode, the default value is off.\n      --analyze                         <Optional> Switch for using msprof to analyze collecting data, the default value is off.\n      --rule                            <Optional> Switch specified rule for using msprof to analyze collecting data, include communication, communication_matrix.\n\t\t\t\t\t\t   the default value is communication,communication_matrix.\n      --iteration-id                    <Optional> The export iteration id, only used when argument export is on, the default value is 1.\n      --model-id                        <Optional> The export model id, only used when argument export is on, msprof will export minium accessible model by default.\n      --summary-format                  <Optional> The export summary file format, only used when argument export is on, include csv, json, the default value is csv.\n      --type                            <Optional> The export type, only used when argument `export` is on \n\t\t\t\t\t\t   or when collecting data, include text, db.\n\t\t\t\t\t\t   the default value is text(which will also export the database).\n      --reports                         <Optional> Specify the path that is used for controlling the export scope of collecting results\n      --aicpu                           <Optional> Show aicpu profiling data, the default value is off.\n      --sys-hardware-mem                <Optional> LLC, DDR, HBM acquisition switch, optional on / off, the default value is off.\n      --sys-hardware-mem-freq           <Optional> LLC, DDR, HBM acquisition frequency, range 1 ~ 100, the default value is 50, unit Hz.\n      --llc-profiling                   <Optional> The llc profiling groups, include read, write. the default value is read.\n      --sys-cpu-profiling               <Optional> The CPU acquisition switch, optional on / off,the default value is off.\n      --sys-cpu-freq                    <Optional> The cpu sampling frequency in hertz. the default value is 50 Hz, the range is 1 to 50 Hz.\n      --sys-profiling                   <Optional> The System CPU usage and system memory acquisition switch,the default value is off.\n      --sys-sampling-freq               <Optional> The sys sampling frequency in hertz. the default value is 10 Hz, the range is 1 to 10 Hz.\n      --sys-pid-profiling               <Optional> The CPU usage of the process and the memory acquisition switch of the process,the default value is off.\n      --sys-pid-sampling-freq           <Optional> The pid sampling frequency in hertz. the default value is 10 Hz, the range is 1 to 10 Hz.\n      --sys-io-profiling                <Optional> NIC, ROCE acquisition switch, the default value is off.\n      --sys-io-sampling-freq            <Optional> NIC, ROCE acquisition frequency, range 1 ~ 100, the default value is 100, unit Hz.\n      --instr-profiling                 <Optional> Show instr profiling data, the default value is off.\n      --instr-profiling-freq            <Optional> The instr profiling sampling period in clock-cycle, the default value is 1000 cycle, the range is 300 to 30000 cycle.\n      --sys-interconnection-profiling   <Optional> PCIE, HCCS acquisition switch, the default value is off.\n      --sys-interconnection-freq        <Optional> PCIE, HCCS acquisition frequency, range 1 ~ 50, the default value is 50, unit Hz.\n      --dvpp-profiling                  <Optional> DVPP acquisition switch, the default value is off.\n      --dvpp-freq                       <Optional> DVPP acquisition frequency, range 1 ~ 100, the default value is 50, unit Hz.\n      --l2                              <Optional> L2 Cache and SMMU acquisition switch. The default value is off.\n      --host-sys                        <Optional> The host-sys data type, include cpu, mem, disk, network, osrt, numa\n      --host-sys-pid                    <Optional> Set the PID of the app process for which you want to collect performance data.\n      --host-sys-usage                  <Optional> The host-sys-usage data type, include cpu, mem.(full-platform)\n      --host-sys-usage-freq             <Optional> The sampling frequency in hertz. the default value is 50 Hz the range is 1 to 50 Hz.\n      --dynamic                         <Optional> Dynamic profiling switch, the default value is off.\n      --pid                             <Optional> Dynamic profiling pids of the target processes\n      --delay                           <Optional> Collect start delay time in seconds, range 1 ~ 4294967295s.\n      --duration                        <Optional> Collection duration in seconds, range 1 ~ 4294967295s.\n      --help                            <Optional> help message.\n",
+        "stderr": "<runtime-path>: unrecognized option '--version'\n"
+      },
+      "msopprof": {
+        "path": "<runtime-path>",
+        "sha256": "24e3eb4ad3c440b823a606b372860501a45dda905b20afe82f8c248c4f5e36c1",
+        "command": [
+          "<runtime-path>",
+          "--version"
+        ],
+        "exit": 0,
+        "stdout": "msopprof is part of MindStudio Operator-dev Tools.\nmsopprof vesion is 26.1.0-56632dc4a944410c791538451dc2156a151bd105\nmsopscommon version is b4ffdb3d6ba7acdb7bbfcf359f6e4dd5b587a4f4\n",
+        "stderr": ""
+      },
+      "bishengir-compile": {
+        "path": "<runtime-path>",
+        "sha256": "4f5b28a5dd3b64724299c8ef220f4c27e02668237b93fe2aab04675d32ca2f62",
+        "command": [
+          "<runtime-path>",
+          "--version"
+        ],
+        "exit": 0,
+        "stdout": "bishengir-compile 1.2.0 (<runtime-path> 8796a8ac1508 2026-07-31) \nllvm 19.1.7 2430ab069eb1\nRelease build\n\n",
+        "stderr": ""
+      },
+      "hivmc": {
+        "path": "<runtime-path>",
+        "sha256": "d7ff8fd34f20535c9d4ad3d19855c52ab71ea1eaba7b5109a1f16dcd7e3bd3d1",
+        "command": [
+          "<runtime-path>",
+          "--version"
+        ],
+        "exit": 0,
+        "stdout": "hivmc 0.3.0 (4ace068b0b12 2026-07-31)\nRelease build\n\n",
+        "stderr": ""
+      },
+      "bisheng": {
+        "path": "<runtime-path>",
+        "sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a",
+        "command": [
+          "<runtime-path>",
+          "--version"
+        ],
+        "exit": 0,
+        "stdout": "2026-07-30T20:53:21+08:00 clang version 15.0.5 (clang-5c68a1cb1231 flang-5c68a1cb1231)\nTarget: aarch64-unknown-linux-gnu\nThread model: posix\nInstalledDir: <runtime-path>\n",
+        "stderr": ""
+      },
+      "ccec": {
+        "path": "<runtime-path>",
+        "sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a",
+        "command": [
+          "<runtime-path>",
+          "--version"
+        ],
+        "exit": 0,
+        "stdout": "2026-07-30T20:53:21+08:00 clang version 15.0.5 (clang-5c68a1cb1231 flang-5c68a1cb1231)\nTarget: aarch64-unknown-linux-gnu\nThread model: posix\nInstalledDir: <runtime-path>\n",
+        "stderr": ""
+      }
+    },
+    "CANN_version_files": [
+      {
+        "component": "acl_extend",
+        "sha256": "d4c8387d7ac99d052f26d976751514ea689858a79d9c3691a4a219a9b89ac7a1",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "aoe",
+        "sha256": "6aa6e27a760e76653922dbdbb748fd993a1d35592a88b3e365fac210ab075c9c",
+        "text": "Version=9.1.0\nversion_dir=cann\ntimestamp=20260730_231653901\nrequired_package_acl-extend_version=\"9.1\"\nrequired_package_ge-compiler_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_ncs_version=\"9.1\"\nrequired_package_opbase_version=\"9.1\"\nrequired_package_runtime_version=\"9.1\"\nrequired_package_tbe-tik_version=\"9.1\"\n"
+      },
+      {
+        "component": "asc-devkit",
+        "sha256": "f20359296d5a7127f841aa35f4a788137f444dc36d72641e948cb9e39e47e4f4",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_bisheng-compiler_version=\"9.1\"\nrequired_package_tbe-tik_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "asc-tools",
+        "sha256": "fb73e36cd4bd525381b5c04224de3688efe68d3f7ea2573a022107e2123919aa",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_asc-devkit_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "ascendnpu-ir",
+        "sha256": "caa72d84cac4d3245cd99e5a0b4c57a5529dfeba4cbf17b9aa0d82c467e44296",
+        "text": "Version=1.2.0\n"
+      },
+      {
+        "component": "bisheng-compiler",
+        "sha256": "b60c90526474b29ccb5f9077fcfbb5c1f739d57987f8d3bdab5a3599c33aa365",
+        "text": "Version=9.1.0\nversion_dir=cann\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "dflow-executor",
+        "sha256": "fc001e57591b485e65267b13b36de6d1f23057bb26073b69cc8e2acbbd90afb3",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_hcomm_version=\"9.1\"\nrequired_package_bisheng-compiler_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "dvpp",
+        "sha256": "537afe68699020cf5da7afb85a02dd00a8834971c8b36aac845bf7ab73ad5431",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_opbase_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "ge-compiler",
+        "sha256": "2f6f9fd4d54bb0c089317d31cac302e6fe25abfdd851591d8c900cb19ff9111d",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_hcomm_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "ge-executor",
+        "sha256": "9e8b00e5e330e15ebf823de28775c6e83f4ab351fdabf1d08625f0cd1916300c",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_hcomm_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "graph_autofusion",
+        "sha256": "2aace96d1aa0efbfdeda8ed895ad85eebe09e864d7fa349bc9768b5cb2cc455c",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_asc-devkit_version=\"9.1\"\nrequired_package_ge-compiler_version=\"9.1\"\nrequired_package_bisheng-compiler_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "hccl",
+        "sha256": "01dc95fa1d7268bfd942e739e7f05ddf39797c9221ceb1535ccccce31751379c",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_hcomm_version=\">=8.5\"\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\ntimestamp=20260730_231653901\nhost_only=false\n"
+      },
+      {
+        "component": "hcomm",
+        "sha256": "01f293673967a73c382d222e129c8f742001a9a4c0adca051cea442d4280b107",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\ntimestamp=20260730_231653901\nhost_only=true\n"
+      },
+      {
+        "component": "hixl",
+        "sha256": "4e0ae747eabe1609abce41b4b718436f3d5229fa479aa289f4a84831cf069dcc",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_hcomm_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "metadef",
+        "sha256": "d4c8387d7ac99d052f26d976751514ea689858a79d9c3691a4a219a9b89ac7a1",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "mindstudio-debugger",
+        "sha256": "40b39b3409ccaa31c57336d479f0fab9e7a82d4183386fa26e4f64f2dcb0b537",
+        "text": "[PACKAGE]\nName=mindstudio-debugger\nVersion=26.1.0\n"
+      },
+      {
+        "component": "mindstudio-operator-tools",
+        "sha256": "71dae3dd28bd0fd883b93fbc54258a7e9d3ac7b6f30ab5ce7e9971a5ec54d1e7",
+        "text": "[PACKAGE]\nName=mindstudio-operator-tools\nVersion=26.1.0"
+      },
+      {
+        "component": "mindstudio-opprof",
+        "sha256": "e58246d2990f588686644a09b4de5f08eb08fb271a4ce8966be9807185d4888d",
+        "text": "[PACKAGE]\nName=mindstudio-opprof\nVersion=26.1.0"
+      },
+      {
+        "component": "mindstudio-sanitizer",
+        "sha256": "649f8c33384aeecaf22bc277951ea7131db5125bf173b62b42fae33dbef8f186",
+        "text": "[PACKAGE]\nName=mindstudio-sanitizer\nVersion=26.1.0"
+      },
+      {
+        "component": "ms_fmk_transplt",
+        "sha256": "e6e6cb8773363ef5e86f72695471d7c5e795fa802cbc6bc32f34b93793d43b59",
+        "text": "[PACKAGE]\nName=mindstudio-transplt\nVersion=26.1.0"
+      },
+      {
+        "component": "msboost",
+        "sha256": "f4646c2d489a3047bb36303d8624ebc7fefcfada61175e052c7ccf7ed0ba4cc3",
+        "text": "[PACKAGE]\nName=mindstudio-boost\nVersion=26.1.0\n"
+      },
+      {
+        "component": "msmemscope",
+        "sha256": "4038fd57daffa7803a900aed3483061f2a20422db325ec8a48862803195d4426",
+        "text": "[PACKAGE]\nName=mindstudio-memscope\nVersion=26.1.0\n"
+      },
+      {
+        "component": "msprof",
+        "sha256": "1e47dcaec6c10bc8bf6350602aac82cc7a490c6730c17100d053268be08af26a",
+        "text": "[PACKAGE]\nName=mindstudio-profiler\nVersion=26.1.0"
+      },
+      {
+        "component": "mspti",
+        "sha256": "d54aa86ee69d17a35f4244f48bafd3f7f12de3aa54b9d3ad416f39d49b30e188",
+        "text": "[PACKAGE]\nName=mindstudio-profiler-tools-interface\nVersion=26.1.0"
+      },
+      {
+        "component": "msserviceprofiler",
+        "sha256": "a3d8eb32bfb7841d07666b265f98eba461fce9d750c23f8eb851faac765471b4",
+        "text": "[PACKAGE]\nName=mindstudio-serviceprofiler\nVersion=26.1.0"
+      },
+      {
+        "component": "mstx",
+        "sha256": "bc0d04744ff96ba34e6ceecf7f790e68cd0401983f5c251bc8b62ce622a660c9",
+        "text": "[PACKAGE]\nName=mindstudio-TX\nVersion=26.1.0\n"
+      },
+      {
+        "component": "ncs",
+        "sha256": "5f301ae1b23f145a3c37217c70be5f7e956aa3b3ecf848b8025a164458898ee5",
+        "text": "Version=9.1.0\nversion_dir=cann\ntimestamp=20260730_231653901\nrequired_package_acl-extend_version=\"9.1\"\nrequired_package_aoe_version=\"9.1\"\nrequired_package_ge-compiler_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_opbase_version=\"9.1\"\nrequired_package_runtime_version=\"9.1\"\nrequired_package_tbe-tik_version=\"9.1\"\n"
+      },
+      {
+        "component": "oam_tools",
+        "sha256": "9ce0ebf7645f85b4e51dc9f6a0cb6cf2ff85e88e50e091f63c1ae41ae413caa7",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=9.0\"\nrequired_package_metadef_version=\">=9.0\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "opbase",
+        "sha256": "841279757459d4eabc1c8cfea69d3e1dc0fc9db3eb0c18100294cd5c1301b9e6",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_asc-devkit_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "operator_cmp",
+        "sha256": "0f87f0ae0ac0d9a0dac90f02f4117290205541dcb80d114ff3d502c588cf82b1",
+        "text": "[PACKAGE]\nName=mindstudio-accucmp\nVersion=26.1.0"
+      },
+      {
+        "component": "ops_cv",
+        "sha256": "d6ec180e5a9abe7c95d798ff72a8d7278e8801855264fe11135ccd78cc3df5c2",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_opbase_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\nrequired_package_asc-devkit_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_asc-tools_version=\">=8.5\"\nrequired_package_ops-legacy_version=\">=8.5\"\nrequired_package_ops-math_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "ops_legacy",
+        "sha256": "249468544b7aaa03376b8a25879a72fc2f8ba45171176c242c6764c7b3e48795",
+        "text": "Version=9.1.0\nversion_dir=cann\ntimestamp=20260730_231653901\nops_version=9.1.0\nadk_version=9.1.0\n"
+      },
+      {
+        "component": "ops_math",
+        "sha256": "b185b4e2091bc53cad880f61a693350065653ce55d06a54c26f50575ad14ea7a",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_opbase_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\nrequired_package_asc-devkit_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_asc-tools_version=\">=8.5\"\nrequired_package_ops-legacy_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "ops_nn",
+        "sha256": "fa1a5dd13201b51d62d1cfc77f6eda0460208157c43f897121773ea1f8a7b468",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_opbase_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\nrequired_package_asc-devkit_version=\">=8.5\"\nrequired_package_asc-tools_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_ops_legacy_version=\">=8.5\"\nrequired_package_ops_math_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "ops_ras",
+        "sha256": "f810262471c9b6aa10c66e4fc37b743253d92d50cbb554bb366216960bab25b1",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_opbase_version=\">=8.5\"\nrequired_package_asc-devkit_version=\">=8.5\"\nrequired_package_ge-compiler_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\nrequired_package_tbe-tik_version=\">=8.5\"\nrequired_package_asc-tools_version=\">=8.5\""
+      },
+      {
+        "component": "ops_transformer",
+        "sha256": "9e8aad0762d909d660a2887a7d69a3b3f1b3b4d6fc2280ff73ec4f00a414089c",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_opbase_version=\">=8.5\"\nrequired_package_hcomm_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_ge-compiler_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\nrequired_package_asc-tools_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\nrequired_package_ops-nn_version=\">=8.5\"\nrequired_package_hccl_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "platform_profiler",
+        "sha256": "913d79c156a9b3214b4989e8bc66c97f3e4eecd6242899ba84630dc30aa27011",
+        "text": "[PACKAGE]\nName=platform-profiler\nVersion=1.0.0"
+      },
+      {
+        "component": "pto_isa",
+        "sha256": "e0b8f4ea2317db19dc3600014df1ddb73b29f37be35588bddb92b1d95ab4156a",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_opbase_version=\"9.1\"\nrequired_package_asc-devkit_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\nrequired_package_bisheng-compiler_version=\"9.1\"\nrequired_package_asc-tools_version=\"9.1\"\nrequired_package_ge-compiler_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "pyACL",
+        "sha256": "b0a5b3a5ba03b6af335a9b957211bbce4da3e7cc180d667f6ab8d792fbe60577",
+        "text": "Version=9.1.0\n"
+      },
+      {
+        "component": "pypto",
+        "sha256": "982f55f43d36c46b5a351d80e414ea3862551f014a6a49476eab6052d9ebfa9e",
+        "text": "Version=9.1.0\nversion_dir=cann\nrequired_package_driver_version=\">=25.5.0\"\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "runtime",
+        "sha256": "b60c90526474b29ccb5f9077fcfbb5c1f739d57987f8d3bdab5a3599c33aa365",
+        "text": "Version=9.1.0\nversion_dir=cann\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "simulator",
+        "sha256": "b60c90526474b29ccb5f9077fcfbb5c1f739d57987f8d3bdab5a3599c33aa365",
+        "text": "Version=9.1.0\nversion_dir=cann\ntimestamp=20260730_231653901\n"
+      },
+      {
+        "component": "tbe-tik",
+        "sha256": "ad59b9ddab61bbfc414d0a27ce5fc84315aba1735a7275f58bce8f557d6c3cc1",
+        "text": "Version=9.1.0\nversion_dir=cann\ntimestamp=20260730_231653901\nrequired_opp_abi_version=tbe-tik\nrequired_package_ge-compiler_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_runtime_version=\"9.1\"\n"
+      },
+      {
+        "component": "test-ops",
+        "sha256": "b0a5b3a5ba03b6af335a9b957211bbce4da3e7cc180d667f6ab8d792fbe60577",
+        "text": "Version=9.1.0\n"
+      }
+    ]
+  },
+  "native_program": {
+    "source_host_blocks": 8,
+    "tiling_entries": 40,
+    "tiling_bytes": 332,
+    "coreNum": "min(n,8)",
+    "workspace_bytes": 1024,
+    "source_max_chunk_floats": 11776,
+    "source_manual_UB_high_water_bytes": 194816,
+    "physical_UB_bytes": 196608,
+    "automatic_UB_scratch": "unknown",
+    "resource_peak": "unknown",
+    "stack_note_schema": "unknown; not added to UB",
+    "compiler_report_flag": "warned unused on both diagnostic routes",
+    "disassembly": "All instructions unavailable; no decoded instruction counts",
+    "formal_total_resource_fit_claim": false,
+    "before": "Educational product materialization then same source reduction; Y load/Mul only removed from reducer, source order/sync/clears retained",
+    "after": "Exact native source local Mul+cadd kernel",
+    "source_native_flags": "O2/stdC++17/fPIC/shared/save-temps/dav-c220; diagnostic-only flag variants produced identical selected device objects",
+    "source_and_current_stream": "Source-derived native CABI on actual Torch-NPU current ACL stream; no profiled host sync/allocator included",
+    "all_workspace_clears_and_Ffts_sync_inside_each_API": true,
+    "initial_product_storage": "Private guarded product buffer allocated in both prepared arms for common CABI; after does not use it. No allocator-memory saving claim."
+  },
+  "resources": {
+    "before": {
+      "device_object_sha256": "59c765d5f1dbd24462c1854084fc87d929ab3b48930cf118c34bf25fd2dea658",
+      "device_sections": {
+        "": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_hex": ""
+        },
+        ".strtab": {
+          "bytes": 428,
+          "sha256": "d4bda7c83420ff23e056fc45294b8520101a2f6b60e6a544f23004220b8f6cfe",
+          "raw_hex": null
+        },
+        ".text": {
+          "bytes": 1700,
+          "sha256": "cc791d1bcc5bdddb79593f1f6fe414a6b1fe9a965c39cc708c99c22e8cf9a21d",
+          "raw_hex": null
+        },
+        ".ascend.stack.size.record": {
+          "bytes": 8,
+          "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3",
+          "raw_hex": "0080000000000000"
+        },
+        ".data": {
+          "bytes": 32768,
+          "sha256": "c35020473aed1b4642cd726cad727b63fff2824ad68cedd7ffb73c7cbd890479",
+          "raw_hex": null
+        },
+        "__CCE_KernelArgSize": {
+          "bytes": 4,
+          "sha256": "8d71b3faab8201459ad37ef499beb336ba88bdcfa0f51ee6f0a46ec3192d750a",
+          "raw_hex": "20000000"
+        },
+        "__CCE_KernelMetaData": {
+          "bytes": 4,
+          "sha256": "67abdd721024f0ff4e0b3f4c2fc13bc5bad42d0b7851d456d88d203d15aaa450",
+          "raw_hex": "01000000"
+        },
+        ".ascend.meta._Z17sdot_materializedPhS_S_S_S_": {
+          "bytes": 8,
+          "sha256": "5efb86fd8b71f4c83cd066a0defdd3ee02a6e2240abaebcfb402034ce5be7816",
+          "raw_hex": "0100040003000000"
+        },
+        ".ascend.meta.sdot_materialize": {
+          "bytes": 8,
+          "sha256": "5efb86fd8b71f4c83cd066a0defdd3ee02a6e2240abaebcfb402034ce5be7816",
+          "raw_hex": "0100040003000000"
+        },
+        ".comment": {
+          "bytes": 88,
+          "sha256": "9a581d041dfd07fcb4b7136109d924ff97516ab9ef53658e4ecfbd19d9b875b7",
+          "raw_hex": null
+        },
+        ".note.GNU-stack": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_hex": ""
+        },
+        ".llvm_addrsig": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_hex": ""
+        },
+        ".symtab": {
+          "bytes": 456,
+          "sha256": "b2a155a674cb74f5440c41814ca40250ac3aa918df435eccbbfc6ad0756f23c5",
+          "raw_hex": null
+        }
+      },
+      "selected_symbols": [
+        "sdot_materialize",
+        "_Z17sdot_materializedPhS_S_S_S_"
+      ],
+      "symbol_table": "0000000000000000 n $d.1\n0000000000000000 d $d.2\n0000000000000000 n $d.3\n0000000000000000 n $d.4\n0000000000000000 n $d.5\n0000000000000000 n $d.6\n0000000000000000 n $d.7\n0000000000000000 n $d.8\n0000000000000000 t $x.0\n0000000000000000 n .Kernel_Type__Z17sdot_materializedPhS_S_S_S_\n0000000000000000 n .Kernel_Type_sdot_materialize\n0000000000000000 T _Z17sdot_materializedPhS_S_S_S_\n0000000000000000 V _Z17sdot_materializedPhS_S_S_S___\n0000000000000000 V __CCE_Mix_Kernel_Policy\n0000000000000000 D g_tilingKey\n00000000000004fc T sdot_materialize\n0000000000000000 V sdot_materialize__\n",
+      "disassembly_exit": 0,
+      "declared_UB_high_water_bytes": 194816,
+      "compiler_scratch_qualification": "requires read-only generated device artifact audit before scientific expected"
+    },
+    "after": {
+      "device_object_sha256": "0e076775b323aa69997e1db2b0c772aa39a63af84615d09d627fe079a3cba061",
+      "device_sections": {
+        "": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_hex": ""
+        },
+        ".strtab": {
+          "bytes": 297,
+          "sha256": "7cd4a30769bc90a9a9044afd07ab529e65b7039ca7232d1b9bc7465097b56192",
+          "raw_hex": null
+        },
+        ".text": {
+          "bytes": 1400,
+          "sha256": "615230539b433ae33ce4dab296b57ccd20275cafb0df62ac79dd40de20311fae",
+          "raw_hex": null
+        },
+        ".ascend.stack.size.record": {
+          "bytes": 8,
+          "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3",
+          "raw_hex": "0080000000000000"
+        },
+        ".data": {
+          "bytes": 32768,
+          "sha256": "c35020473aed1b4642cd726cad727b63fff2824ad68cedd7ffb73c7cbd890479",
+          "raw_hex": null
+        },
+        "__CCE_KernelArgSize": {
+          "bytes": 4,
+          "sha256": "1a00f51f3029fa4b7e61b9bf7aa9de5a64798857872981f7e056e4f437171955",
+          "raw_hex": "28000000"
+        },
+        "__CCE_KernelMetaData": {
+          "bytes": 4,
+          "sha256": "67abdd721024f0ff4e0b3f4c2fc13bc5bad42d0b7851d456d88d203d15aaa450",
+          "raw_hex": "01000000"
+        },
+        ".ascend.meta._Z4sdotPhS_S_S_S_": {
+          "bytes": 8,
+          "sha256": "5efb86fd8b71f4c83cd066a0defdd3ee02a6e2240abaebcfb402034ce5be7816",
+          "raw_hex": "0100040003000000"
+        },
+        ".comment": {
+          "bytes": 88,
+          "sha256": "9a581d041dfd07fcb4b7136109d924ff97516ab9ef53658e4ecfbd19d9b875b7",
+          "raw_hex": null
+        },
+        ".note.GNU-stack": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_hex": ""
+        },
+        ".llvm_addrsig": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "raw_hex": ""
+        },
+        ".symtab": {
+          "bytes": 336,
+          "sha256": "00285308d5da65799f6751fe57c2d7cc0cf39ee262afc543d542225281eb8e4b",
+          "raw_hex": null
+        }
+      },
+      "selected_symbols": [
+        "_Z4sdotPhS_S_S_S_"
+      ],
+      "symbol_table": "0000000000000000 n $d.1\n0000000000000000 d $d.2\n0000000000000000 n $d.3\n0000000000000000 n $d.4\n0000000000000000 n $d.5\n0000000000000000 n $d.6\n0000000000000000 t $x.0\n0000000000000000 n .Kernel_Type__Z4sdotPhS_S_S_S_\n0000000000000000 T _Z4sdotPhS_S_S_S_\n0000000000000000 V _Z4sdotPhS_S_S_S___\n0000000000000000 V __CCE_Mix_Kernel_Policy\n0000000000000000 D g_tilingKey\n",
+      "disassembly_exit": 0,
+      "declared_UB_high_water_bytes": 194816,
+      "compiler_scratch_qualification": "requires read-only generated device artifact audit before scientific expected"
+    }
+  },
+  "compile_ABI_cells": [
+    {
+      "case_id": "W009-R11-01",
+      "arm": "before",
+      "compilation": [
+        {
+          "hash": "59c765d5f1dbd24462c1854084fc87d929ab3b48930cf118c34bf25fd2dea658",
+          "binaries": {
+            "device_vec_o": "59c765d5f1dbd24462c1854084fc87d929ab3b48930cf118c34bf25fd2dea658",
+            "host_shared_so": "c8a605e367f8842d6cbf134ce704ee688362b85a0233aaf6337d8bbbd526eaad"
+          }
+        }
+      ],
+      "metadata": {
+        "arm": "before",
+        "prototype": true,
+        "n": 1024,
+        "grid": [
+          8
+        ],
+        "tiling_bytes": 332,
+        "tiling_sha256": "177782109d42371c166edc1858ec067b8940f19b39c142ab2217057144c3331f",
+        "source_declared_UB_high_water_bytes": 194816,
+        "ABI": {
+          "pointer_count": 6,
+          "input_n": 1024,
+          "workspace_bytes": 1024,
+          "logical_result_floats": 1,
+          "alignment": 128
+        }
+      },
+      "physical_prototype_layouts": [
+        {
+          "shape": [
+            1024
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4352,
+          "addressed_bytes": 4224,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1088
+          }
+        },
+        {
+          "shape": [
+            1024
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4352,
+          "addressed_bytes": 4224,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1088
+          }
+        },
+        {
+          "shape": [
+            256
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 1280,
+          "addressed_bytes": 1152,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 320
+          }
+        },
+        {
+          "shape": [
+            332
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 0,
+          "dtype": "torch.uint8",
+          "storage_bytes": 332,
+          "addressed_bytes": 332,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 332
+          }
+        },
+        {
+          "shape": [
+            1024
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4352,
+          "addressed_bytes": 4224,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1088
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        }
+      ],
+      "expected_kernels": [
+        "sdot_materialize",
+        "_Z17sdot_materializedPhS_S_S_S_"
+      ]
+    },
+    {
+      "case_id": "W009-R11-01",
+      "arm": "after",
+      "compilation": [
+        {
+          "hash": "0e076775b323aa69997e1db2b0c772aa39a63af84615d09d627fe079a3cba061",
+          "binaries": {
+            "device_vec_o": "0e076775b323aa69997e1db2b0c772aa39a63af84615d09d627fe079a3cba061",
+            "host_shared_so": "e56881a6885a5a61ceff03814699bff49de6c5bfa9354a50bb20dfda09112c79"
+          }
+        }
+      ],
+      "metadata": {
+        "arm": "after",
+        "prototype": true,
+        "n": 1024,
+        "grid": [
+          8
+        ],
+        "tiling_bytes": 332,
+        "tiling_sha256": "177782109d42371c166edc1858ec067b8940f19b39c142ab2217057144c3331f",
+        "source_declared_UB_high_water_bytes": 194816,
+        "ABI": {
+          "pointer_count": 6,
+          "input_n": 1024,
+          "workspace_bytes": 1024,
+          "logical_result_floats": 1,
+          "alignment": 128
+        }
+      },
+      "physical_prototype_layouts": [
+        {
+          "shape": [
+            1024
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4352,
+          "addressed_bytes": 4224,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1088
+          }
+        },
+        {
+          "shape": [
+            1024
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4352,
+          "addressed_bytes": 4224,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1088
+          }
+        },
+        {
+          "shape": [
+            256
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 1280,
+          "addressed_bytes": 1152,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 320
+          }
+        },
+        {
+          "shape": [
+            332
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 0,
+          "dtype": "torch.uint8",
+          "storage_bytes": 332,
+          "addressed_bytes": 332,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 332
+          }
+        },
+        {
+          "shape": [
+            1024
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4352,
+          "addressed_bytes": 4224,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1088
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        }
+      ],
+      "expected_kernels": [
+        "_Z4sdotPhS_S_S_S_"
+      ]
+    },
+    {
+      "case_id": "W009-R11-02",
+      "arm": "before",
+      "compilation": [
+        {
+          "hash": "59c765d5f1dbd24462c1854084fc87d929ab3b48930cf118c34bf25fd2dea658",
+          "binaries": {
+            "device_vec_o": "59c765d5f1dbd24462c1854084fc87d929ab3b48930cf118c34bf25fd2dea658",
+            "host_shared_so": "c8a605e367f8842d6cbf134ce704ee688362b85a0233aaf6337d8bbbd526eaad"
+          }
+        }
+      ],
+      "metadata": {
+        "arm": "before",
+        "prototype": true,
+        "n": 16384,
+        "grid": [
+          8
+        ],
+        "tiling_bytes": 332,
+        "tiling_sha256": "17e6c67bf3ea787f0f1d87f84890c45921af28c21240f383f62ed6697b658ce7",
+        "source_declared_UB_high_water_bytes": 194816,
+        "ABI": {
+          "pointer_count": 6,
+          "input_n": 16384,
+          "workspace_bytes": 1024,
+          "logical_result_floats": 1,
+          "alignment": 128
+        }
+      },
+      "physical_prototype_layouts": [
+        {
+          "shape": [
+            16384
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 65792,
+          "addressed_bytes": 65664,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 16448
+          }
+        },
+        {
+          "shape": [
+            16384
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 65792,
+          "addressed_bytes": 65664,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 16448
+          }
+        },
+        {
+          "shape": [
+            256
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 1280,
+          "addressed_bytes": 1152,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 320
+          }
+        },
+        {
+          "shape": [
+            332
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 0,
+          "dtype": "torch.uint8",
+          "storage_bytes": 332,
+          "addressed_bytes": 332,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 332
+          }
+        },
+        {
+          "shape": [
+            16384
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 65792,
+          "addressed_bytes": 65664,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 16448
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        }
+      ],
+      "expected_kernels": [
+        "sdot_materialize",
+        "_Z17sdot_materializedPhS_S_S_S_"
+      ]
+    },
+    {
+      "case_id": "W009-R11-02",
+      "arm": "after",
+      "compilation": [
+        {
+          "hash": "0e076775b323aa69997e1db2b0c772aa39a63af84615d09d627fe079a3cba061",
+          "binaries": {
+            "device_vec_o": "0e076775b323aa69997e1db2b0c772aa39a63af84615d09d627fe079a3cba061",
+            "host_shared_so": "e56881a6885a5a61ceff03814699bff49de6c5bfa9354a50bb20dfda09112c79"
+          }
+        }
+      ],
+      "metadata": {
+        "arm": "after",
+        "prototype": true,
+        "n": 16384,
+        "grid": [
+          8
+        ],
+        "tiling_bytes": 332,
+        "tiling_sha256": "17e6c67bf3ea787f0f1d87f84890c45921af28c21240f383f62ed6697b658ce7",
+        "source_declared_UB_high_water_bytes": 194816,
+        "ABI": {
+          "pointer_count": 6,
+          "input_n": 16384,
+          "workspace_bytes": 1024,
+          "logical_result_floats": 1,
+          "alignment": 128
+        }
+      },
+      "physical_prototype_layouts": [
+        {
+          "shape": [
+            16384
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 65792,
+          "addressed_bytes": 65664,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 16448
+          }
+        },
+        {
+          "shape": [
+            16384
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 65792,
+          "addressed_bytes": 65664,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 16448
+          }
+        },
+        {
+          "shape": [
+            256
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 1280,
+          "addressed_bytes": 1152,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 320
+          }
+        },
+        {
+          "shape": [
+            332
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 0,
+          "dtype": "torch.uint8",
+          "storage_bytes": 332,
+          "addressed_bytes": 332,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 332
+          }
+        },
+        {
+          "shape": [
+            16384
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 65792,
+          "addressed_bytes": 65664,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 16448
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        }
+      ],
+      "expected_kernels": [
+        "_Z4sdotPhS_S_S_S_"
+      ]
+    },
+    {
+      "case_id": "W009-R11-03",
+      "arm": "before",
+      "compilation": [
+        {
+          "hash": "59c765d5f1dbd24462c1854084fc87d929ab3b48930cf118c34bf25fd2dea658",
+          "binaries": {
+            "device_vec_o": "59c765d5f1dbd24462c1854084fc87d929ab3b48930cf118c34bf25fd2dea658",
+            "host_shared_so": "c8a605e367f8842d6cbf134ce704ee688362b85a0233aaf6337d8bbbd526eaad"
+          }
+        }
+      ],
+      "metadata": {
+        "arm": "before",
+        "prototype": true,
+        "n": 131072,
+        "grid": [
+          8
+        ],
+        "tiling_bytes": 332,
+        "tiling_sha256": "56a2a2637dc3d9e30f6d94424a13bc589e9cb011c25ab20f518bfa8de4c856ab",
+        "source_declared_UB_high_water_bytes": 194816,
+        "ABI": {
+          "pointer_count": 6,
+          "input_n": 131072,
+          "workspace_bytes": 1024,
+          "logical_result_floats": 1,
+          "alignment": 128
+        }
+      },
+      "physical_prototype_layouts": [
+        {
+          "shape": [
+            131072
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 524544,
+          "addressed_bytes": 524416,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 131136
+          }
+        },
+        {
+          "shape": [
+            131072
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 524544,
+          "addressed_bytes": 524416,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 131136
+          }
+        },
+        {
+          "shape": [
+            256
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 1280,
+          "addressed_bytes": 1152,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 320
+          }
+        },
+        {
+          "shape": [
+            332
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 0,
+          "dtype": "torch.uint8",
+          "storage_bytes": 332,
+          "addressed_bytes": 332,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 332
+          }
+        },
+        {
+          "shape": [
+            131072
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 524544,
+          "addressed_bytes": 524416,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 131136
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        }
+      ],
+      "expected_kernels": [
+        "sdot_materialize",
+        "_Z17sdot_materializedPhS_S_S_S_"
+      ]
+    },
+    {
+      "case_id": "W009-R11-03",
+      "arm": "after",
+      "compilation": [
+        {
+          "hash": "0e076775b323aa69997e1db2b0c772aa39a63af84615d09d627fe079a3cba061",
+          "binaries": {
+            "device_vec_o": "0e076775b323aa69997e1db2b0c772aa39a63af84615d09d627fe079a3cba061",
+            "host_shared_so": "e56881a6885a5a61ceff03814699bff49de6c5bfa9354a50bb20dfda09112c79"
+          }
+        }
+      ],
+      "metadata": {
+        "arm": "after",
+        "prototype": true,
+        "n": 131072,
+        "grid": [
+          8
+        ],
+        "tiling_bytes": 332,
+        "tiling_sha256": "56a2a2637dc3d9e30f6d94424a13bc589e9cb011c25ab20f518bfa8de4c856ab",
+        "source_declared_UB_high_water_bytes": 194816,
+        "ABI": {
+          "pointer_count": 6,
+          "input_n": 131072,
+          "workspace_bytes": 1024,
+          "logical_result_floats": 1,
+          "alignment": 128
+        }
+      },
+      "physical_prototype_layouts": [
+        {
+          "shape": [
+            131072
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 524544,
+          "addressed_bytes": 524416,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 131136
+          }
+        },
+        {
+          "shape": [
+            131072
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 524544,
+          "addressed_bytes": 524416,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 131136
+          }
+        },
+        {
+          "shape": [
+            256
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 1280,
+          "addressed_bytes": 1152,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 320
+          }
+        },
+        {
+          "shape": [
+            332
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 0,
+          "dtype": "torch.uint8",
+          "storage_bytes": 332,
+          "addressed_bytes": 332,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 332
+          }
+        },
+        {
+          "shape": [
+            131072
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 524544,
+          "addressed_bytes": 524416,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 131136
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        }
+      ],
+      "expected_kernels": [
+        "_Z4sdotPhS_S_S_S_"
+      ]
+    },
+    {
+      "case_id": "W009-R11-04",
+      "arm": "before",
+      "compilation": [
+        {
+          "hash": "59c765d5f1dbd24462c1854084fc87d929ab3b48930cf118c34bf25fd2dea658",
+          "binaries": {
+            "device_vec_o": "59c765d5f1dbd24462c1854084fc87d929ab3b48930cf118c34bf25fd2dea658",
+            "host_shared_so": "c8a605e367f8842d6cbf134ce704ee688362b85a0233aaf6337d8bbbd526eaad"
+          }
+        }
+      ],
+      "metadata": {
+        "arm": "before",
+        "prototype": true,
+        "n": 1048576,
+        "grid": [
+          8
+        ],
+        "tiling_bytes": 332,
+        "tiling_sha256": "0fd4961cb5932215cf69f8acb9461099ad44f37e27b9e09bee15a6e924fba17c",
+        "source_declared_UB_high_water_bytes": 194816,
+        "ABI": {
+          "pointer_count": 6,
+          "input_n": 1048576,
+          "workspace_bytes": 1024,
+          "logical_result_floats": 1,
+          "alignment": 128
+        }
+      },
+      "physical_prototype_layouts": [
+        {
+          "shape": [
+            1048576
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4194560,
+          "addressed_bytes": 4194432,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1048640
+          }
+        },
+        {
+          "shape": [
+            1048576
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4194560,
+          "addressed_bytes": 4194432,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1048640
+          }
+        },
+        {
+          "shape": [
+            256
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 1280,
+          "addressed_bytes": 1152,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 320
+          }
+        },
+        {
+          "shape": [
+            332
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 0,
+          "dtype": "torch.uint8",
+          "storage_bytes": 332,
+          "addressed_bytes": 332,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 332
+          }
+        },
+        {
+          "shape": [
+            1048576
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4194560,
+          "addressed_bytes": 4194432,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1048640
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        }
+      ],
+      "expected_kernels": [
+        "sdot_materialize",
+        "_Z17sdot_materializedPhS_S_S_S_"
+      ]
+    },
+    {
+      "case_id": "W009-R11-04",
+      "arm": "after",
+      "compilation": [
+        {
+          "hash": "0e076775b323aa69997e1db2b0c772aa39a63af84615d09d627fe079a3cba061",
+          "binaries": {
+            "device_vec_o": "0e076775b323aa69997e1db2b0c772aa39a63af84615d09d627fe079a3cba061",
+            "host_shared_so": "e56881a6885a5a61ceff03814699bff49de6c5bfa9354a50bb20dfda09112c79"
+          }
+        }
+      ],
+      "metadata": {
+        "arm": "after",
+        "prototype": true,
+        "n": 1048576,
+        "grid": [
+          8
+        ],
+        "tiling_bytes": 332,
+        "tiling_sha256": "0fd4961cb5932215cf69f8acb9461099ad44f37e27b9e09bee15a6e924fba17c",
+        "source_declared_UB_high_water_bytes": 194816,
+        "ABI": {
+          "pointer_count": 6,
+          "input_n": 1048576,
+          "workspace_bytes": 1024,
+          "logical_result_floats": 1,
+          "alignment": 128
+        }
+      },
+      "physical_prototype_layouts": [
+        {
+          "shape": [
+            1048576
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4194560,
+          "addressed_bytes": 4194432,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1048640
+          }
+        },
+        {
+          "shape": [
+            1048576
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4194560,
+          "addressed_bytes": 4194432,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1048640
+          }
+        },
+        {
+          "shape": [
+            256
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 1280,
+          "addressed_bytes": 1152,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 320
+          }
+        },
+        {
+          "shape": [
+            332
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 0,
+          "dtype": "torch.uint8",
+          "storage_bytes": 332,
+          "addressed_bytes": 332,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 332
+          }
+        },
+        {
+          "shape": [
+            1048576
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4194560,
+          "addressed_bytes": 4194432,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1048640
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        }
+      ],
+      "expected_kernels": [
+        "_Z4sdotPhS_S_S_S_"
+      ]
+    },
+    {
+      "case_id": "W009-R11-GA",
+      "arm": "before",
+      "compilation": [
+        {
+          "hash": "59c765d5f1dbd24462c1854084fc87d929ab3b48930cf118c34bf25fd2dea658",
+          "binaries": {
+            "device_vec_o": "59c765d5f1dbd24462c1854084fc87d929ab3b48930cf118c34bf25fd2dea658",
+            "host_shared_so": "c8a605e367f8842d6cbf134ce704ee688362b85a0233aaf6337d8bbbd526eaad"
+          }
+        }
+      ],
+      "metadata": {
+        "arm": "before",
+        "prototype": true,
+        "n": 1031,
+        "grid": [
+          8
+        ],
+        "tiling_bytes": 332,
+        "tiling_sha256": "525c832eceaf46b6cdbddbbc0c918ee8d0f07d3d8187e44e4709b40124c94136",
+        "source_declared_UB_high_water_bytes": 194816,
+        "ABI": {
+          "pointer_count": 6,
+          "input_n": 1031,
+          "workspace_bytes": 1024,
+          "logical_result_floats": 1,
+          "alignment": 128
+        }
+      },
+      "physical_prototype_layouts": [
+        {
+          "shape": [
+            1031
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4380,
+          "addressed_bytes": 4252,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1095
+          }
+        },
+        {
+          "shape": [
+            1031
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4380,
+          "addressed_bytes": 4252,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1095
+          }
+        },
+        {
+          "shape": [
+            256
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 1280,
+          "addressed_bytes": 1152,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 320
+          }
+        },
+        {
+          "shape": [
+            332
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 0,
+          "dtype": "torch.uint8",
+          "storage_bytes": 332,
+          "addressed_bytes": 332,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 332
+          }
+        },
+        {
+          "shape": [
+            1031
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4380,
+          "addressed_bytes": 4252,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1095
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        }
+      ],
+      "expected_kernels": [
+        "sdot_materialize",
+        "_Z17sdot_materializedPhS_S_S_S_"
+      ]
+    },
+    {
+      "case_id": "W009-R11-GA",
+      "arm": "after",
+      "compilation": [
+        {
+          "hash": "0e076775b323aa69997e1db2b0c772aa39a63af84615d09d627fe079a3cba061",
+          "binaries": {
+            "device_vec_o": "0e076775b323aa69997e1db2b0c772aa39a63af84615d09d627fe079a3cba061",
+            "host_shared_so": "e56881a6885a5a61ceff03814699bff49de6c5bfa9354a50bb20dfda09112c79"
+          }
+        }
+      ],
+      "metadata": {
+        "arm": "after",
+        "prototype": true,
+        "n": 1031,
+        "grid": [
+          8
+        ],
+        "tiling_bytes": 332,
+        "tiling_sha256": "525c832eceaf46b6cdbddbbc0c918ee8d0f07d3d8187e44e4709b40124c94136",
+        "source_declared_UB_high_water_bytes": 194816,
+        "ABI": {
+          "pointer_count": 6,
+          "input_n": 1031,
+          "workspace_bytes": 1024,
+          "logical_result_floats": 1,
+          "alignment": 128
+        }
+      },
+      "physical_prototype_layouts": [
+        {
+          "shape": [
+            1031
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4380,
+          "addressed_bytes": 4252,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1095
+          }
+        },
+        {
+          "shape": [
+            1031
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4380,
+          "addressed_bytes": 4252,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1095
+          }
+        },
+        {
+          "shape": [
+            256
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 1280,
+          "addressed_bytes": 1152,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 320
+          }
+        },
+        {
+          "shape": [
+            332
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 0,
+          "dtype": "torch.uint8",
+          "storage_bytes": 332,
+          "addressed_bytes": 332,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 332
+          }
+        },
+        {
+          "shape": [
+            1031
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 4380,
+          "addressed_bytes": 4252,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 1095
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        }
+      ],
+      "expected_kernels": [
+        "_Z4sdotPhS_S_S_S_"
+      ]
+    },
+    {
+      "case_id": "W009-R11-GB",
+      "arm": "before",
+      "compilation": [
+        {
+          "hash": "59c765d5f1dbd24462c1854084fc87d929ab3b48930cf118c34bf25fd2dea658",
+          "binaries": {
+            "device_vec_o": "59c765d5f1dbd24462c1854084fc87d929ab3b48930cf118c34bf25fd2dea658",
+            "host_shared_so": "c8a605e367f8842d6cbf134ce704ee688362b85a0233aaf6337d8bbbd526eaad"
+          }
+        }
+      ],
+      "metadata": {
+        "arm": "before",
+        "prototype": true,
+        "n": 1,
+        "grid": [
+          8
+        ],
+        "tiling_bytes": 332,
+        "tiling_sha256": "e991862b02455283eedd3ea714c774c4915b53caffaef32644078fb3c11a4fb8",
+        "source_declared_UB_high_water_bytes": 194816,
+        "ABI": {
+          "pointer_count": 6,
+          "input_n": 1,
+          "workspace_bytes": 1024,
+          "logical_result_floats": 1,
+          "alignment": 128
+        }
+      },
+      "physical_prototype_layouts": [
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        },
+        {
+          "shape": [
+            256
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 1280,
+          "addressed_bytes": 1152,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 320
+          }
+        },
+        {
+          "shape": [
+            332
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 0,
+          "dtype": "torch.uint8",
+          "storage_bytes": 332,
+          "addressed_bytes": 332,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 332
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        }
+      ],
+      "expected_kernels": [
+        "sdot_materialize",
+        "_Z17sdot_materializedPhS_S_S_S_"
+      ]
+    },
+    {
+      "case_id": "W009-R11-GB",
+      "arm": "after",
+      "compilation": [
+        {
+          "hash": "0e076775b323aa69997e1db2b0c772aa39a63af84615d09d627fe079a3cba061",
+          "binaries": {
+            "device_vec_o": "0e076775b323aa69997e1db2b0c772aa39a63af84615d09d627fe079a3cba061",
+            "host_shared_so": "e56881a6885a5a61ceff03814699bff49de6c5bfa9354a50bb20dfda09112c79"
+          }
+        }
+      ],
+      "metadata": {
+        "arm": "after",
+        "prototype": true,
+        "n": 1,
+        "grid": [
+          8
+        ],
+        "tiling_bytes": 332,
+        "tiling_sha256": "e991862b02455283eedd3ea714c774c4915b53caffaef32644078fb3c11a4fb8",
+        "source_declared_UB_high_water_bytes": 194816,
+        "ABI": {
+          "pointer_count": 6,
+          "input_n": 1,
+          "workspace_bytes": 1024,
+          "logical_result_floats": 1,
+          "alignment": 128
+        }
+      },
+      "physical_prototype_layouts": [
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        },
+        {
+          "shape": [
+            256
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 1280,
+          "addressed_bytes": 1152,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 320
+          }
+        },
+        {
+          "shape": [
+            332
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 0,
+          "dtype": "torch.uint8",
+          "storage_bytes": 332,
+          "addressed_bytes": 332,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 332
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        },
+        {
+          "shape": [
+            1
+          ],
+          "stride": [
+            1
+          ],
+          "storage_offset": 32,
+          "dtype": "torch.float32",
+          "storage_bytes": 260,
+          "addressed_bytes": 132,
+          "column_major": false,
+          "physical": {
+            "format": 2,
+            "storage_numel": 65
+          }
+        }
+      ],
+      "expected_kernels": [
+        "_Z4sdotPhS_S_S_S_"
+      ]
+    }
+  ],
+  "fixtures": [
+    {
+      "case_id": "W009-R11-03",
+      "case": {
+        "case_id": "W009-R11-03",
+        "role": "heldout",
+        "seed": 91103,
+        "parameters": {
+          "n": 131072
+        },
+        "scenario_designation": "heldout-benefit"
+      },
+      "payload_sha256": "dbb19c35f93870c35abcec6870afaf26b87cedb66e9a1aaee86b6e97cfabfc98",
+      "payload_bytes": 1051041,
+      "manifest_sha256": "2cc369cd1b420a289349c8f4384a5292eb5cc95934e8cba1e1a4db0cd61ac467",
+      "expected_FP32_cached_value": 0.0008392333984375,
+      "expected_FP32_bits": 979107840,
+      "cache_key": "211c6293a8ce3cb8c98e973ff44233afb22aa226d8733b0764bb62930bbd1fed",
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "418875756bcbd5cfaf9f50b6e32d4770907005ddb5a835fd09aee6ccd9441fbf"
+        }
+      ]
+    },
+    {
+      "case_id": "W009-R11-GA",
+      "case": {
+        "case_id": "W009-R11-GA",
+        "role": "guard",
+        "seed": 91191,
+        "parameters": {
+          "n": 1031,
+          "unaligned_core_partitions": true
+        }
+      },
+      "payload_sha256": "f69ae7670929e49c158dcfee6aee6c7d42a2c93872f6e7fb4b280d983efb5ae3",
+      "payload_bytes": 10785,
+      "manifest_sha256": "471e5fba0f3f218d79e1e75cf61c2cf20647fd2bc11e77c081e155cd54e55673",
+      "expected_FP32_cached_value": -0.0035552978515625,
+      "expected_FP32_bits": -1150746624,
+      "cache_key": "2f3dabf5c52bf147f764c6211ddab3c567c642aca2c35af61bf954159699d396",
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "418875756bcbd5cfaf9f50b6e32d4770907005ddb5a835fd09aee6ccd9441fbf"
+        }
+      ]
+    },
+    {
+      "case_id": "W009-R11-04",
+      "case": {
+        "case_id": "W009-R11-04",
+        "role": "heldout",
+        "seed": 91104,
+        "parameters": {
+          "n": 1048576
+        },
+        "scenario_designation": "heldout-benefit"
+      },
+      "payload_sha256": "dc8304585998ee053117a7ade0e0cdcc2de08a8f1f7e818218fdfee7ffc6cb53",
+      "payload_bytes": 8391073,
+      "manifest_sha256": "e3ba77043f6889015ad23ab21298dd71afa95eec7436ad04867c19b34679b1e4",
+      "expected_FP32_cached_value": -0.0749969482421875,
+      "expected_FP32_bits": -1114007552,
+      "cache_key": "54ab069777d7dfcdeecd384ea5abe8694521b5d32834104099d7aa97a81cea7b",
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "418875756bcbd5cfaf9f50b6e32d4770907005ddb5a835fd09aee6ccd9441fbf"
+        }
+      ]
+    },
+    {
+      "case_id": "W009-R11-02",
+      "case": {
+        "case_id": "W009-R11-02",
+        "role": "gallery",
+        "seed": 91102,
+        "parameters": {
+          "n": 16384
+        },
+        "scenario_designation": "gallery-cost"
+      },
+      "payload_sha256": "d70eff29a460c49dc04647aebfc04575f7e8112d895ea22b5e69a9c93d7e7e1c",
+      "payload_bytes": 133537,
+      "manifest_sha256": "fc0458fcad6da7f46eed270c4e3aafa90b7f55f67b4de153497e4e998dcaef45",
+      "expected_FP32_cached_value": -0.0101776123046875,
+      "expected_FP32_bits": -1138311168,
+      "cache_key": "8d192e14ea81fdcf6e230d251d7ac5b2bb5b64bdb50c525ee8b577139bfb9e07",
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "418875756bcbd5cfaf9f50b6e32d4770907005ddb5a835fd09aee6ccd9441fbf"
+        }
+      ]
+    },
+    {
+      "case_id": "W009-R11-GB",
+      "case": {
+        "case_id": "W009-R11-GB",
+        "role": "guard",
+        "seed": 91192,
+        "parameters": {
+          "n": 1,
+          "signed_zero": true
+        }
+      },
+      "payload_sha256": "4c68223144b97060765b4209bf3ef162a61a6833d327f13deb9c8be0ce401921",
+      "payload_bytes": 2593,
+      "manifest_sha256": "d53babf7ea15f21193c1ecd892eddff492da907a178d6a81a763d6bb4ddb987a",
+      "expected_FP32_cached_value": 0.0,
+      "expected_FP32_bits": 0,
+      "cache_key": "8de2f482a4c09152e68999a8bd625f485d12996dcb50da6d5815067cbc262d69",
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "418875756bcbd5cfaf9f50b6e32d4770907005ddb5a835fd09aee6ccd9441fbf"
+        }
+      ]
+    },
+    {
+      "case_id": "W009-R11-01",
+      "case": {
+        "case_id": "W009-R11-01",
+        "role": "gallery",
+        "seed": 91101,
+        "parameters": {
+          "n": 1024
+        },
+        "scenario_designation": "gallery-cost"
+      },
+      "payload_sha256": "707f781778684b526f193f90904133d15e049dde90ad7899bda9c07c7873862a",
+      "payload_bytes": 10657,
+      "manifest_sha256": "b927f86220e9183cc75c4b3ffc3be6d425b57a50d823238e7dda9b3b591b86f1",
+      "expected_FP32_cached_value": 0.0001373291015625,
+      "expected_FP32_bits": 957349888,
+      "cache_key": "d108b4e9194345068ece3eb35b11830bbbca1fffc5db6475ec19c6a04f1dfed7",
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "418875756bcbd5cfaf9f50b6e32d4770907005ddb5a835fd09aee6ccd9441fbf"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "cases": [
+      {
+        "name": "W009-R11-01",
+        "performance": true,
+        "scenario": [
+          "gallery",
+          "native-FP32-unitstride",
+          "n=1024"
+        ],
+        "route": "unattempted",
+        "compile_probe": true,
+        "correct": false,
+        "numerical_status": "runtime-synchronization-failed-before-comparison",
+        "before_API_calls": 1,
+        "after_API_calls": 0,
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Actual uninitialized ND/128B/whole-storage prototype checks passed for each case before expected. Source8-core ownership/tail bytes audited; GPU output/halo/immutability validation did not complete."
+        }
+      },
+      {
+        "name": "W009-R11-02",
+        "performance": true,
+        "scenario": [
+          "gallery",
+          "native-FP32-unitstride",
+          "n=16384"
+        ],
+        "route": "unattempted",
+        "compile_probe": true,
+        "correct": false,
+        "numerical_status": "unattempted",
+        "before_API_calls": 0,
+        "after_API_calls": 0,
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Actual uninitialized ND/128B/whole-storage prototype checks passed for each case before expected. Source8-core ownership/tail bytes audited; GPU output/halo/immutability validation did not complete."
+        }
+      },
+      {
+        "name": "W009-R11-03",
+        "performance": true,
+        "scenario": [
+          "heldout",
+          "native-FP32-unitstride",
+          "n=131072"
+        ],
+        "route": "unattempted",
+        "compile_probe": true,
+        "correct": false,
+        "numerical_status": "unattempted",
+        "before_API_calls": 0,
+        "after_API_calls": 0,
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Actual uninitialized ND/128B/whole-storage prototype checks passed for each case before expected. Source8-core ownership/tail bytes audited; GPU output/halo/immutability validation did not complete."
+        }
+      },
+      {
+        "name": "W009-R11-04",
+        "performance": true,
+        "scenario": [
+          "heldout",
+          "native-FP32-unitstride",
+          "n=1048576"
+        ],
+        "route": "unattempted",
+        "compile_probe": true,
+        "correct": false,
+        "numerical_status": "unattempted",
+        "before_API_calls": 0,
+        "after_API_calls": 0,
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Actual uninitialized ND/128B/whole-storage prototype checks passed for each case before expected. Source8-core ownership/tail bytes audited; GPU output/halo/immutability validation did not complete."
+        }
+      },
+      {
+        "name": "W009-R11-GA",
+        "performance": false,
+        "scenario": [
+          "guard",
+          "native-FP32-unitstride",
+          "n=1031"
+        ],
+        "route": "unattempted",
+        "compile_probe": true,
+        "correct": false,
+        "numerical_status": "unattempted",
+        "before_API_calls": 0,
+        "after_API_calls": 0,
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Actual uninitialized ND/128B/whole-storage prototype checks passed for each case before expected. Source8-core ownership/tail bytes audited; GPU output/halo/immutability validation did not complete."
+        }
+      },
+      {
+        "name": "W009-R11-GB",
+        "performance": false,
+        "scenario": [
+          "guard",
+          "native-FP32-unitstride",
+          "n=1"
+        ],
+        "route": "unattempted",
+        "compile_probe": true,
+        "correct": false,
+        "numerical_status": "unattempted",
+        "before_API_calls": 0,
+        "after_API_calls": 0,
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Actual uninitialized ND/128B/whole-storage prototype checks passed for each case before expected. Source8-core ownership/tail bytes audited; GPU output/halo/immutability validation did not complete."
+        }
+      }
+    ]
+  },
+  "coverage_audit": "expected-fail; no case passed numerical gate",
+  "release": {
+    "owner": {
+      "pid": 762010,
+      "pgid": 761841,
+      "sid": 761841
+    },
+    "no_live_owned_group_or_stage_matches": true,
+    "die0_lease_acquired_and_released": true,
+    "both_export_locks_acquired_and_released": true,
+    "health_queries": [
+      {
+        "kind": "board",
+        "exit": 0,
+        "status": "complete",
+        "sha256": "1a8d5474c5dfa1d8feb2264862734c912d963f6c186f8fb1ddf81c4301f2071f"
+      },
+      {
+        "kind": "health",
+        "exit": 0,
+        "status": "complete",
+        "sha256": "c0b1f1f5618d065a5d47c41fec1f5e9ae65f17d827ef8053d2a3d782d15c300a"
+      },
+      {
+        "kind": "usages",
+        "exit": 0,
+        "status": "complete",
+        "sha256": "6b748926f32a0d105c5140b21afa67fb994db92ddce7c59f37c5324b6bc88c5d"
+      },
+      {
+        "kind": "memory",
+        "exit": 0,
+        "status": "complete",
+        "sha256": "177eb6e4fad504a4f439ccaa0b980b52711207dd4aa4bfc8b752e798220ea7c6"
+      },
+      {
+        "kind": "proc-mem",
+        "exit": 0,
+        "status": "complete",
+        "sha256": "3d111ab6de18ebdb4ff9b5f09c58f271bc50cc6269ba5a5ace5768053b118e01"
+      },
+      {
+        "kind": "ecc",
+        "exit": 0,
+        "status": "complete",
+        "sha256": "430b8b1144aec18048671085ae50fb258bbf10e859d1997571b4d3e744b3c8e6"
+      }
+    ],
+    "actual_health": "OK",
+    "error_code": "NA",
+    "process_query": "empty",
+    "utilization": "idle",
+    "ECC": "zero",
+    "no_reset_or_kill": true
+  },
+  "pre_math_history": {
+    "v1_host_selector_lookup_failed_after_successful_native_build": true,
+    "repair": "Resolved actual .ascend.meta registrations/C++ mangled symbols before any math",
+    "before_device_ELF_identical_between_selector_versions": true,
+    "all_prior_host_versions_scientific_CPU_expected": 0,
+    "all_prior_host_versions_numerical_APIs": 0,
+    "provisional_resource_unqualified_interface": "retained unexecuted; superseded before first math by authoritative prospective v2 clarification",
+    "primary_resource_lookup_miss": "4b0846f9d1250fac2e9d7ad5c8fb1c3f",
+    "SIMT_3510_rules_applied": false
+  },
+  "public_interface": {
+    "default_factory_make_case_prepare_validate_capture_CLI": "fail closed before provider/cache/backend/moves/expected",
+    "explicit_compile_inspection_only": true,
+    "prototype_run": "always raises before build or launch",
+    "numerical_bypass_advertised": false
+  },
+  "retained_evidence": {
+    "science_compact_sha256": "254a2f286e4516631f21beb848d67540f3357110c5e1381ea0710bede14953ae",
+    "science_compact_bytes": 1929916,
+    "science_compact_files": 171,
+    "science_manifest_sha256": "d50f08b0efcdeed05c7a81045d973070c95b889843a372b8c6469d9de89adb70",
+    "all_six_actual_fixture_payloads_retained_locally_and_remote": true,
+    "resource_compact_sha256": "3d9fc0660731de3708545b0075308db7a62717d71db8155caee1f18c2ce72a89",
+    "resource_compact_files": 216,
+    "resource_manifest_sha256": "f42b580c7e1d3ac4d0bb1ca088e55130b979ebbd4aa4d5885d962b553d752d0f",
+    "initial_lookup_failure_compact_sha256": "b16cc70b12c04a2138c56ea96eae0665ba2090b474aa712cb13598d11063e134",
+    "initial_lookup_failure_compact_files": 121,
+    "science_bundle_sha256": "a173fc40d6ed5d7ec8afe8a0e03f94fa3649975611c9096f58cee229436193e8",
+    "controller_sha256": "3725a87a49c5842717ea29cca2049660e530e0d6f3009f001f1cb7572e810fd6",
+    "local_verification": {
+      "status": "pass",
+      "science_compact_manifest_files": 171,
+      "resource_compact_manifest_files": 216,
+      "compile_case_ABI_cells": 12,
+      "all_six_payloads_hash_verified": true,
+      "all_source_provider_binary_bindings_verified": true,
+      "all12_code_ABI_prototypes_before6_once_expected": true,
+      "all6_expected_before_first_API": true,
+      "exactly_one_API_entered": true,
+      "correctness_passes": 0,
+      "profiles": 0,
+      "regenerated_oracles": 0
+    }
+  },
+  "diagnostics_artifact": {
+    "file": "R11-diagnostics.json.gz",
+    "sha256": "787fc063b3c58c4cf58e5c6bc1abba3c40127c045f9aa27cc4c874b9c99db463",
+    "bytes": 6856,
+    "uncompressed_sha256": "87e2e134a743f58fd86e984f381d38e42f16fc5c65f08a17e0e64c38236c439d",
+    "contents": "Full original scientific stdout/stderr/ACL diagnostics, both unused-resource-option outputs, native compiler logs and initial host selector failure; portable paths"
+  },
+  "performance": "Not measured; no speedup, geomean or native technique conclusion",
+  "validation": {
+    "publication_host_gate": {
+      "status": "complete",
+      "tests": 5,
+      "real_backend_imports": [],
+      "real_compile_calls": 0,
+      "npu_forwards": 0,
+      "scientific_frozen_fixtures": 0,
+      "profiles": 0,
+      "scope": "CPU-only public host compatibility gate; original scientific qualification unchanged",
+      "bundle_sha256": "ef36956b2d17e1bb7af9db63a94a3020825a2bb63351449bff0a0466ec46ab94"
+    },
+    "host_tests": 5,
+    "host_test_seconds": 0.229,
+    "scope": "CPU-only failclosed publication interface; no numerical/native runtime qualification",
+    "audit_receipt": {
+      "expected_exit": 1,
+      "actual_exit": 1,
+      "stdout": "",
+      "stderr": "contract audit failed:\n- case 'W009-R11-01' lacks a passing correctness result\n- case 'W009-R11-01' route must be optimized or reference\n- case 'W009-R11-02' lacks a passing correctness result\n- case 'W009-R11-02' route must be optimized or reference\n- case 'W009-R11-03' lacks a passing correctness result\n- case 'W009-R11-03' route must be optimized or reference\n- case 'W009-R11-04' lacks a passing correctness result\n- case 'W009-R11-04' route must be optimized or reference\n- case 'W009-R11-GA' lacks a passing correctness result\n- case 'W009-R11-GA' route must be optimized or reference\n- case 'W009-R11-GB' lacks a passing correctness result\n- case 'W009-R11-GB' route must be optimized or reference\n",
+      "coverage_sha256": "31209adeaabf9b1cd58066590e59d2f0a551428839ecdb1cff496bd5d00abce9"
+    }
+  }
+}

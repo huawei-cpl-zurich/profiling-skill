@@ -1,0 +1,74 @@
+{
+  "pin": "c2332551586763f8c2d27621f8bc119bd1c3a301",
+  "files": [
+    {
+      "path": "vendor/blas/common/arch/hardware.h",
+      "sha256": "c383733463a1eff5f5a1a748aebbe5648a413efd9e52676c7c1d2a50efc5c4cd"
+    },
+    {
+      "path": "vendor/blas/common/arch/layout.h",
+      "sha256": "7274db54776ed9cbf5943fd698db263f1a796ad6317207ac6b2dbe2a7eeb1c8c"
+    },
+    {
+      "path": "vendor/blas/common/compute/simd.h",
+      "sha256": "1ff8aaf85a3bf69a2bb785d0c6cac1b14b509c3fe5421fde470ed25cbf9ef1b2"
+    },
+    {
+      "path": "vendor/blas/common/helper/kernel_utils.h",
+      "sha256": "42abf3b79150f1b645d62890c0f60a4a738d3eed162d6ba760c1838e45225e2b"
+    },
+    {
+      "path": "vendor/blas/common/iterator/iterator.h",
+      "sha256": "27ce6aee72d71e2437cc75498687a9198cadfd573933a555e3bf3aba2e4f0d94"
+    },
+    {
+      "path": "vendor/blas/common/iterator/iterators/gm_to_l1_iterator.inc",
+      "sha256": "97a87bc2f88c230d5a43d435ca3174ba32f3dcfa53e626dd6a98a6fdaf0d147f"
+    },
+    {
+      "path": "vendor/blas/common/iterator/iterators/gm_to_ub_iterator.inc",
+      "sha256": "3132ac92d6b8daabd6350636b4b750da9ecc5f88b9733e204447f197e8e279d0"
+    },
+    {
+      "path": "vendor/blas/common/iterator/iterators/l0c_to_gm_iterator.inc",
+      "sha256": "b0d76d99f8fb34990ae6297b7ff32a676437499fe9143401448859ce83b5ce4e"
+    },
+    {
+      "path": "vendor/blas/common/iterator/iterators/l0c_to_l1_iterator.inc",
+      "sha256": "affe489bbf79a3f8b45c46340e74f8f8894103f8ee807afa10425386ea67af0e"
+    },
+    {
+      "path": "vendor/blas/common/iterator/iterators/l0c_to_ub_iterator.inc",
+      "sha256": "3019dbc9b523b8e05bc3cd8039a7ada69ea8a5d7c00eda4e6cd1cf44499874a3"
+    },
+    {
+      "path": "vendor/blas/common/iterator/iterators/l1_to_bt_iterator.inc",
+      "sha256": "8ddc039a219aecd1672703d0ab0f69794a124367e5cc07d9d9a44be74e90b6e3"
+    },
+    {
+      "path": "vendor/blas/common/iterator/iterators/l1_to_fb_iterator.inc",
+      "sha256": "df8fda8791ee9f30de0ad2922cafdcc077cef0e385e96ce1ccfc74c0bd06f68c"
+    },
+    {
+      "path": "vendor/blas/common/iterator/iterators/l1_to_l0_iterator.inc",
+      "sha256": "9d84779dedeb3d0292e9e02ecbfe6b821f86662efe742cbb4690a8890bd90cc4"
+    },
+    {
+      "path": "vendor/blas/common/iterator/iterators/l1_to_ub_iterator.inc",
+      "sha256": "29cf5b0c62f254814dbac86c46cb66a0eedca996bb36ed513710a96bd83ad974"
+    },
+    {
+      "path": "vendor/blas/common/memory/mem.h",
+      "sha256": "45326f6c03704121758d3ca1ba3a13113cef1498b5df855143f15cc2513cd1d5"
+    },
+    {
+      "path": "vendor/include/cann_ops_blas_common.h",
+      "sha256": "e9b5f32066123a558823145dc3d39a0021fd34b26145b22225ad8066549377ae"
+    },
+    {
+      "path": "vendor/blas/dot/arch22/sdot_kernel.cpp",
+      "sha256": "e3da7d0ee01f9cf38bd76bb1bb9477ba02895e7ca777d66931ad8142466596bf"
+    }
+  ],
+  "full_repository_dependency": "UNRESOLVED ops-tensor.cmake pin; miss36e66c893c045e8e634f2530e5a364a6; selected16headerclosure only"
+}

@@ -1,0 +1,167 @@
+{
+  "wave": 9,
+  "approval": "Standing user approval waves003\u2013022; datafirst.",
+  "study_kind": "source-backed-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "c2332551586763f8c2d27621f8bc119bd1c3a301",
+  "query": "d41e042399894c02a7d400b6c6adc31a",
+  "source_receipts": "../optimization-wave010-research/receipts.json andnative-dependency-closure/receipts.json/summary.md; selectedsourceclosureonly, fullprojectOpsTensorCMakepinUNRESOLVEDmiss36e66c893c045e8e634f2530e5a364a6",
+  "protocol": "Compile/codegen/resource allcasepairs via input-only prototypes BEFORE scientificCPUexpected. Six cached CPU payloads ONCE, numerical correctness ONCE perarm/case/source then exactly10preparedcompleteAPI profilingforwards/arm of4mainpairs; guards0captures. No GPUwarmups/autotune/extraunprofiledtiming/profiledIOinspection. Retainnegative/noop/unsupported/failed results and originalsource/binary/fixture/version bindings. No postdata case/tolerance/flag retuning. Actualtarget/compiler/product/cores queried, never inherited GZ40. Complete operation spans/tasktime/union/gaps/raw10samples/PMUs diagnostic not ordinarylatency/physicaltraffic/roofline proof.",
+  "language": "AscendC native C++",
+  "source_helpers_manifest": [
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/blas/common/arch/hardware.h",
+      "sha256": "c383733463a1eff5f5a1a748aebbe5648a413efd9e52676c7c1d2a50efc5c4cd"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/blas/common/arch/layout.h",
+      "sha256": "7274db54776ed9cbf5943fd698db263f1a796ad6317207ac6b2dbe2a7eeb1c8c"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/blas/common/compute/simd.h",
+      "sha256": "1ff8aaf85a3bf69a2bb785d0c6cac1b14b509c3fe5421fde470ed25cbf9ef1b2"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/blas/common/helper/kernel_utils.h",
+      "sha256": "42abf3b79150f1b645d62890c0f60a4a738d3eed162d6ba760c1838e45225e2b"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/blas/common/iterator/iterator.h",
+      "sha256": "27ce6aee72d71e2437cc75498687a9198cadfd573933a555e3bf3aba2e4f0d94"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/blas/common/iterator/iterators/gm_to_l1_iterator.inc",
+      "sha256": "97a87bc2f88c230d5a43d435ca3174ba32f3dcfa53e626dd6a98a6fdaf0d147f"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/blas/common/iterator/iterators/gm_to_ub_iterator.inc",
+      "sha256": "3132ac92d6b8daabd6350636b4b750da9ecc5f88b9733e204447f197e8e279d0"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/blas/common/iterator/iterators/l0c_to_gm_iterator.inc",
+      "sha256": "b0d76d99f8fb34990ae6297b7ff32a676437499fe9143401448859ce83b5ce4e"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/blas/common/iterator/iterators/l0c_to_l1_iterator.inc",
+      "sha256": "affe489bbf79a3f8b45c46340e74f8f8894103f8ee807afa10425386ea67af0e"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/blas/common/iterator/iterators/l0c_to_ub_iterator.inc",
+      "sha256": "3019dbc9b523b8e05bc3cd8039a7ada69ea8a5d7c00eda4e6cd1cf44499874a3"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/blas/common/iterator/iterators/l1_to_bt_iterator.inc",
+      "sha256": "8ddc039a219aecd1672703d0ab0f69794a124367e5cc07d9d9a44be74e90b6e3"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/blas/common/iterator/iterators/l1_to_fb_iterator.inc",
+      "sha256": "df8fda8791ee9f30de0ad2922cafdcc077cef0e385e96ce1ccfc74c0bd06f68c"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/blas/common/iterator/iterators/l1_to_l0_iterator.inc",
+      "sha256": "9d84779dedeb3d0292e9e02ecbfe6b821f86662efe742cbb4690a8890bd90cc4"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/blas/common/iterator/iterators/l1_to_ub_iterator.inc",
+      "sha256": "29cf5b0c62f254814dbac86c46cb66a0eedca996bb36ed513710a96bd83ad974"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/blas/common/memory/mem.h",
+      "sha256": "45326f6c03704121758d3ca1ba3a13113cef1498b5df855143f15cc2513cd1d5"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave010-research/native-dependency-closure/bodies/include/cann_ops_blas_common.h",
+      "sha256": "e9b5f32066123a558823145dc3d39a0021fd34b26145b22225ad8066549377ae"
+    }
+  ],
+  "license": "CANN Open Software License Agreement2.0, exactrootLICENSE/perfileheaders retained",
+  "study_id": "R11",
+  "task": "optimization-w009-native-sdot-fusion",
+  "title": "Fuse native FP32 dot multiplication into local reduction",
+  "source_files": [
+    "../optimization-wave010-research/bodies/gitcode-cann-ops-blas-curated-text/blas/dot/arch22/sdot_kernel.cpp"
+  ],
+  "cases": [
+    {
+      "case_id": "W009-R11-01",
+      "role": "gallery",
+      "seed": 91101,
+      "parameters": {
+        "n": 1024
+      },
+      "scenario_designation": "gallery-cost"
+    },
+    {
+      "case_id": "W009-R11-02",
+      "role": "gallery",
+      "seed": 91102,
+      "parameters": {
+        "n": 16384
+      },
+      "scenario_designation": "gallery-cost"
+    },
+    {
+      "case_id": "W009-R11-03",
+      "role": "heldout",
+      "seed": 91103,
+      "parameters": {
+        "n": 131072
+      },
+      "scenario_designation": "heldout-benefit"
+    },
+    {
+      "case_id": "W009-R11-04",
+      "role": "heldout",
+      "seed": 91104,
+      "parameters": {
+        "n": 1048576
+      },
+      "scenario_designation": "heldout-benefit"
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W009-R11-GA",
+      "role": "guard",
+      "seed": 91191,
+      "parameters": {
+        "n": 1031,
+        "unaligned_core_partitions": true
+      }
+    },
+    {
+      "case_id": "W009-R11-GB",
+      "role": "guard",
+      "seed": 91192,
+      "parameters": {
+        "n": 1,
+        "signed_zero": true
+      }
+    }
+  ],
+  "contract": {
+    "admission": "MovesONLYW010proposal02SDOT toW009R11 replacingNOTADMITTEDduplicateinitialE11linearCEchunkstudy. SingleownershipSDOTtaskhere, W01002retiredfromunclaimedcount(11remainingnot12). Knownlocalfusionmechanismnovelty0, newnativeSDOTapplication. FULLops-blasprojectnotbuilt; rootmissingops-tensor.cmakepin remainsUNRESOLVED, butselectedSDOTbody+all16observedrepositoryheaders pinnedbyreceipt/contentSHA. CompileactualexternalCANNheaders/SDK mustbequalified, doNOTguessmissingdependencyorigins/versions.",
+    "interface": "Preparedunitstride realFP32dot ofownedcontiguousfinitex[n],y[n], scalarFP32result. Positive1<=n<=1048576, incx=incy1, isConj0, no complex/nonfinite/stride0/negative/reduction-zeroNclaim. Originalinputsimmutable; resultprivate128bytealignedlogicalscalarviewinsidecanarystorage; workspace1024bytesprivateperarm+deterministictiling332bytes(3u32+40offsets+40counts). NativekernelqueuedonSAME actualTorchNPUcurrentACLstream throughsource-derivedC++launchbridge/ctypesorcompatiblebackend; no datasampling/IOinsideprofiles.",
+    "before": "Explicitlyeducational SOURCE-DERIVED TWO kernel productmaterialization+sameSDOTreduction, NOTupstreamunoptimizedBLASbaseline. Firstproductkernel writesEVERYvalidFP32p=x*ytoN-elementprivateGMworkspaceduringEVERYAPI. Then derivativeofsourceSDOTkernel loadsP insteadXandREMOVESYload+Mul ONLY, retainingSAMEper-coretiling/64lane caddhierarchy/pingpongiteration/accumulationorder/workspaceclear/FftsCrossCoreSync/finalcore0reduction/outputstore. CommonCANNvectorMul rounding inmaterializer matchesafterlocalMul. No cachedP/freeCPUproduct/freeworkspacezero outsideAPI.",
+    "after": "Exactselectednative sdot_kernel.cpp process/single_iteration/launchbody plus16actualhelpers: loadsXandY,localMul,caddhierarchy/per-coreacc/finalcore0reduce inONEkernel. PreserveASCEND_V220 semantics, maxDataCount46*1024/4=11776, pingpong/caddtree/events/barriers/workspaceclearing/SetAtomicnone. Do not substituteTensorRT/Triton/naiveunscaledaccumulation, do not dropworkspaceclear/sync toforcefastresults. Readexactbodyandprovealloutputwrites/flagsreset acrossTENsame-inputinvocations.",
+    "tiling": "FreezeSOURCEHOSTnumBlocks=8 (NOTactualnative48VEC). DEFAULT_VECTOR_NUM40 layout: u32n,coreNum,isConj,offset[40],calNum[40]; zero-initalltilingpadding atprepare onlyforreproduciblebytes, fillSOURCE CalSdotTilingData(n,8) quotient/remainderpartition. coreNum=min(n,8); launch8evenn1, inactivecalNum0/sourcezero-workcores stillparticipate insync/workspacewrites; finalreduceonlycoreNum contributions. CPUindexownershipproof allvalidnexactonce and8partitions withinallocation BEFOREcode/time. No grid/tile retuning/sourcehostcorecountchange. TilingH2DoutsidepreparedprofileBOTH, publicupstreamhostsync/workspaceallocationexcluded anddisclosed.",
+    "physical": "Inputs/result/P/workspacebase128Baligned byhalo32FP32elements, suffixhalo32. AuditactualDataCopyPadGM/UB bytecounts/tailpadding, includingGA1031unalignedpartitions; no roundedGMaccesspermissionbeyondactualownedstorage. Sourcegm_to_ub_align usesDataCopyPadExtParams(false,...), priorDuplicate0 neutralizesreducepadding; preservethatorderingandactualhelpersemantics, doNOTassumepadparametersforcezero. Source workspaceclear eachAPI andall8writes/finalsync included, no outsideAPI reset needed. SourceUBhighestdeclaredaccumulatoroffset(46*4+6)KiB plus64floats =194816B=190.25KiB <192KiB=196608B; sourceboundNOTcompiler-scratchproof. Actualcompilerresources/spills/sourcehandlaidbufferoverlaps/scratch and64lane tails mustbequalifiedbeforemath. Exactnative8blocks despiteactualboard48, reportboth.",
+    "oracle": "ONEindependentCPUFP64dotpayload percase onFP32representedx/y integer/256,q[-4,4]; allabsproductnum<=16 denominator65536. n<=2^20 ->sumabsoluteintegerproducts<=2^24, soEVERYFP32product/anysumintermediate EXACTdyadic, fixedno-toleranceclaim fornonzeroFP32bits againstFP64sumcastFP32. Zero resultsnumericexact withsignedzerobitsreportedsecondary; botharmnonzerospairedexact. GAseededcancellation/positive-negativepatterns/unalignedpartitions;GBx=-0,y=.5 verifieslogicalzero/halos, source+0accmaychangezerosignwhichisnotprimaryfailure. Checkallscalarshape/dtype/canaries/wholeinputimmutability/privateP/output boundsONCE, retainfirstmismatchcoords/expectedactual fromsoleCPUtransfer iffailed. SixcachedCPUexpectedpayloadsonce afterALL12nativeinputonlycompile/resourcecasecells; referenceproviderunchanged/cachemissfatalonhost-onlyfollowups.",
+    "compilation": "Source-derivedSELFCONTAINEDnativebuildwithselectedheaders preservepaths/includeclosure+OSLAlicense; externalCANN9.1SDK/toolchainactualversion/hash/product/archflags resolvedfromregisteredruntime notrememberedSDKpaths. Device-lessbuild+input-onlyABI/prototypechecks12cells/selectedkernelcomponents BEFORECPUexpected; .compile_only neverlaunches, .runrejectsonprobes, transactionalsharedlibcache onlyafterALLcomponentssucceed. NativecompilemayreuseonebodybinaryacrossN butrecordeachcaseABI andselectedkernels. Full.so identicalacrossarmsdoesNOTmeanAPI-noop: compareSELECTEDdeviceobjects/symbols andexecutioncomponentlist before2kernels after1. Retainactualdevice.o/asm/resource/registrationmetadata+host.so/compiler/headerflags; doNOTusehostx86textsizeasNPUinstructioncount. No __CCE_KT_TEST__stubs/emulatorqualification/nativehelperguessing. SDKcompatibilityfailureterminalhonest0math unlessroutinepremathsyntaxbindingfixretainsoldversion.",
+    "protocol": "SixCPUexpectedonceaftercompile; correctnessONCEperarmcase all12 BEFORE80completeAPIprofileforwards8capturesguards0. No warmup/autotune/extratiming/profileIO orpostdataretune. Commonraw10samples/launchcounts/PMUs/source/header/compiler/devicebinary/fixture bindings andliveprocess/lease/exportquiescenceproofretained. Expectedprofileselectorsfromactualcompilednativekernelregistration/symbolnames, no extraNPUprobe todiscover names. BothbothHOSTcanonicalexportlocks capture+syncanalysis and600Cstartup/run/validate/profilewatchdogs+durablecounterphases beforeNPUimports/init/inputH2D.",
+    "claims": "Prospectivebenefit03/04 removeN-FP32GMproductwrite/read+one kernel; costprobes01/02 smallNtestlocaldependency/sync/DMAoverhead with8sourceblocks. GMrequestbytescode-derived (afterrough8N,before16Nexcludingcommonworkspace), NOTphysicalHBMtraffic duecache/implementation. Allsourceworkspaceclearsandcrosscoresyncinsidekernel counted, noexternalclearomission. No ordinarylatency/vendorBLASdispatchbest/wholedeviceoccupancy/rooflineclaim. Publicdefaultnumericqualification ONLYaftercapableA3passesallgates; failuresDRAFTfailclosedfactory/make_case/prepare/CLI beforemath andexplicitnativecompileinspectiononlywithNONFROZENCPUgate.",
+    "resource_evidence_limit": "SourcehighestmanualUBaddress194816B iswithin192KiB; exactstaticaddress/tail/activebufferlayoutaudited. Nativecompileracceptanceandall12ABI/codechecks providecompilationgate. ItdidnotexposeautomaticUBscratch/spillpeak; 0x8000stackrecordCANNOTbeaddedtoUBorinterpretedasusage. SupportedflaghelpwasnotoperationalforA3, nofurtherflag/optimizerattempts. ThislimitationisrecordedBEFOREfirstnumericAPI. BoundedcorrectnessONCE/armcasewithC600watchdog+durablecounter/freshisolateddevice isappropriateempiricalqualification; anydriver/numericerrorSTOPandretain, noreset/replay. Onlyall12passespermit80profileAPIs. Noformalall-resourcefit/zero-scratch/occupancy/rooflineclaim."
+  },
+  "source_files_manifest": [
+    {
+      "path": "../optimization-wave010-research/bodies/gitcode-cann-ops-blas-curated-text/blas/dot/arch22/sdot_kernel.cpp",
+      "sha256": "e3da7d0ee01f9cf38bd76bb1bb9477ba02895e7ca777d66931ad8142466596bf"
+    }
+  ],
+  "contract_version": 2,
+  "prospective_qualification_clarification": "BEFOREANYscientificCPUexpected/numericalAPI/profiling: actualnativecompilerACCEPTEDsource/all12ABI screens; selecteddeviceobjectsandregistrationareverified. BoundedofficialSDKresearchfoundNOvalidCANN9.1/A3compiler-managedUBscratchreport/ELFstackrecordschema (miss4b0846f9d1250fac2e9d7ad5c8fb1c3f); SIMT3510rulesMUSTNOTbetransferred. MissingdiagnosticsdoesNOTestablishunsupported/unsafe kernel andisnotnegativeperformanceevidence. ProceedstandardboundedONCEcorrectnessforfixedcases usingSUCCESSFULcompiler+exactsourceaddress/resourceaudit; all12mustpassbeforeprofiles. ResourcePEAK/SCRATCHREMAINSUNKNOWN, noformalfullliveUB/occupancyclaim. No source/tiling/flags/math/cases/toleranceschanged; originalv1andallfailedhostselector/diagnosticversionsretained0math."
+}

@@ -1,0 +1,26 @@
+{
+  "versions": [
+    {
+      "version": 1,
+      "status": "host-qualification-failed-before-first-compile",
+      "reason": "Controller expected prior-target40vectorcores; actual queried target48; runtime initialization succeeded",
+      "real_compilations": 0,
+      "scientific_payloads": 0,
+      "correctness_apis": 0,
+      "profiled_apis": 0,
+      "captures": 0,
+      "archive_sha256": "1c02932f83f38606c8d71e866ca58b05eb1af2b575f02310b9d8241bed903160"
+    },
+    {
+      "version": 2,
+      "status": "complete",
+      "source_JIT_provider_unchanged": true,
+      "scientific_payloads": 6,
+      "correctness_apis": 12,
+      "profiled_apis": 80,
+      "captures": 8,
+      "archive_sha256": "de2d35e917c4905841db82ed25cb1a44d1028a35c2d486e9cd79f777b31fe3a0"
+    }
+  ],
+  "actual_core_receipt_sha256": "330bf46f9299be47aafa06c6502bdf6cfaef6563d353c5f4e22859ee446aa484"
+}

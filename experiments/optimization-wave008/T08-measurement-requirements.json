@@ -1,0 +1,12 @@
+{
+  "main_cases": [
+    "W008-T08-01",
+    "W008-T08-02",
+    "W008-T08-03",
+    "W008-T08-04"
+  ],
+  "profile_forwards_per_arm": 10,
+  "total_profiles": 80,
+  "total_captures": 8,
+  "clarification": "Coverage performance means optimized route REQUIRED; main04 declaredcachedfallbackNEUTRALcontrol has performancefalse but STILL10profileforwards/arm. No source/cases/tolerances/profileprotocol change, pre-science clarification."
+}

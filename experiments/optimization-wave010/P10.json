@@ -1,0 +1,210 @@
+{
+  "wave": 10,
+  "proposal": 10,
+  "task": "optimization-w010-native-srotm-dma",
+  "approval": "Standing user approval next20waves; root GO source+run.",
+  "study_kind": "source-backed native operator application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "c2332551586763f8c2d27621f8bc119bd1c3a301",
+  "source_receipts": "Filtered wave010 query d41e042399894c02a7d400b6c6adc31a and receipts.json; no raw library traversal.",
+  "source_files_manifest": [
+    {
+      "path": "blas/rotm/arch22/srotm_kernel.cpp",
+      "sha256": "05a8fc2e8a5d27f4c9ef00cacb4d0b327da597fda1c2a684670389b4dc9ab44f"
+    },
+    {
+      "path": "blas/rotm/arch22/srotm_host.cpp",
+      "sha256": "beaa83618acbb124d29e5035d6d4c4f510f366758a12537eedfed62c50509629"
+    },
+    {
+      "path": "blas/rotm/arch22/srotm_tiling_data.h",
+      "sha256": "9aa20e96125ee4c5abe8ccd66cb81ad376c363f5b1a933fb9bc3ff1948532fe6"
+    },
+    {
+      "path": "test/rotm/srotm/srotm_golden.h",
+      "sha256": "b86ca003fc2b1f5053f1479a62d897baae080cf70c016a4450a17aa9ef17e73b"
+    },
+    {
+      "path": "test/rotm/srotm/arch22/srotm_test.cpp",
+      "sha256": "54097f69a0da464014e7b14a15ebc5a65c6d06e3fb8f58e9da6ee1b68548fe39"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "cb282ac2b66d7d6734c3fb354db792b28cf23ab29fbc16d5cfd8bd542bedeb1e"
+    }
+  ],
+  "license": "CANN Open Software License Agreement Version2.0, copyright2026Huawei; complete license and notices retained.",
+  "cases": [
+    {
+      "case_id": "W010-P10-01",
+      "role": "gallery",
+      "scenario_designation": "cost",
+      "seed": 101001,
+      "parameters": {
+        "n": 127,
+        "incx": 1,
+        "incy": 1,
+        "sparam": [
+          -1.0,
+          0.75,
+          -0.25,
+          0.5,
+          1.25
+        ]
+      }
+    },
+    {
+      "case_id": "W010-P10-02",
+      "role": "gallery",
+      "scenario_designation": "cost",
+      "seed": 101002,
+      "parameters": {
+        "n": 4096,
+        "incx": 1,
+        "incy": 1,
+        "sparam": [
+          -1.0,
+          0.75,
+          -0.25,
+          0.5,
+          1.25
+        ]
+      }
+    },
+    {
+      "case_id": "W010-P10-03",
+      "role": "heldout",
+      "scenario_designation": "benefit",
+      "seed": 101003,
+      "parameters": {
+        "n": 65536,
+        "incx": 1,
+        "incy": 1,
+        "sparam": [
+          -1.0,
+          0.75,
+          -0.25,
+          0.5,
+          1.25
+        ]
+      }
+    },
+    {
+      "case_id": "W010-P10-04",
+      "role": "heldout",
+      "scenario_designation": "benefit",
+      "seed": 101004,
+      "parameters": {
+        "n": 1048579,
+        "incx": 1,
+        "incy": 1,
+        "sparam": [
+          -1.0,
+          0.75,
+          -0.25,
+          0.5,
+          1.25
+        ]
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W010-P10-GA",
+      "role": "guard",
+      "seed": 101091,
+      "parameters": {
+        "n": 1031,
+        "incx": 2,
+        "incy": 2,
+        "sparam": [
+          -1.0,
+          0.75,
+          -0.25,
+          0.5,
+          1.25
+        ]
+      }
+    },
+    {
+      "case_id": "W010-P10-GB",
+      "role": "guard",
+      "seed": 101092,
+      "parameters": {
+        "n": 17,
+        "incx": 1,
+        "incy": 1,
+        "sparam": [
+          0.0,
+          0.75,
+          -0.25,
+          0.5,
+          1.25
+        ]
+      }
+    }
+  ],
+  "contract": {
+    "interface": "Prepared coupled rotation: immutable distinct CPU-owned contiguousFP32 full-storage X/Y lengthS=1+(n-1)*inc; positiveequalincx=incy in{1,2}; n1..1048579; sparam CPUlist exactly[-1,.75,-.25,.5,1.25] or[0,.75,-.25,.5,1.25]. ReturnTUPLE(full-private-FP32-Xstorage,full-private-FP32-Ystorage), shape[S] contiguous; logicalactiveindices0,inc,...,(n-1)inc, unusedstride-gaps unchanged. Reject nonfinite/non-dyadic/range/dtype/layout/alias/invalidparam beforecache/build/NPUmoves. Noautograd/repeatedmutation support promised.",
+    "before": "Same exactpinned scalarCopyIn/Out/vector source asoriginal, compiledwithactualSDK ASCsource-intendedrecipe below; originallegacyCCEwronggate remainsfailedhistorical NOTusedcomparison.",
+    "after": "SameoriginalprospectivelydefinedunitstrideDataCopyPad derivative, unchangedvectorformulas/order/UB/coreselector/fallback; compileonlyunattemptedASC_AF TER with EXACTsameSDKrecipe/flagVALUES assuccessfulASC_BEFORE; sourceBEOFREmacro/kernelname differaspredeclared.",
+    "reset": "COMMON native charged reset-copy kernel EACHAPI from immutable originalX/Y entirefullstorage to workingX/Y, includingstridegaps. Both reset+rotation launched on actual caller currentTorchACLstream, completeAPI exactly2kernels. No Torchcopy_/zero_ insideAPI, no free resets, no profileIO. Tiling/preallocation/CPUmetadata outsideAPI. Private fullstorage outputs reused; no untouchedvendorBLAShost/allocatorlatency claim.",
+    "tilings": "Source SrotmTilingData sizeof80 align8: Qx@0,Qy@8,QxStorage@16,QyStorage@24,I n@32,I useCoreNum@36,q incx@40,q incy@48,float sflag@56,h11@60,h12@64,h21@68,h22@72,4tailpad. CPU sparam order[flag,h11,h21,h12,h22] mapped explicitly. Kernelbyvalue tiling sourceABI, native bridge receives immutable preparedHOSTtiling pointer, notdevicepointer. Source unituseCore=min(ceil(n/2048),8), nonunit1; alwayslaunch8blocks. Source512B/128-element partition, onlylastactivecoretail. Fullsource192KiB/6section32768B, maxDataCount8192floats/32Brounding, doublex/yqueues +2outputs; compileasis. Successful compiler/staticranges/boundedmath sufficient; compiler-managedscratch UNKNOWN ifunreported, notmandatorygate.",
+    "math": "flag-1 general xnew=h11*x+h12*y, ynew=h22*y+h21*x using originalboth and exactsource Muls/Muls/Muls/Add/Muls/Add order, noFMAflagrewrite; flag0 xnew=x+h12*y,ynew=y+h21*x same sourceMuls/Add order. Positiveflag/-2/negative/mismatched/zero strides outsidepublicdomain, nodeviceexecutions. Use independentCPUFP64 directformulas, assignactiveindices into copiedfullbackings; preserveinactivegap values. Inputintegerq in[-64,64] /16 => representedFP32[-4,4]; seedlocalGenerator. Quartercoefficients imply everyproduct/sum dyadic denominator64, absnumerator<=384<<2^24, exactnonzeroFP32result. No overflow/underflow/cancellationtolerance relaxation.",
+    "oracle": "OriginalsixCPUFP64-derivedexpected payloads generatedONCE underlegacyv2 retained/cached/hashverified; PROVIDER19305c26629abdd9a24c3a1458ea90b76c6269a9e2aca06e192c113a8d2821e4UNCHANGED. Newgeneration0: cachemissFAILFASTnevercallprovider. Newall12ASCwholeprogram/prototype/resource/code/noop/genericconsumer screens BEFOREloading/providingcachepayloads for newonce12numericgates. Sameprimary nonzeroFP32bits/zero numericexact andsignsecondary, fullstorage/gaps/halos/private/inputimmutable gates. Lifetimeexpectedcalls6, new0, oldwrong1call retained, new12calls explicitversion.",
+    "qualification": "All12inputonlycells before6CPUexpectedonce, all12correctnesscalls once before80completeAPIprofiles/8captures4mainpairs; guards0profiles. Actualdevice/text/ELF/relocations/IR/staticUBaddresses/resources/buildcompiler/source/binary/ABI/tilinghashes retained. Input-onlyrun raises0launch. Native buildcache publishes only afterallrequiredkernelcomponents/bridge validate. Compiler-noop/inconclusive ->0math ifoptimizedmainarmcodeidentical; GA exactsourcefallback equality expected, notglobalnoop. Source192KiBallocation notautomaticallyillegal; compiler scratch unavailable honestUNKNOWN. Unknownactualprofiletaskkind failsclosed, alltasks accounted.",
+    "protocol": "NEWASCsource-binaryversion: all12inputonlywholeprogramCube+Vec/ABI/physical prototypes+actualcanonicalcollect_pair MOCKboundary+noop/resourcescreens -> cachedsixexpectedload0generation -> newoncecorrectness12 ->80completeAPIs/8captures4mainpairs,guards0. FreshBZ1physical0mapping/sixhealth underdie0lease/runtime/compiler beforemath; C600startup/run_validate/profile andmmaps beforeNPUinit; bothcanonicalHOSTexports duringcapture+syncanalysis. Noautotune/warmups/extratiming/profileIO/drop/retune/reset/replay. FatalSTOPretainfirstdiag soleCPUtransfer/counts/unknowns. FirstoldCCEwrongnumeric1/0profiles andselector/configplacement0math failures preserved; doNOTsilentlyrepeatoreraseoldchecks.",
+    "claims": "First2main prospectively cost-risk smalln; latter2 DMA-benefit hypotheses. Preserveallnegative/neutral/faileddata. Rawten instrumentedoperation-span/tasktime/union/gaps/PMUs diagnostic, notordinarylatency/physicaltraffic/occupancy/roofline. KnownDMAspecialization technique novelty0. Prepared complete reset+coupledrotationcomponent withbufferreuse, notvendorBLASautotuner/hostlatency.",
+    "build_recipe": {
+      "language": "actualSDK find_packageASC CONFIG,projectLANGUAGESASC CXX,.cppLANGUAGEASC viaascendc_library; actual --asc-aicore-lang rule",
+      "arch": "dav-2201",
+      "Release": "-O3",
+      "device_options": [
+        "--cce-auto-sync=on",
+        "--cce-auto-sync-log=<uniqueoutput>/auto-sync.log",
+        "-g"
+      ],
+      "driver_options": [
+        "-save-temps=obj"
+      ],
+      "includes_libraries": "ActualSDK interface includes/linkdirs/libraries copiedtoPRIVATE standaloneDLL; sourceABI CPUstream/CABI unchanged. SourceKernel full192KiB unchanged; scratch UNKNOWN ifunreported notmandatorygate.",
+      "before_reused": {
+        "host_so_sha256": "f169f065edbbfec6ef0a00f44ba8e665cb4f5e415de55bc380dd0dc305f432f5",
+        "vec_sha256": "c24103a668842699e2091e23ea03cf532908b58cf3e7ce43797cbf316a43bf12",
+        "cube_sha256": "a03db0916d0b0139d0eb9da8d4c0ee7093a138893a679c5a0e36938adcafb160",
+        "archive_sha256": "7b6ec6151a9d7e798fd2bb575baaf2c1ff01b590c4a6f82db223e04e294b1d25",
+        "source_compile_calls_new_before": 0
+      },
+      "program_identity": "CanonicalLIST actualDEVICEELF records BOTHCube+Vec, includingemptyCube; hostSOsecondary, allactualmetadata/registereddefinedsymbols retained. Noactualexecutionengine inferred untilprofiles.",
+      "supported_flags": "Actualinstalledcompilerhelp confirmsON/OFF/log options.6338BcompilerlogreportsinsertedPIPE_V beforeunchangedsourceGENERALlines236-241; compileracceptance/barrierlog notnumericalproof/defaultlegacycauseproof."
+    },
+    "host_lifecycle": "Publicprepared.close idempotentlyunregistersONLYownweak handle,dropsownoriginal/work/hosttilingrefs/removesONLYmatchingAdapterentry. Native.run andvalidation guardcapturedprepareddevice; allocation/stream/context sameowner/restorescaller afterswitch; runafterclose rejects beforelaunch. FunctionalNONFROZENrealrun_pair success/errorcleanup anddevice-switch/foreign/samearmreplacement tests PASSbeforefreeze. Controlledcollectorborrowsclose-free view forcorrectness thenprofiles SAMEpreparedprivatebuffers; OWNERexplicitclosesall in finally afterfamily. Thisborrowedscope isexplicit, notpubliccleanupbypass."
+  },
+  "prospective_freeze": "BEFORE anynewASC numericalcall/AFTERcompile; parent explicitlyauthorizes source-build-contractcorrectnessrepair afterFindASCdevice-lessproof, NOTperformanceautotuning. OriginalCPP/kernel/tiling/provider/cases/math/tols/UB/cores unchanged. Mode+O3+SDKlinkdefaults+explicitdocumentedON fixedtogether; noisolatedauto-synccauseclaim.",
+  "numerical_version": 3,
+  "extends_original_frozen_sha256": "e45c00d95797d2caca3cc205673a9be56e85ad56c96ddbce4c827b58dda87434",
+  "build_qualification_addendum_sha256": "410b8e2891b66f88198ffd83e7b630f2dac77a664c3baacf92978914a4813103",
+  "resolved_ASC_recipe_sha256": "0a77a42a2814e677718ef4a853242b437ccda4947684d2744e1ad14cecc2a279",
+  "host_sources_before_new_math": {
+    "examples/optimization-library/ascendc/srotm/srotm.py": "94ca86663b491a38b62536e9934de790579f5de6bf3c774a90ca72d03ea73ff0",
+    "examples/optimization-library/ascendc/srotm/srotm_compile.py": "9a6154df3df7772f1aab51bb9f0cce2e9abd049cace5befe5e687d9c9faa5741",
+    "examples/optimization-library/ascendc/srotm/srotm_contract.py": "19305c26629abdd9a24c3a1458ea90b76c6269a9e2aca06e192c113a8d2821e4",
+    "examples/optimization-library/ascendc/srotm/native.cpp": "e17d8db9a92d79a0572bc77aba1b6d12ce8b7152ae15069742ac34b3fb696a2b",
+    "examples/optimization-library/ascendc/srotm/vendor/srotm_kernel.cpp": "05a8fc2e8a5d27f4c9ef00cacb4d0b327da597fda1c2a684670389b4dc9ab44f",
+    "examples/optimization-library/ascendc/srotm/vendor/srotm_tiling_data.h": "9aa20e96125ee4c5abe8ccd66cb81ad376c363f5b1a933fb9bc3ff1948532fe6",
+    "tests/test_optimization_native_srotm.py": "024cf26a11edd08ecfb5b69a0890b4227f912d8c3232e30b492e6a7659d5444f"
+  },
+  "prior_failures": {
+    "legacy_selector_job": "remote:bz-a3-1:job:20261025T055146Z-d77fc6ba25a5",
+    "legacy_wrong_numeric_job": "remote:bz-a3-1:job:20261025T060536Z-40b0f35dfd31",
+    "legacy_numeric_calls": 1,
+    "legacy_numeric_passes": 0,
+    "legacy_profiles": 0,
+    "legacy_archive_sha256": "a5d30e1fe26c9d2327afcda6d94eff2004a9786cb61a6b6783c228506147fcb8",
+    "config01_flag_placement_archive_sha256": "85156460d21930f875bf0e6b3ab5714d79c5e5f91243950c4f398f180e2952b9"
+  }
+}

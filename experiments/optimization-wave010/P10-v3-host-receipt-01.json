@@ -1,0 +1,23 @@
+{
+  "numerical_contract_sha256": "bf1f3e1a74d76b9d65b1c5d6bd576508119a0187bb20e6271f140c3c621b133e",
+  "scope": "HOSTmetadata repair beforefirstASCnumeric/AFTERcompile, sameNUMERICAL-v3 version/sourceprograms",
+  "old_attempt": "remote:bz-a3-1:job:20261025T072550Z-95add749b64d",
+  "old_attempt_new_numeric": 0,
+  "old_attempt_new_after_compile": 0,
+  "old_attempt_new_expected": 0,
+  "error": "CustomSDKASC CMakegenerator didnotemit compile_commands.json despite request; first retainedBEFOREqualification failedFileNotFound beforeanynewsourcecall.",
+  "repair": "Use actualretainedverbosebuild.stdout uniqueASCcompilerline plusSDKgeneratedbuild.make/flags.make/link.txt asauthoritativecommand evidence whencompile_commands unavailable. No fakefile/guessedcommand/newflag/compiler rerun; actualsourceBeforef169/c241/a03 unchanged.",
+  "functional_test": "NONFROZEN filesystemqualify mock withcompile_commands absent, actualconsumer APIreturnsbothELFroles/selector/boundverbosecommand; all10hosttestsPASS. NoGPU/realnativecompile/frozenpayload inunit.",
+  "host_source_sha256": {
+    "examples/optimization-library/ascendc/srotm/srotm.py": "94ca86663b491a38b62536e9934de790579f5de6bf3c774a90ca72d03ea73ff0",
+    "examples/optimization-library/ascendc/srotm/srotm_compile.py": "ca3ceeb96c7ddf2cda784c3cc72e187708fed2c02df6d9a2a54067bdced35a45",
+    "tests/test_optimization_native_srotm.py": "5043fb74298e83787aaf2b0d7cda0c3bc8345d437aa5b28cc9bdd88c83260276"
+  },
+  "unchanged": {
+    "native_CPP": "e17d8db9a92d79a0572bc77aba1b6d12ce8b7152ae15069742ac34b3fb696a2b",
+    "provider": "19305c26629abdd9a24c3a1458ea90b76c6269a9e2aca06e192c113a8d2821e4",
+    "cases_math_tolerances": true,
+    "source_ASC_flags": true
+  },
+  "new_attempt": "unique operational v3b stage; cached6payloads reused generation0; SAMEnew12ASCgates/80profiles protocol, old0math retained; no scientificreplay"
+}

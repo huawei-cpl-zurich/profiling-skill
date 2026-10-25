@@ -1,0 +1,117 @@
+{
+  "wave": 9,
+  "approval": "Standing user approval waves003\u2013022; datafirst.",
+  "study_kind": "source-backed-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "query": "61093052e4af41c5b2132db2cd524089",
+  "source_receipts": "bodies.json/tests-license.json/proposals.md; original source inventory full immutable pin; MIT plus Huawei/vLLM/DeepLink third-party notices retained.",
+  "protocol": "Compile/codegen/resource allcasepairs via input-only prototypes BEFORE scientificCPUexpected. Six cached CPU payloads ONCE, numerical correctness ONCE perarm/case/source then exactly10preparedcompleteAPI profilingforwards/arm of4mainpairs; guards0captures. No GPUwarmups/autotune/extraunprofiledtiming/profiledIOinspection. Retainnegative/noop/unsupported/failed results and originalsource/binary/fixture/version bindings. No postdata case/tolerance/flag retuning. Actualtarget/compiler/product/cores queried, never inherited GZ40. Complete operation spans/tasktime/union/gaps/raw10samples/PMUs diagnostic not ordinarylatency/physicaltraffic/roofline proof.",
+  "study_id": "R05",
+  "task": "optimization-w009-request-metadata",
+  "title": "Reuse request-index row metadata across column tiles",
+  "source_files": [
+    "bodies/src/triton_ascend_kernels/index/convert_index.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W009-R05-01",
+      "role": "gallery",
+      "seed": 90501,
+      "parameters": {
+        "tokens": 8,
+        "topK": 128,
+        "max_blocks": 64,
+        "requests": 8,
+        "HAS_PREFILL": false
+      },
+      "scenario_designation": "gallery-cost"
+    },
+    {
+      "case_id": "W009-R05-02",
+      "role": "gallery",
+      "seed": 90502,
+      "parameters": {
+        "tokens": 32,
+        "topK": 512,
+        "max_blocks": 128,
+        "requests": 8,
+        "HAS_PREFILL": true
+      },
+      "scenario_designation": "gallery-benefit"
+    },
+    {
+      "case_id": "W009-R05-03",
+      "role": "heldout",
+      "seed": 90503,
+      "parameters": {
+        "tokens": 128,
+        "topK": 1024,
+        "max_blocks": 128,
+        "requests": 8,
+        "HAS_PREFILL": false
+      },
+      "scenario_designation": "heldout-benefit"
+    },
+    {
+      "case_id": "W009-R05-04",
+      "role": "heldout",
+      "seed": 90504,
+      "parameters": {
+        "tokens": 256,
+        "topK": 2048,
+        "max_blocks": 128,
+        "requests": 8,
+        "HAS_PREFILL": true
+      },
+      "scenario_designation": "heldout-benefit"
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W009-R05-GA",
+      "role": "guard",
+      "seed": 90591,
+      "parameters": {
+        "tokens": 3,
+        "topK": 128,
+        "max_blocks": 4,
+        "requests": 2,
+        "HAS_PREFILL": true,
+        "invalid_boundaries": true
+      }
+    },
+    {
+      "case_id": "W009-R05-GB",
+      "role": "guard",
+      "seed": 90592,
+      "parameters": {
+        "tokens": 2,
+        "topK": 128,
+        "max_blocks": 262146,
+        "requests": 2,
+        "HAS_PREFILL": true,
+        "large_integer_indices": true
+      }
+    }
+  ],
+  "contract": {
+    "interface": "Prepared exactint32 request-index conversion component req_id[T],block_table[R,max_blocks],token_indices[T,topK], optionalprefill_request_id[T]andworkspace_starts[3], privateint32out[T,topK]. Contiguoussamehealthydevice, BLOCK_SIZE64,BLOCK_N128; topKpositive128multiple. Allreq0..R-1, prefillids=-1or0..2, blocktablepages0..100000, workspacestarts0,1048576,2097152. Maxderivedglobalandworkspaceoutputs<=2^31-1, maskedptrformationint32safe. No allocator/hostcontiguouscopies charged becauseinputs alreadycontiguous BOTH.",
+    "before": "Expliciteducational conventional oneprogram per(token,column_tile), loadsrowrequest/prefillmetadata eachtile and SAMEpinnedsourcevectorlookup/int32arithmetic/masks/stores. Notclaimretrievedunoptimizedvendorbaseline. Sourcefloat32casts ONLYsignpredicates retainedBOTH; integerdivision/modulo/index/output arithmetic unchanged.",
+    "after": "Exactpinned _convert_req_index_to_global_index_kernel grouping rows acrossactualvectorcore grid: grid(actualVEC),rows_per_prog=ceil(T/actualVEC),serialrowloop,innerloopoverallcolumn tiles. Loadreq/prefill/workspacestart onceperrow outsidecolumnloop. Differencealsoincludesprogramscheduling/parallelism, notpureloadhoistclaim. QueryactualVEC atcompile/runtime withreceipt; native9382expected48neverassumedGZ40. Common tiles128/BLOCK_SIZE64/noautotune/configchanges.",
+    "oracle": "ONEindependentCPUinteger scalar provider percase: forEVERYentry firstnegativeorblockidoutside[0,max_blocks) ->-1 INCLUDINGprefill; otherwiseprefillworkspace_start+tok, decodeblock_table[req,blockid]*64+tok%64. Checkalloutputbitsdtype/shape/tuplearity/halos andimmutableallinputs. Sixcachedpayloadsonce AFTER12inputonlycode/resourcescreens; correctnessonce/arm/case before80profileAPIforwards8captures guards0. Primarypairedintegerbitexact. No scientificsubbatchinvariance replays.",
+    "fixtures": "SeedCPUgenerator: tokenindicesmostlyvaliduniform[0,max_blocks*64), overwriteevery17th=-1,every29th=-7,every31st=max_blocks*64. Decodereqidseeduniform; HAS_PREFILLtrue everythirdtokenprefillid(token//3)%3else-1. GA forces allnegative/lastvalidblock/firstinvalidblock withmixedprefilldecode, safeinvalidblockmasked evenprefill. GB exactint32indices16777215,16777216,16777217,16777343 plusnegative/outofbound, blocktable262146columns givesvalidlargeindiceswhileFP32signcast cannotalterintegeraddresses; no claimsourcehasprecisionbug. CPUoracleloops/Torchindex independent noNPUmath. Publichostrequiresbounds/formatvalidatedonce beforecache, NONFROZENtests invalidreq/prefillids/topKtail/shape/dtype/overflow/domain reject.",
+    "physical": "Source lackscoltailmask so topK128multiple REQUIRED, guardinvalidtail exercisedhostONLYnonfrozen. Tablepointerforinvalidblocks mayformoutofrangebut tl.loadvalid_block & notprefill masks preventdereference; tok=-7 floor-div noinvalidread. Proveint32offsetboundsinclT*topK, req*max_blocks+derivedblock evenmasked andworkspaceprefix+tok. GA/GBcompileprototypes uninitialized noCPUscientificexpected. Fulloutcanaryprivateint32buffers explicitdtype independentglobaldefault. Probe.runraises,transactionalALLcomponentcompilequalification.",
+    "claims": "Predictedbenefitcases02/03/04 manycolumn tiles amortizemetadata; case01topK128singlecolumn iscost/control withextraactualcoregridinactiveprograms,nohoistamortization. Costlabelmeansrisknotpromisedslowdown. Allnecessaryworkonekernel botharms; noCPUmetadata precompute/freecrossforwardcache. Retaincompiler-noop/negative/fail outcomes, noforcedloweringcontrast. Newoperatorapplication novelty0, notphysicallymeasuredtraffic/occupancy/roofline/ordinarylatency proof."
+  },
+  "source_files_manifest": [
+    {
+      "path": "bodies/src/triton_ascend_kernels/index/convert_index.py",
+      "sha256": "ee64be4d4d1766e17e1518ff4e70eff8aa5f424ee87dcbe5c783b7f709abc7a7"
+    }
+  ]
+}

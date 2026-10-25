@@ -1,0 +1,767 @@
+{
+  "status": "all-six-correct-four-profile-pairs-complete",
+  "counts": {
+    "CPU_fixtures": 6,
+    "native_correctness": 12,
+    "profiled_APIs": 80,
+    "captures": 8,
+    "guards_profile_APIs": 0,
+    "new_readout_GPU_calls": 0
+  },
+  "pairs": [
+    {
+      "case_id": "W009-R12-01",
+      "arms": {
+        "before": {
+          "device_span_us": {
+            "samples": [
+              17.82,
+              10.96,
+              10.44,
+              10.34,
+              10.36,
+              10.2405,
+              10.68,
+              10.3205,
+              10.74,
+              10.34
+            ],
+            "count": 10,
+            "mean": 11.2241,
+            "sample_sd": 2.328918499599713
+          },
+          "event_ms": {
+            "samples": [
+              0.5924800038337708,
+              0.18306000530719757,
+              0.18479999899864197,
+              0.17520000040531158,
+              0.20579999685287476,
+              0.30799999833106995,
+              0.17589999735355377,
+              0.1638599932193756,
+              0.15705999732017517,
+              0.1729000061750412
+            ],
+            "count": 10,
+            "mean": 0.23190599977970122,
+            "sample_sd": 0.13381432905193952
+          },
+          "task_types": [
+            "device"
+          ],
+          "compilation": [
+            {
+              "hash": "5ab756e1bb4040a3a6d5f1750beeb794dc5f9e1d5c96dd2344dad2b742771430",
+              "sha256": "5ab756e1bb4040a3a6d5f1750beeb794dc5f9e1d5c96dd2344dad2b742771430",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aic",
+              "component": "aic",
+              "binaries": {
+                "elf": "5ab756e1bb4040a3a6d5f1750beeb794dc5f9e1d5c96dd2344dad2b742771430",
+                "selected_text": "2e65bba0fc26fb372b8e607f60c72b56166a47a6f2a5660b4d228ac6a9d6dc01"
+              },
+              "host_shared_library_sha256": "21f2959eabb2aedc462dc6f4eafe5f9399ecdeb7b7ee0e8c9e754f5a60c36830"
+            },
+            {
+              "hash": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "sha256": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aiv",
+              "component": "aiv",
+              "binaries": {
+                "elf": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+                "selected_text": "99f54142713142badd46293b4f28b50f056796973cac9fa002e3fdbe63713ddf"
+              },
+              "host_shared_library_sha256": "21f2959eabb2aedc462dc6f4eafe5f9399ecdeb7b7ee0e8c9e754f5a60c36830"
+            }
+          ]
+        },
+        "after": {
+          "device_span_us": {
+            "samples": [
+              14.1,
+              10.36,
+              10.8405,
+              10.5805,
+              10.2605,
+              10.2405,
+              10.22,
+              10.2205,
+              10.3805,
+              10.3005
+            ],
+            "count": 10,
+            "mean": 10.750350000000001,
+            "sample_sd": 1.1930619116374472
+          },
+          "event_ms": {
+            "samples": [
+              0.5398200154304504,
+              0.17773999273777008,
+              0.14074000716209412,
+              0.15291999280452728,
+              0.2747200131416321,
+              0.14985999464988708,
+              0.14348000288009644,
+              0.15386000275611877,
+              0.1512800008058548,
+              0.1439400017261505
+            ],
+            "count": 10,
+            "mean": 0.20283600240945815,
+            "sample_sd": 0.12497015963417107
+          },
+          "task_types": [
+            "device"
+          ],
+          "compilation": [
+            {
+              "hash": "48c7b9b1dce775f6244a441acfbf6c8d91c1ce6297c4da7112069733616efa99",
+              "sha256": "48c7b9b1dce775f6244a441acfbf6c8d91c1ce6297c4da7112069733616efa99",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aic",
+              "component": "aic",
+              "binaries": {
+                "elf": "48c7b9b1dce775f6244a441acfbf6c8d91c1ce6297c4da7112069733616efa99",
+                "selected_text": "6ec88ad6528d0d2c8ca500791649089c2d21256abc307abece7973ce05ed3d04"
+              },
+              "host_shared_library_sha256": "6d794dec68ff7d750788bdb67a76e50d9f72d84a9171325b6cf6819a480fcc33"
+            },
+            {
+              "hash": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "sha256": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aiv",
+              "component": "aiv",
+              "binaries": {
+                "elf": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+                "selected_text": "99f54142713142badd46293b4f28b50f056796973cac9fa002e3fdbe63713ddf"
+              },
+              "host_shared_library_sha256": "6d794dec68ff7d750788bdb67a76e50d9f72d84a9171325b6cf6819a480fcc33"
+            }
+          ]
+        }
+      },
+      "evidence_sha256": "a2f844c21c362f620495e5479e93a3a9b9918dcdec1eb2c7b628c95829bea728"
+    },
+    {
+      "case_id": "W009-R12-02",
+      "arms": {
+        "before": {
+          "device_span_us": {
+            "samples": [
+              53.981,
+              37.0205,
+              39.1005,
+              39.421,
+              39.0005,
+              38.321,
+              40.0805,
+              39.2805,
+              38.4605,
+              38.1005
+            ],
+            "count": 10,
+            "mean": 40.276650000000004,
+            "sample_sd": 4.888139074728633
+          },
+          "event_ms": {
+            "samples": [
+              1.5662000179290771,
+              0.22502000629901886,
+              0.17404000461101532,
+              0.16660000383853912,
+              0.16791999340057373,
+              0.16279999911785126,
+              0.16764000058174133,
+              0.14667999744415283,
+              0.16419999301433563,
+              0.1619199961423874
+            ],
+            "count": 10,
+            "mean": 0.3103020012378693,
+            "sample_sd": 0.44174999746663296
+          },
+          "task_types": [
+            "device"
+          ],
+          "compilation": [
+            {
+              "hash": "5ab756e1bb4040a3a6d5f1750beeb794dc5f9e1d5c96dd2344dad2b742771430",
+              "sha256": "5ab756e1bb4040a3a6d5f1750beeb794dc5f9e1d5c96dd2344dad2b742771430",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aic",
+              "component": "aic",
+              "binaries": {
+                "elf": "5ab756e1bb4040a3a6d5f1750beeb794dc5f9e1d5c96dd2344dad2b742771430",
+                "selected_text": "2e65bba0fc26fb372b8e607f60c72b56166a47a6f2a5660b4d228ac6a9d6dc01"
+              },
+              "host_shared_library_sha256": "21f2959eabb2aedc462dc6f4eafe5f9399ecdeb7b7ee0e8c9e754f5a60c36830"
+            },
+            {
+              "hash": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "sha256": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aiv",
+              "component": "aiv",
+              "binaries": {
+                "elf": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+                "selected_text": "99f54142713142badd46293b4f28b50f056796973cac9fa002e3fdbe63713ddf"
+              },
+              "host_shared_library_sha256": "21f2959eabb2aedc462dc6f4eafe5f9399ecdeb7b7ee0e8c9e754f5a60c36830"
+            }
+          ]
+        },
+        "after": {
+          "device_span_us": {
+            "samples": [
+              52.4415,
+              28.1405,
+              29.2205,
+              29.7405,
+              29.1405,
+              28.4205,
+              30.4605,
+              30.1005,
+              26.8805,
+              27.641
+            ],
+            "count": 10,
+            "mean": 31.21865,
+            "sample_sd": 7.539926517656963
+          },
+          "event_ms": {
+            "samples": [
+              0.926360011100769,
+              0.3236199915409088,
+              0.16884000599384308,
+              0.18021999299526215,
+              0.17268000543117523,
+              0.16621999442577362,
+              0.16402000188827515,
+              0.175819993019104,
+              0.1588599979877472,
+              0.1482599973678589
+            ],
+            "count": 10,
+            "mean": 0.2584899991750717,
+            "sample_sd": 0.23994638137693028
+          },
+          "task_types": [
+            "device"
+          ],
+          "compilation": [
+            {
+              "hash": "48c7b9b1dce775f6244a441acfbf6c8d91c1ce6297c4da7112069733616efa99",
+              "sha256": "48c7b9b1dce775f6244a441acfbf6c8d91c1ce6297c4da7112069733616efa99",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aic",
+              "component": "aic",
+              "binaries": {
+                "elf": "48c7b9b1dce775f6244a441acfbf6c8d91c1ce6297c4da7112069733616efa99",
+                "selected_text": "6ec88ad6528d0d2c8ca500791649089c2d21256abc307abece7973ce05ed3d04"
+              },
+              "host_shared_library_sha256": "6d794dec68ff7d750788bdb67a76e50d9f72d84a9171325b6cf6819a480fcc33"
+            },
+            {
+              "hash": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "sha256": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aiv",
+              "component": "aiv",
+              "binaries": {
+                "elf": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+                "selected_text": "99f54142713142badd46293b4f28b50f056796973cac9fa002e3fdbe63713ddf"
+              },
+              "host_shared_library_sha256": "6d794dec68ff7d750788bdb67a76e50d9f72d84a9171325b6cf6819a480fcc33"
+            }
+          ]
+        }
+      },
+      "evidence_sha256": "ce657be5dbee948221db6292977e3592d067d755581163727973b795a66ba15e"
+    },
+    {
+      "case_id": "W009-R12-03",
+      "arms": {
+        "before": {
+          "device_span_us": {
+            "samples": [
+              57.041,
+              49.341,
+              48.401,
+              49.061,
+              51.941,
+              49.841,
+              47.781,
+              48.061,
+              49.841,
+              49.141
+            ],
+            "count": 10,
+            "mean": 50.045,
+            "sample_sd": 2.721679220220078
+          },
+          "event_ms": {
+            "samples": [
+              0.5627400279045105,
+              0.18209999799728394,
+              0.2325199991464615,
+              0.18279999494552612,
+              0.13804000616073608,
+              0.14183999598026276,
+              0.18836000561714172,
+              0.17508000135421753,
+              0.1476999968290329,
+              0.15304000675678253
+            ],
+            "count": 10,
+            "mean": 0.21042200326919555,
+            "sample_sd": 0.12696745029764006
+          },
+          "task_types": [
+            "device"
+          ],
+          "compilation": [
+            {
+              "hash": "5ab756e1bb4040a3a6d5f1750beeb794dc5f9e1d5c96dd2344dad2b742771430",
+              "sha256": "5ab756e1bb4040a3a6d5f1750beeb794dc5f9e1d5c96dd2344dad2b742771430",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aic",
+              "component": "aic",
+              "binaries": {
+                "elf": "5ab756e1bb4040a3a6d5f1750beeb794dc5f9e1d5c96dd2344dad2b742771430",
+                "selected_text": "2e65bba0fc26fb372b8e607f60c72b56166a47a6f2a5660b4d228ac6a9d6dc01"
+              },
+              "host_shared_library_sha256": "21f2959eabb2aedc462dc6f4eafe5f9399ecdeb7b7ee0e8c9e754f5a60c36830"
+            },
+            {
+              "hash": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "sha256": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aiv",
+              "component": "aiv",
+              "binaries": {
+                "elf": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+                "selected_text": "99f54142713142badd46293b4f28b50f056796973cac9fa002e3fdbe63713ddf"
+              },
+              "host_shared_library_sha256": "21f2959eabb2aedc462dc6f4eafe5f9399ecdeb7b7ee0e8c9e754f5a60c36830"
+            }
+          ]
+        },
+        "after": {
+          "device_span_us": {
+            "samples": [
+              48.901,
+              31.8205,
+              34.8805,
+              35.0405,
+              36.7405,
+              35.3605,
+              36.101,
+              36.3405,
+              33.6405,
+              33.581
+            ],
+            "count": 10,
+            "mean": 36.24065,
+            "sample_sd": 4.690428321178261
+          },
+          "event_ms": {
+            "samples": [
+              0.5497999787330627,
+              0.19575999677181244,
+              0.16896000504493713,
+              0.15746000409126282,
+              0.15627999603748322,
+              0.14146000146865845,
+              0.1437399983406067,
+              0.1620199978351593,
+              0.15449999272823334,
+              0.13702000677585602
+            ],
+            "count": 10,
+            "mean": 0.19669999778270722,
+            "sample_sd": 0.12517765325743282
+          },
+          "task_types": [
+            "device"
+          ],
+          "compilation": [
+            {
+              "hash": "48c7b9b1dce775f6244a441acfbf6c8d91c1ce6297c4da7112069733616efa99",
+              "sha256": "48c7b9b1dce775f6244a441acfbf6c8d91c1ce6297c4da7112069733616efa99",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aic",
+              "component": "aic",
+              "binaries": {
+                "elf": "48c7b9b1dce775f6244a441acfbf6c8d91c1ce6297c4da7112069733616efa99",
+                "selected_text": "6ec88ad6528d0d2c8ca500791649089c2d21256abc307abece7973ce05ed3d04"
+              },
+              "host_shared_library_sha256": "6d794dec68ff7d750788bdb67a76e50d9f72d84a9171325b6cf6819a480fcc33"
+            },
+            {
+              "hash": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "sha256": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aiv",
+              "component": "aiv",
+              "binaries": {
+                "elf": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+                "selected_text": "99f54142713142badd46293b4f28b50f056796973cac9fa002e3fdbe63713ddf"
+              },
+              "host_shared_library_sha256": "6d794dec68ff7d750788bdb67a76e50d9f72d84a9171325b6cf6819a480fcc33"
+            }
+          ]
+        }
+      },
+      "evidence_sha256": "d90b48ee544784279b3d5374eabd941b228a5951f57929ce783037b0f9b13ab5"
+    },
+    {
+      "case_id": "W009-R12-04",
+      "arms": {
+        "before": {
+          "device_span_us": {
+            "samples": [
+              112.8225,
+              86.142,
+              88.942,
+              89.242,
+              86.122,
+              88.782,
+              92.482,
+              80.662,
+              90.342,
+              85.002
+            ],
+            "count": 10,
+            "mean": 90.05405,
+            "sample_sd": 8.643516055563142
+          },
+          "event_ms": {
+            "samples": [
+              0.544979989528656,
+              0.21649999916553497,
+              0.17674000561237335,
+              0.18491999804973602,
+              0.1661600023508072,
+              0.1779399961233139,
+              0.18082000315189362,
+              0.16461999714374542,
+              0.18097999691963196,
+              0.17851999402046204
+            ],
+            "count": 10,
+            "mean": 0.21721799820661544,
+            "sample_sd": 0.11602769764641614
+          },
+          "task_types": [
+            "device"
+          ],
+          "compilation": [
+            {
+              "hash": "5ab756e1bb4040a3a6d5f1750beeb794dc5f9e1d5c96dd2344dad2b742771430",
+              "sha256": "5ab756e1bb4040a3a6d5f1750beeb794dc5f9e1d5c96dd2344dad2b742771430",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aic",
+              "component": "aic",
+              "binaries": {
+                "elf": "5ab756e1bb4040a3a6d5f1750beeb794dc5f9e1d5c96dd2344dad2b742771430",
+                "selected_text": "2e65bba0fc26fb372b8e607f60c72b56166a47a6f2a5660b4d228ac6a9d6dc01"
+              },
+              "host_shared_library_sha256": "21f2959eabb2aedc462dc6f4eafe5f9399ecdeb7b7ee0e8c9e754f5a60c36830"
+            },
+            {
+              "hash": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "sha256": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aiv",
+              "component": "aiv",
+              "binaries": {
+                "elf": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+                "selected_text": "99f54142713142badd46293b4f28b50f056796973cac9fa002e3fdbe63713ddf"
+              },
+              "host_shared_library_sha256": "21f2959eabb2aedc462dc6f4eafe5f9399ecdeb7b7ee0e8c9e754f5a60c36830"
+            }
+          ]
+        },
+        "after": {
+          "device_span_us": {
+            "samples": [
+              92.202,
+              50.261,
+              53.041,
+              47.641,
+              53.741,
+              53.5815,
+              55.681,
+              55.461,
+              50.521,
+              50.141
+            ],
+            "count": 10,
+            "mean": 56.22715,
+            "sample_sd": 12.898429460920168
+          },
+          "event_ms": {
+            "samples": [
+              0.6906399726867676,
+              0.2184000015258789,
+              0.18376000225543976,
+              0.17598000168800354,
+              0.1697400063276291,
+              0.17520000040531158,
+              0.16335999965667725,
+              0.17080000042915344,
+              0.17166000604629517,
+              0.1697400063276291
+            ],
+            "count": 10,
+            "mean": 0.22892799973487854,
+            "sample_sd": 0.16295302945759052
+          },
+          "task_types": [
+            "device"
+          ],
+          "compilation": [
+            {
+              "hash": "48c7b9b1dce775f6244a441acfbf6c8d91c1ce6297c4da7112069733616efa99",
+              "sha256": "48c7b9b1dce775f6244a441acfbf6c8d91c1ce6297c4da7112069733616efa99",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aic",
+              "component": "aic",
+              "binaries": {
+                "elf": "48c7b9b1dce775f6244a441acfbf6c8d91c1ce6297c4da7112069733616efa99",
+                "selected_text": "6ec88ad6528d0d2c8ca500791649089c2d21256abc307abece7973ce05ed3d04"
+              },
+              "host_shared_library_sha256": "6d794dec68ff7d750788bdb67a76e50d9f72d84a9171325b6cf6819a480fcc33"
+            },
+            {
+              "hash": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "sha256": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+              "format": "ELF64LE-hiipu-device",
+              "identity_source": "actual selected SDK device ELF plus .ascend.meta and function section",
+              "name": "_ZN7Catlass13KernelAdapterINS_4Gemm6Kernel15MatmulFullLoadAINS1_5Block9BlockMmadINS1_20MmadAtlasA2FullLoadAILb1EEENS_9GemmShapeILj128ELj256ELj256EEENS8_ILj128ELj256ELj64EEENS1_8GemmTypeIDhNS_6layout8RowMajorELN7AscendC9TPositionE0EEESG_SG_vNS1_4Tile8TileCopyINS_4Arch7AtlasA2ESG_SG_SG_vEENSH_8TileMmadISK_SG_SG_vEEvEEvNS4_24GemmIdentityBlockSwizzleILj3ELj0EEEEEEEvNT_6ParamsE_mix_aiv",
+              "component": "aiv",
+              "binaries": {
+                "elf": "e936ceeb4a699d5aabbc1ac4f7ee706a920e9cc508fe67cc741adbc4c9e6b71e",
+                "selected_text": "99f54142713142badd46293b4f28b50f056796973cac9fa002e3fdbe63713ddf"
+              },
+              "host_shared_library_sha256": "6d794dec68ff7d750788bdb67a76e50d9f72d84a9171325b6cf6819a480fcc33"
+            }
+          ]
+        }
+      },
+      "evidence_sha256": "1381ad261e9bf00e949b317cd1fde9e7d48a97ede82ec2186b53a5a8d606464e"
+    }
+  ],
+  "correctness": [
+    {
+      "case_id": "W009-R12-01",
+      "arm": "before",
+      "diagnostics": {
+        "passed": true,
+        "mismatch_count": 0,
+        "first_mismatches": [],
+        "nonfinite_count": 0,
+        "max_fp64_forward_error": 0.0,
+        "immutable_inputs": true,
+        "canaries": true,
+        "private_output": true,
+        "paired_nonzero_bits": null,
+        "zero_sign_bits_secondary": true
+      }
+    },
+    {
+      "case_id": "W009-R12-01",
+      "arm": "after",
+      "diagnostics": {
+        "passed": true,
+        "mismatch_count": 0,
+        "first_mismatches": [],
+        "nonfinite_count": 0,
+        "max_fp64_forward_error": 0.0,
+        "immutable_inputs": true,
+        "canaries": true,
+        "private_output": true,
+        "paired_nonzero_bits": true,
+        "zero_sign_bits_secondary": true
+      }
+    },
+    {
+      "case_id": "W009-R12-02",
+      "arm": "before",
+      "diagnostics": {
+        "passed": true,
+        "mismatch_count": 0,
+        "first_mismatches": [],
+        "nonfinite_count": 0,
+        "max_fp64_forward_error": 0.0,
+        "immutable_inputs": true,
+        "canaries": true,
+        "private_output": true,
+        "paired_nonzero_bits": null,
+        "zero_sign_bits_secondary": true
+      }
+    },
+    {
+      "case_id": "W009-R12-02",
+      "arm": "after",
+      "diagnostics": {
+        "passed": true,
+        "mismatch_count": 0,
+        "first_mismatches": [],
+        "nonfinite_count": 0,
+        "max_fp64_forward_error": 0.0,
+        "immutable_inputs": true,
+        "canaries": true,
+        "private_output": true,
+        "paired_nonzero_bits": true,
+        "zero_sign_bits_secondary": true
+      }
+    },
+    {
+      "case_id": "W009-R12-03",
+      "arm": "before",
+      "diagnostics": {
+        "passed": true,
+        "mismatch_count": 0,
+        "first_mismatches": [],
+        "nonfinite_count": 0,
+        "max_fp64_forward_error": 0.0,
+        "immutable_inputs": true,
+        "canaries": true,
+        "private_output": true,
+        "paired_nonzero_bits": null,
+        "zero_sign_bits_secondary": true
+      }
+    },
+    {
+      "case_id": "W009-R12-03",
+      "arm": "after",
+      "diagnostics": {
+        "passed": true,
+        "mismatch_count": 0,
+        "first_mismatches": [],
+        "nonfinite_count": 0,
+        "max_fp64_forward_error": 0.0,
+        "immutable_inputs": true,
+        "canaries": true,
+        "private_output": true,
+        "paired_nonzero_bits": true,
+        "zero_sign_bits_secondary": true
+      }
+    },
+    {
+      "case_id": "W009-R12-04",
+      "arm": "before",
+      "diagnostics": {
+        "passed": true,
+        "mismatch_count": 0,
+        "first_mismatches": [],
+        "nonfinite_count": 0,
+        "max_fp64_forward_error": 0.0,
+        "immutable_inputs": true,
+        "canaries": true,
+        "private_output": true,
+        "paired_nonzero_bits": null,
+        "zero_sign_bits_secondary": true
+      }
+    },
+    {
+      "case_id": "W009-R12-04",
+      "arm": "after",
+      "diagnostics": {
+        "passed": true,
+        "mismatch_count": 0,
+        "first_mismatches": [],
+        "nonfinite_count": 0,
+        "max_fp64_forward_error": 0.0,
+        "immutable_inputs": true,
+        "canaries": true,
+        "private_output": true,
+        "paired_nonzero_bits": true,
+        "zero_sign_bits_secondary": true
+      }
+    },
+    {
+      "case_id": "W009-R12-GA",
+      "arm": "before",
+      "diagnostics": {
+        "passed": true,
+        "mismatch_count": 0,
+        "first_mismatches": [],
+        "nonfinite_count": 0,
+        "max_fp64_forward_error": 0.0,
+        "immutable_inputs": true,
+        "canaries": true,
+        "private_output": true,
+        "paired_nonzero_bits": null,
+        "zero_sign_bits_secondary": true
+      }
+    },
+    {
+      "case_id": "W009-R12-GA",
+      "arm": "after",
+      "diagnostics": {
+        "passed": true,
+        "mismatch_count": 0,
+        "first_mismatches": [],
+        "nonfinite_count": 0,
+        "max_fp64_forward_error": 0.0,
+        "immutable_inputs": true,
+        "canaries": true,
+        "private_output": true,
+        "paired_nonzero_bits": true,
+        "zero_sign_bits_secondary": true
+      }
+    },
+    {
+      "case_id": "W009-R12-GB",
+      "arm": "before",
+      "diagnostics": {
+        "passed": true,
+        "mismatch_count": 0,
+        "first_mismatches": [],
+        "nonfinite_count": 0,
+        "max_fp64_forward_error": 0.0,
+        "immutable_inputs": true,
+        "canaries": true,
+        "private_output": true,
+        "paired_nonzero_bits": null,
+        "zero_sign_bits_secondary": true
+      }
+    },
+    {
+      "case_id": "W009-R12-GB",
+      "arm": "after",
+      "diagnostics": {
+        "passed": true,
+        "mismatch_count": 0,
+        "first_mismatches": [],
+        "nonfinite_count": 0,
+        "max_fp64_forward_error": 0.0,
+        "immutable_inputs": true,
+        "canaries": true,
+        "private_output": true,
+        "paired_nonzero_bits": true,
+        "zero_sign_bits_secondary": true
+      }
+    }
+  ]
+}

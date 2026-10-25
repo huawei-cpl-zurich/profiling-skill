@@ -1,0 +1,253 @@
+{
+  "total_provider_calls": 6,
+  "rows": [
+    {
+      "version": "v3",
+      "case": {
+        "case_id": "W009-R12-01",
+        "role": "gallery",
+        "seed": 91201,
+        "parameters": {
+          "M": 128,
+          "N": 256,
+          "K": 256
+        },
+        "scenario_designation": "gallery-cost"
+      },
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+        }
+      ],
+      "payload_sha256": "8b26135bdc802f00d6833f3d8827ace20593e0c0ec44711566088d3615d7b777",
+      "oracle_calls": 1,
+      "provider_sources": {
+        "l1_a_contract.py": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+      }
+    },
+    {
+      "version": "v4",
+      "case": {
+        "case_id": "W009-R12-01",
+        "role": "gallery",
+        "seed": 91201,
+        "parameters": {
+          "M": 128,
+          "N": 256,
+          "K": 256
+        },
+        "scenario_designation": "gallery-cost"
+      },
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+        }
+      ],
+      "payload_sha256": "8b26135bdc802f00d6833f3d8827ace20593e0c0ec44711566088d3615d7b777",
+      "oracle_calls": 0,
+      "provider_sources": {
+        "l1_a_contract.py": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+      }
+    },
+    {
+      "version": "v4",
+      "case": {
+        "case_id": "W009-R12-02",
+        "role": "gallery",
+        "seed": 91202,
+        "parameters": {
+          "M": 128,
+          "N": 12288,
+          "K": 512
+        },
+        "scenario_designation": "gallery-benefit"
+      },
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+        }
+      ],
+      "payload_sha256": "c360bb5257b2d53480c45778ce4c1dd81e16e6833d87be259569bb3af61e08ef",
+      "oracle_calls": 1,
+      "provider_sources": {
+        "l1_a_contract.py": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+      }
+    },
+    {
+      "version": "v4",
+      "case": {
+        "case_id": "W009-R12-03",
+        "role": "heldout",
+        "seed": 91203,
+        "parameters": {
+          "M": 128,
+          "N": 16384,
+          "K": 512
+        },
+        "scenario_designation": "heldout-benefit"
+      },
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+        }
+      ],
+      "payload_sha256": "1d98a99d2264d183601cdaeed562826092dcd0cb17e2eba16704927cfeb272f2",
+      "oracle_calls": 1,
+      "provider_sources": {
+        "l1_a_contract.py": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+      }
+    },
+    {
+      "version": "v4",
+      "case": {
+        "case_id": "W009-R12-04",
+        "role": "heldout",
+        "seed": 91204,
+        "parameters": {
+          "M": 128,
+          "N": 24576,
+          "K": 768
+        },
+        "scenario_designation": "heldout-benefit"
+      },
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+        }
+      ],
+      "payload_sha256": "e6001e1832f740e4780a65cec39e3094b626f48a76866929d32be0a14b2aecc8",
+      "oracle_calls": 1,
+      "provider_sources": {
+        "l1_a_contract.py": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+      }
+    },
+    {
+      "version": "v4",
+      "case": {
+        "case_id": "W009-R12-GA",
+        "role": "guard",
+        "seed": 91291,
+        "parameters": {
+          "M": 127,
+          "N": 12304,
+          "K": 512
+        }
+      },
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+        }
+      ],
+      "payload_sha256": "4a5d2edb3306132f331952d1c77aeb909e30201fa0076772e1a14de571608632",
+      "oracle_calls": 1,
+      "provider_sources": {
+        "l1_a_contract.py": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+      }
+    },
+    {
+      "version": "v4",
+      "case": {
+        "case_id": "W009-R12-GB",
+        "role": "guard",
+        "seed": 91292,
+        "parameters": {
+          "M": 128,
+          "N": 256,
+          "K": 1024
+        }
+      },
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+        }
+      ],
+      "payload_sha256": "14673ddb4e8e9a3baa4128dd7b5f1c23ad124aa5aeb0071a1aaf017c1d0d6671",
+      "oracle_calls": 1,
+      "provider_sources": {
+        "l1_a_contract.py": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+      }
+    },
+    {
+      "version": "v5",
+      "case": {
+        "case_id": "W009-R12-02",
+        "role": "gallery",
+        "seed": 91202,
+        "parameters": {
+          "M": 128,
+          "N": 12288,
+          "K": 512
+        },
+        "scenario_designation": "gallery-benefit"
+      },
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+        }
+      ],
+      "payload_sha256": "c360bb5257b2d53480c45778ce4c1dd81e16e6833d87be259569bb3af61e08ef",
+      "oracle_calls": 0,
+      "provider_sources": {
+        "l1_a_contract.py": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+      }
+    },
+    {
+      "version": "v5",
+      "case": {
+        "case_id": "W009-R12-03",
+        "role": "heldout",
+        "seed": 91203,
+        "parameters": {
+          "M": 128,
+          "N": 16384,
+          "K": 512
+        },
+        "scenario_designation": "heldout-benefit"
+      },
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+        }
+      ],
+      "payload_sha256": "1d98a99d2264d183601cdaeed562826092dcd0cb17e2eba16704927cfeb272f2",
+      "oracle_calls": 0,
+      "provider_sources": {
+        "l1_a_contract.py": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+      }
+    },
+    {
+      "version": "v5",
+      "case": {
+        "case_id": "W009-R12-04",
+        "role": "heldout",
+        "seed": 91204,
+        "parameters": {
+          "M": 128,
+          "N": 24576,
+          "K": 768
+        },
+        "scenario_designation": "heldout-benefit"
+      },
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+        }
+      ],
+      "payload_sha256": "e6001e1832f740e4780a65cec39e3094b626f48a76866929d32be0a14b2aecc8",
+      "oracle_calls": 0,
+      "provider_sources": {
+        "l1_a_contract.py": "f351ed018aa76e755cd17bfe9378a978aa927e8c00eb239b5f06567d7c1377a4"
+      }
+    }
+  ]
+}

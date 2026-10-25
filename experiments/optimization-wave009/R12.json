@@ -1,0 +1,383 @@
+{
+  "wave": 9,
+  "approval": "Standing user approval waves003\u2013022; datafirst.",
+  "study_kind": "source-backed-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "40aced927fdaaa0f3eaa9c6f5c5d859e06392f55",
+  "query": "a2881209433545639e9a518a3f8961ee",
+  "source_receipts": "catlass-bodies.json + catlass-closure/receipts.json/summary.md; selected68headerclosure plus explicitlysource-derivednarrowumbrella, NOTuntouchedfullrepobuild",
+  "protocol": "Compile/codegen/resource allcasepairs via input-only prototypes BEFORE scientificCPUexpected. Six cached CPU payloads ONCE, numerical correctness ONCE perarm/case/source then exactly10preparedcompleteAPI profilingforwards/arm of4mainpairs; guards0captures. No GPUwarmups/autotune/extraunprofiledtiming/profiledIOinspection. Retainnegative/noop/unsupported/failed results and originalsource/binary/fixture/version bindings. No postdata case/tolerance/flag retuning. Actualtarget/compiler/product/cores queried, never inherited GZ40. Complete operation spans/tasktime/union/gaps/raw10samples/PMUs diagnostic not ordinarylatency/physicaltraffic/roofline proof.",
+  "language": "Native CATLASS C++ for AtlasA2/A3, NOTPythonDSL",
+  "source_helpers_manifest": [
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/LICENSE",
+      "sha256": "89b1c114df62cfd183004f38d18d07f186436c3b37203dd69c3e84becf9d2282"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/LICENSE-APACHE",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/Third_Party_Open_Source_Software_Notice",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/examples/25_matmul_full_loadA/matmul_full_loadA.cpp",
+      "sha256": "cd69e2aaac4f2fe9b856a80b935be8ad13d82055d80a657ebba4003aaaf18681"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/arch/arch.hpp",
+      "sha256": "42d9c6214ea1028bd48ca0f384da612406e5a251aa841554662998dda2630125"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/arch/local_tensor_buffer.hpp",
+      "sha256": "88e5227c846316e3674dbfceb5a872da829ed605d8f111ec951dbd3a5796a281"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/arch/resource.hpp",
+      "sha256": "b1b1a6e572e9f018c16aad7289a26d90ff472dde6be0e2ec0b7b70867d47000f"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/catlass.hpp",
+      "sha256": "fe1410d62cf72573f8a3ca97e160bfd4a4520f2752b753f9d701ff927fabec0b"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/conv_coord.hpp",
+      "sha256": "5ed16f63df916343010aec57794b8e79cdb258ccd388ad813f9ac796049ec7a7"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/coord.hpp",
+      "sha256": "448483ecec89e51556a76e078ef2b1fdcd1bf4ae9c4e73ce032fc1324ca0dd81"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/detail/alignment.hpp",
+      "sha256": "40af79ae86a4892859bd649699b68c3195fb0138288d3fd7835e7b7db85340f0"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/detail/dependent_false.hpp",
+      "sha256": "b2d08ec3485236d8879c82fc4ffa13adf1efa65d9de6e711a1d996cffc77e1cf"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/detail/kernel_adapter.hpp",
+      "sha256": "390f797ea448cfab8911f4dfdd4ec7936724f95cde4f2fa59f926f6c00961107"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/detail/macros.hpp",
+      "sha256": "ac325efb38493fbe1e39ad1b00298b2b686da01504e8ad06688b67045fe617ea"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/detail/tag_to_layout.hpp",
+      "sha256": "a96709f7c96c26aa1c60c1a3ae6fb05377db596c277990a5f5f1b86373d32a85"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/block/block_mmad.hpp",
+      "sha256": "4c1c38c42d2e51a09fa3a5d407885fa5a9868820196e1c6f0722d9aeb8265c30"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/block/block_mmad_pingpong_full_loadA.hpp",
+      "sha256": "5cc15b7a85a68a8c63b68613b9055d5020bb367716c689d1efc7d900cf8d3e74"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/block/block_swizzle.hpp",
+      "sha256": "04ac166dd7f3bf0e57f8eb3dce97c26df88d91e4d169850e899b0502dacf3a14"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/device/device_gemm.hpp",
+      "sha256": "c852a95f933ee54549933f892b67e34b891fa8c7dee19a4871936cc78dc36260"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/dispatch_policy.hpp",
+      "sha256": "0f9c9795b5384f6f211acfaaec9caae62cca99cab3f9c89a8799b337036a38d4"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/gemm_type.hpp",
+      "sha256": "ad15a666a48b610c6e35394a1dc9c4039589dca6149b24942ff3c1277587a468"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/helper.hpp",
+      "sha256": "0062470847b592bccad4664ca8ffb9222b2850c605f24852e5a6c2ebfd192795"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/kernel/matmul_full_loadA.hpp",
+      "sha256": "1ef9a4caae8cc38559f907d938ced5f4c58d5252601e19abe122b9f6874b7518"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/atlasa2/cast_fp8_to_fp16.hpp",
+      "sha256": "e483234df530d6d43c9dbf4cbfccd28df124a5298535c8ccdf54d9656144c2d9"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/atlasa2/cast_int4_to_int8.hpp",
+      "sha256": "cb559d6c30418a8535bc9f14c3ba2a809d894de68e8e4547fb9be3fed43826ea"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/atlasa2/cast_int8_to_fp16.hpp",
+      "sha256": "bdf6bdfbf080969f293826e63e3d428ef338d46a18ace5f60aed4191db098ff6"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/atlasa2/copy_gm_to_l1.hpp",
+      "sha256": "c96b1383161ff4cd7b6798b4a75c025279b26149db4145ed5085338c02f43db8"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/atlasa2/copy_gm_to_ub.hpp",
+      "sha256": "67db1322663edbc5a3c8b1d4b64b96722ce033e0f74d92d311a1fc24f15bed1a"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/atlasa2/copy_l0c_to_gm.hpp",
+      "sha256": "70e9635c7ea8b17f0c6f8394a4f1c017a46259622f0abb3840b10f78fbaa21fb"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/atlasa2/copy_l1_to_bt.hpp",
+      "sha256": "de9cef5d308aebd667c1f4665541dafb143a2a83aa5ae96342625219c8b53c73"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/atlasa2/copy_l1_to_l0a.hpp",
+      "sha256": "455a9cbd53b8d48d0a3c221acca254e97419e25e9215f113568d4a6b721edc5f"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/atlasa2/copy_l1_to_l0b.hpp",
+      "sha256": "8e24286a2d2958dc619f0bf0000b0356a485c373a14594bfb2a58971860a81b7"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/atlasa2/copy_ub_to_gm.hpp",
+      "sha256": "e1f8865a11f7884b94517a6d72982db668b437db76864b6cd8da321145331eb3"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/cast_fp8_to_fp16.hpp",
+      "sha256": "a05933aedfd06bd37293953314d6ca4f6264f38a23e64f0fdda3301dc39a67d2"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/cast_int4_to_int8.hpp",
+      "sha256": "e89c098b8df65de1733b80175b93b2908807d1ae275cf5af81caef6bde4107d4"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/cast_int8_to_fp16.hpp",
+      "sha256": "5464c4bba31c96ce3bd085cf4af309513ab0b0471f02bbecc570e7af07916fed"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/copy_gm_to_l1.hpp",
+      "sha256": "0e72281c5e7a2f1e51fc87dfddc3c524139a92d3f4c05ae25e3ef320d6632f9e"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/copy_gm_to_ub.hpp",
+      "sha256": "922733fc178fb898be9c266a2887e0bc7422985598c58430e07366f5b9a7a65b"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/copy_l0c_to_gm.hpp",
+      "sha256": "3b4ba8d2dc9bd77b34efb0dd5042e16ce8a7a00263b7af1d8fcd304134f6277a"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/copy_l0c_to_ub.hpp",
+      "sha256": "2c8a41bb5a8ad412970ddef5103008456f21b02db813caa24b5d9268c0afd5b8"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/copy_l1_to_bt.hpp",
+      "sha256": "0940ecaf5bb4f16a88ff46450ff604465f7cef93900c9f4d055e16e0acba15dc"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/copy_l1_to_fp.hpp",
+      "sha256": "b1fd0a9997e40a66b4fb6248b2cb0cd356206db4b473eabefa9b3218120946eb"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/copy_l1_to_l0a.hpp",
+      "sha256": "0a8efe150a05fe439058a93a74b43d49370ba0066f2cf8fddee2628bb161530c"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/copy_l1_to_l0b.hpp",
+      "sha256": "6a910fee9c5528d4d9a3be446fcffca86cb80d3998fc7c942f53c9f8ed7d9277"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/copy_ub_to_gm.hpp",
+      "sha256": "f8622d6721a4267673d554bb3d75a93a4bb29483cbda90cb0cb19b6e1e3eb29c"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/tile_copy.hpp",
+      "sha256": "953fb37de267514328a5ffb81e8dfa53bc012c718dafcfd1e3f647d6ff9e57e6"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/tile_copy_tla.hpp",
+      "sha256": "dde104d423b0e8085a13c0baece9523f1085e797f3c855307899893e0b6eeac9"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm/tile/tile_mmad.hpp",
+      "sha256": "643a1a73b641d6030208da7afa4ee976e7a5a6f2d773caf67f670f4162914100"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/gemm_coord.hpp",
+      "sha256": "98f6b01c4f03bf3f93f861856c21856b7866919049f587a04069ef3733ebc0e7"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/layout/layout.hpp",
+      "sha256": "e32fe9ae8aad0098bf90c097d7fbeb808fb6ade8d752192fd0b4a402ce01405c"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/layout/matrix.hpp",
+      "sha256": "9721076abec472206f0f1b18f324b2d2c6b141909c862a68f0b4d2675f7662e9"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/layout/tensor.hpp",
+      "sha256": "96bf7be5f61dc1024a1d765238b27ad37dfdf3e51881cf2aea7c588664ce3bf6"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/layout/vector.hpp",
+      "sha256": "9b826b60cd92a3c3971999c7e69b204d1b6fb301c6c2b4b42a863362290bb788"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/matrix_coord.hpp",
+      "sha256": "cf55f004e022a97f094f302106134678bd99a2965e354bf058389c46fae32fe8"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/numeric_size.hpp",
+      "sha256": "acf11cd72642d64fc0c711033fb8c6e67ca439462e01502400da6bc50014ec83"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/catlass/status.hpp",
+      "sha256": "cea8bd8cfc3e72bd7ba86b76601cf9825d74cda9ac7a2eddf9ea5b88fa227dd7"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/tla/integral/integral_constant.hpp",
+      "sha256": "683e4a170edca3fc161a6f297385d888960b9e136c0364444673d513665a4c3b"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/tla/integral/integral_math.hpp",
+      "sha256": "0f41124b5a65d9d627ad6aa63d39fa5b7bf44cbf6f55b73186d984b0dc345c57"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/tla/integral/integral_sequence.hpp",
+      "sha256": "0778df8cd055a8fa1f9b49823379545ca4603e9256f463eb7b9509f99b657c0f"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/tla/layout.hpp",
+      "sha256": "8cb7ea76d8c011ef302a87bb8f4a4bccdee803ce869e8e2cb374ee54151a2237"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/tla/stride.hpp",
+      "sha256": "b5b006b050aa47e75a4be9634e31831b6f8d288b41f609d7311065eef32c141d"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/tla/tensor.hpp",
+      "sha256": "3ce5d2ebb44efd5cae44efd01ba42a9ae2f2aece17f0f2b819ed3803a04a3fd8"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/tla/tuple/tuple.hpp",
+      "sha256": "79d4e090a47e64b52008bfdad6dfeb869ad5cb809609e37f4821f84d5e7c4e10"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/tla/tuple/tuple_algorithms.hpp",
+      "sha256": "ec738c34ca3d6f43f3d1122726826c8563d491d0a764ec9942fcddfdf046c1ca"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/tla/tuple/tuple_math.hpp",
+      "sha256": "776bb0c347fe79aff0f4a684f43f0353c581f5262147c9c5efef14b4e743ebe8"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/tla/utils/functional.hpp",
+      "sha256": "7753d6932e14b03b8c30160bcd99a6e8cdae95695308bf886c3000600c51f036"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/tla/utils/math.hpp",
+      "sha256": "1a21e437b2cc6e308d7fac063cebe25f48f099b1574599ec1e06ecde20371c64"
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave009-research/catlass-closure/bodies/include/tla/utils/type_traits.hpp",
+      "sha256": "ed09a88974e7cd1429d532057f1314369f72b411483cc12d0751dab4f99a08cc"
+    }
+  ],
+  "license": "CANN OpenSoftwareLicenseAgreement2.0 pluscompleteLICENSE-APACHE/ThirdPartyNotices/perfileheaders retained",
+  "preserved_miss": "c8f4756a9d61a99d86b5c6aa58b0dcdd",
+  "study_id": "R12",
+  "task": "optimization-w009-catlass-l1-a-residency",
+  "title": "Reuse full A tiles in native CATLASS L1 across N tasks",
+  "source_files": [
+    "catlass/examples/25_matmul_full_loadA/matmul_full_loadA.cpp"
+  ],
+  "cases": [
+    {
+      "case_id": "W009-R12-01",
+      "role": "gallery",
+      "seed": 91201,
+      "parameters": {
+        "M": 128,
+        "N": 256,
+        "K": 256
+      },
+      "scenario_designation": "gallery-cost"
+    },
+    {
+      "case_id": "W009-R12-02",
+      "role": "gallery",
+      "seed": 91202,
+      "parameters": {
+        "M": 128,
+        "N": 12288,
+        "K": 512
+      },
+      "scenario_designation": "gallery-benefit"
+    },
+    {
+      "case_id": "W009-R12-03",
+      "role": "heldout",
+      "seed": 91203,
+      "parameters": {
+        "M": 128,
+        "N": 16384,
+        "K": 512
+      },
+      "scenario_designation": "heldout-benefit"
+    },
+    {
+      "case_id": "W009-R12-04",
+      "role": "heldout",
+      "seed": 91204,
+      "parameters": {
+        "M": 128,
+        "N": 24576,
+        "K": 768
+      },
+      "scenario_designation": "heldout-benefit"
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W009-R12-GA",
+      "role": "guard",
+      "seed": 91291,
+      "parameters": {
+        "M": 127,
+        "N": 12304,
+        "K": 512
+      }
+    },
+    {
+      "case_id": "W009-R12-GB",
+      "role": "guard",
+      "seed": 91292,
+      "parameters": {
+        "M": 128,
+        "N": 256,
+        "K": 1024
+      }
+    }
+  ],
+  "contract": {
+    "admission": "NativeAtlasA2/A3C++only, exactpin40aced/source6initialfiles+68filteredclosure. Unmodifiedblock_mmad.hppumbrella imports~40unusednativeblocks/unconditionalTLAblocks; closureUNRESOLVEDmissc8f4756a9d61a99d86b5c6aa58b0dcdd. RootEXPLICITLYauthorizesCOMMONminimalbuildoverlay retainingEXACToriginalprimarydeclarations/includes/headernoticesfromblock_mmad.hpp1-108 plusONLYblock_mmad_pingpong_full_loadA.hpp specialization. RemoveunrelatedimplementationincludesONLY, no defaulttype/layout/operator rewrite. Preserveoriginalfullumbrellaasprovenance plusoverlaypatch/hash inBOTHarms. Allother68helpersbyte-identical. IfadditionalUSEDdependenciesmissing, retrieveboundedoriginalqueryBEFOREcode/math; noguessedhelpers/whole-buildclaim. GenericC++TLAutilitiesarelayouttemplates, notPythonDSL/A5execution.",
+    "interface": "PreparednativeFP16rowmajorGEMM C[M,N]=A[M,K]@B[K,N], immutableA/B/privateC, no bias/epilogue/readC. M1..128,N/Kpositive16multiples,K<=1024, allfrozenvaluesboundedFP16 integer/64,q[-4,4]. Bothreusepreallocatedprivateoutputs andnativeDeviceGemmparams/workspacesinitializedonce. Noallocator/upstreamexamplehostH2D/synchronization/aclInit/finalize/resetdeviceinsideAPI; DO NOTEXECUTEoriginalexamplemain(whichresetsdevice andonlyprintscomparisonfailure). Source-derivedlaunchbridgeusesexistingTorchNPUcontext/currentACLstream, sameheaderscompilehost/deviceParamsABI; no copiedABIpaddings/guessedhardwareSyncaddr.",
+    "before": "SameSOURCE FullLoadAblock/scheduler/tiling/buffering/math butforcecallneedLoadL1=true EVERYNtile. OnlyconditionalA-reloadskipdisabled; notgenericstreamingAalternative/vendorbestbaseline. RetainallA/BGM->L1/L0/cubemmads/fixpipeevents/pingpongB/unitflag/outputs. SameonecompletekernelAPI asafter andallactualAIC/AIVtasks accounted.",
+    "after": "Exactsource MatmulFullLoadA per-coretaskloop checksfirstBlock/previousgmOffsetA andskipsAload ONLYwhenSAMEAoffset onsubsequenttaskSAMEcore; sourceblockMmadneedLoadL1boolconditional controlsAcopy/events. Per-forwardfirstBlockALWAYSloads, no crossforwardL1cache assumption. Nogrid/swizzle/tile/precision/bufferingchange. ENABLE_UNIT_FLAGtrue, nativeArch::AtlasA2, L1tile128x256x256,L0tile128x256x64,stage2,K_MAX_SHAPE_DIM0 sourcemacro both.",
+    "schedule": "TargetNATIVEboardactual24Cube/48Vector;queryactualAICviaSDKandrecord BEFOREmath, require24forfrozenproof. SourceblockDim24CUBE (NOT48Vector). AllM<=128 usesEXACTnormalGemmIdentityBlockSwizzle<3,0>,NOTM>128specialFullLoadswizzle. loopsM1 ->taskn=t,m0; percoret=core+24*j,gmOffsetA0. MainN256control1task0reuse;N12288=48tasks24reuses,N16384=64tasks40reuses,N24576=96tasks72reuses. GA49tasks25reuses,GB1task0reuse. CPUindexonlyownership/resourceproofcatlass-schedule-resource-proof.json generatedBEFOREcode/time; counts aresource-derivedNOTdirectdynamicbranchmeasurement.",
+    "resources": "ActualAtlasA2constantsfromfilteredarch.hpp: L1512KiB,L1Areservedhalf256KiB, Bstage128KiBx2=256KiB, L0A64KiB/L0B64KiB/L0C128KiB. RoundedA bytes128*roundUpK16*2<=256KiB (K1024EXACTboundary); B2stagesfitOTHERhalf. L0A2*128*64*2=32KiB,L0B2*64*256*2=64KiB,L0C128*256*4=128KiB. SourceexampletotalL1checkALONEinsufficient; useallhalves/staticasserts/actualSDKcompilerresources/spills. M/NtailsGA127/12304(Ctail16) preserveactualsourcecopy masks, rowstrides32Baligned; allsourceaddresses withinownedstorage/halo. NonfrozenK>1024/M>128/unalignedN/K/layout/alias rejectsBEFOREcompile/cache. No memory-opportunity-costcomparisonclaimed becausebotharmsreserveSAMEfullAstrategy.",
+    "oracle": "ONEindependentCPUFP64matmul payload/case ->FP16RNEexpected, sourceCACCmustbecompiler-provenFP32 andsourceFixpipeFP16roundingbeforemath. InputsFP16integer/64absq<=4, productsint/4096 withabsint<=16, K<=1024soallpartialsumabs<=16384<2^24 =>FP32CubearithmeticEXACTregardlessadditionorder; minnonzero2^-12 normalFP16 noFTZambiguity. RequireALLnonzeroFP16bits vsindependentexpected BOTHarms, numericzeroexact/signssecondary, pairednonzerosbitexact; retainmaxF64forwarderror/rounding. CheckwholeC/scalarshape? matrixshape/dtype/halos/A-Bimmutability/nonalias, GArows/coltails,GBK1024boundaryONCE. SixcachedCPUexpectedonce AFTERALL12sourcecompile/resourcecasecells. IfsourceFixpipeactualroundingunsupportedrecordstopBEFORECPUexpected, no data-drivenmodelpick.",
+    "native_build": "UseactualsourceDeviceGemm<Kernel> +KernelAdapterforCATLASS_ARCH2201, construct Params viaToUnderlyingArguments SAMEcompiledheaders onhost/device. AICspecializationcomputes,AIVempty; recordactualcompiledengine/registration/taskselectors andaccountALLnativephysicaltasktypes. CheckCanImplement/Initialize/status/workspacesizes ratherthanupstreamexampleignoredreturns. ExternalCANN9.1SDK/compiler actualflags/product/version/headerhashreceipts fromregisteredruntime, no hardcodedmachinepaths/env. Retainnative.o/deviceassembly/fatbinary+host.so/overlay/header hashes/resources. Selectedbinaries/componentidentity vsCOMMONhost.so; hostx86textbytesareNOTNPUinstructioncounts. Compilation/ABI tests device-less/input-only/no launch, transactionalcachebeforemath; probe.runMUSTreject. No PythonCatlassDSL/A5/RDV/sourcepublicationfullbuild claim.",
+    "protocol": "SIXCPUexpectedonceafterall12input-onlycompile/code/resourcecells, numericONCEperarmcase/all12BEFORE80fullAPIprofileforwards8capturesguards0. No warmup/autotune/extratiming/profileIO/postdatatuning. Actualphysicalhealthyidlelease andBOTHcanonicalHOSTexports throughcapture+syncanalysis,600Cstartupwatch/phase/mmapBEFORENPUimports/init/transfers andrun+validate/profilebounded. SolevalidationCPUreadretainmismatchcount/firstcoords/actualexpected/finite diagnostics; no GPUdebugreplays. Wholemanifest/source/header/compiler/devicebinary/fixtures/raw10samples/PMUs/livereleaseproof retained; unsupportedfailed/noop valid outcomes defaultsfailedDRAFTfailclosed beforemath/explicitcompileinspectiononly.",
+    "claims": "Benefit02/03/04require actualrepeatedSAMEAoffsetwithinONEcore;no-reuse01controltestsconditionaloverhead, notpromisedslowdown. ProfileexpectaicMTE2workmayfallifAtransferbottleneck, butsourceAloadcount/GMrequestbytesnotphysicalHBMtraffic dueL2cache; no calibratedoccupancy/roofline/applicationlatency. ThisisolatesreuseconditioninFullLoadA, notL1reservationopportunitycostorvendorautotunerthroughput. Knownresidencytechniquenovelty0, sourceappdataonly. ROOTOSLA2/fullAPACHE/thirdparty andper-file notices retained."
+  },
+  "source_files_manifest": [
+    {
+      "path": "catlass/examples/25_matmul_full_loadA/matmul_full_loadA.cpp",
+      "sha256": "cd69e2aaac4f2fe9b856a80b935be8ad13d82055d80a657ebba4003aaaf18681"
+    }
+  ]
+}

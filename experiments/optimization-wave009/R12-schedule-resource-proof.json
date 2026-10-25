@@ -1,0 +1,2167 @@
+{
+  "kind": "CPUindex-only exact normalSwizzle/sourceA-offset andresource proof; no numericalfixtures orkernelmath",
+  "proof": [
+    {
+      "parameters": {
+        "M": 128,
+        "N": 256,
+        "K": 256
+      },
+      "cube_count": 24,
+      "total_tasks": 1,
+      "after_A_loads": 1,
+      "reused_A_tasks": 0,
+      "A_rounded_bytes": 65536,
+      "B_two_stage_bytes": 262144,
+      "ownership": [
+        {
+          "core": 0,
+          "task": 0,
+          "m": 0,
+          "n": 0,
+          "Aoffset": 0,
+          "reuses_A": false
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "M": 128,
+        "N": 12288,
+        "K": 512
+      },
+      "cube_count": 24,
+      "total_tasks": 48,
+      "after_A_loads": 24,
+      "reused_A_tasks": 24,
+      "A_rounded_bytes": 131072,
+      "B_two_stage_bytes": 262144,
+      "ownership": [
+        {
+          "core": 0,
+          "task": 0,
+          "m": 0,
+          "n": 0,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 0,
+          "task": 24,
+          "m": 0,
+          "n": 24,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 1,
+          "task": 1,
+          "m": 0,
+          "n": 1,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 1,
+          "task": 25,
+          "m": 0,
+          "n": 25,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 2,
+          "task": 2,
+          "m": 0,
+          "n": 2,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 2,
+          "task": 26,
+          "m": 0,
+          "n": 26,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 3,
+          "task": 3,
+          "m": 0,
+          "n": 3,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 3,
+          "task": 27,
+          "m": 0,
+          "n": 27,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 4,
+          "task": 4,
+          "m": 0,
+          "n": 4,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 4,
+          "task": 28,
+          "m": 0,
+          "n": 28,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 5,
+          "task": 5,
+          "m": 0,
+          "n": 5,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 5,
+          "task": 29,
+          "m": 0,
+          "n": 29,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 6,
+          "task": 6,
+          "m": 0,
+          "n": 6,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 6,
+          "task": 30,
+          "m": 0,
+          "n": 30,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 7,
+          "task": 7,
+          "m": 0,
+          "n": 7,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 7,
+          "task": 31,
+          "m": 0,
+          "n": 31,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 8,
+          "task": 8,
+          "m": 0,
+          "n": 8,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 8,
+          "task": 32,
+          "m": 0,
+          "n": 32,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 9,
+          "task": 9,
+          "m": 0,
+          "n": 9,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 9,
+          "task": 33,
+          "m": 0,
+          "n": 33,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 10,
+          "task": 10,
+          "m": 0,
+          "n": 10,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 10,
+          "task": 34,
+          "m": 0,
+          "n": 34,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 11,
+          "task": 11,
+          "m": 0,
+          "n": 11,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 11,
+          "task": 35,
+          "m": 0,
+          "n": 35,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 12,
+          "task": 12,
+          "m": 0,
+          "n": 12,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 12,
+          "task": 36,
+          "m": 0,
+          "n": 36,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 13,
+          "task": 13,
+          "m": 0,
+          "n": 13,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 13,
+          "task": 37,
+          "m": 0,
+          "n": 37,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 14,
+          "task": 14,
+          "m": 0,
+          "n": 14,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 14,
+          "task": 38,
+          "m": 0,
+          "n": 38,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 15,
+          "task": 15,
+          "m": 0,
+          "n": 15,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 15,
+          "task": 39,
+          "m": 0,
+          "n": 39,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 16,
+          "task": 16,
+          "m": 0,
+          "n": 16,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 16,
+          "task": 40,
+          "m": 0,
+          "n": 40,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 17,
+          "task": 17,
+          "m": 0,
+          "n": 17,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 17,
+          "task": 41,
+          "m": 0,
+          "n": 41,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 18,
+          "task": 18,
+          "m": 0,
+          "n": 18,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 18,
+          "task": 42,
+          "m": 0,
+          "n": 42,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 19,
+          "task": 19,
+          "m": 0,
+          "n": 19,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 19,
+          "task": 43,
+          "m": 0,
+          "n": 43,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 20,
+          "task": 20,
+          "m": 0,
+          "n": 20,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 20,
+          "task": 44,
+          "m": 0,
+          "n": 44,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 21,
+          "task": 21,
+          "m": 0,
+          "n": 21,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 21,
+          "task": 45,
+          "m": 0,
+          "n": 45,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 22,
+          "task": 22,
+          "m": 0,
+          "n": 22,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 22,
+          "task": 46,
+          "m": 0,
+          "n": 46,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 23,
+          "task": 23,
+          "m": 0,
+          "n": 23,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 23,
+          "task": 47,
+          "m": 0,
+          "n": 47,
+          "Aoffset": 0,
+          "reuses_A": true
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "M": 128,
+        "N": 16384,
+        "K": 512
+      },
+      "cube_count": 24,
+      "total_tasks": 64,
+      "after_A_loads": 24,
+      "reused_A_tasks": 40,
+      "A_rounded_bytes": 131072,
+      "B_two_stage_bytes": 262144,
+      "ownership": [
+        {
+          "core": 0,
+          "task": 0,
+          "m": 0,
+          "n": 0,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 0,
+          "task": 24,
+          "m": 0,
+          "n": 24,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 0,
+          "task": 48,
+          "m": 0,
+          "n": 48,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 1,
+          "task": 1,
+          "m": 0,
+          "n": 1,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 1,
+          "task": 25,
+          "m": 0,
+          "n": 25,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 1,
+          "task": 49,
+          "m": 0,
+          "n": 49,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 2,
+          "task": 2,
+          "m": 0,
+          "n": 2,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 2,
+          "task": 26,
+          "m": 0,
+          "n": 26,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 2,
+          "task": 50,
+          "m": 0,
+          "n": 50,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 3,
+          "task": 3,
+          "m": 0,
+          "n": 3,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 3,
+          "task": 27,
+          "m": 0,
+          "n": 27,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 3,
+          "task": 51,
+          "m": 0,
+          "n": 51,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 4,
+          "task": 4,
+          "m": 0,
+          "n": 4,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 4,
+          "task": 28,
+          "m": 0,
+          "n": 28,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 4,
+          "task": 52,
+          "m": 0,
+          "n": 52,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 5,
+          "task": 5,
+          "m": 0,
+          "n": 5,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 5,
+          "task": 29,
+          "m": 0,
+          "n": 29,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 5,
+          "task": 53,
+          "m": 0,
+          "n": 53,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 6,
+          "task": 6,
+          "m": 0,
+          "n": 6,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 6,
+          "task": 30,
+          "m": 0,
+          "n": 30,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 6,
+          "task": 54,
+          "m": 0,
+          "n": 54,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 7,
+          "task": 7,
+          "m": 0,
+          "n": 7,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 7,
+          "task": 31,
+          "m": 0,
+          "n": 31,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 7,
+          "task": 55,
+          "m": 0,
+          "n": 55,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 8,
+          "task": 8,
+          "m": 0,
+          "n": 8,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 8,
+          "task": 32,
+          "m": 0,
+          "n": 32,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 8,
+          "task": 56,
+          "m": 0,
+          "n": 56,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 9,
+          "task": 9,
+          "m": 0,
+          "n": 9,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 9,
+          "task": 33,
+          "m": 0,
+          "n": 33,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 9,
+          "task": 57,
+          "m": 0,
+          "n": 57,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 10,
+          "task": 10,
+          "m": 0,
+          "n": 10,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 10,
+          "task": 34,
+          "m": 0,
+          "n": 34,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 10,
+          "task": 58,
+          "m": 0,
+          "n": 58,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 11,
+          "task": 11,
+          "m": 0,
+          "n": 11,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 11,
+          "task": 35,
+          "m": 0,
+          "n": 35,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 11,
+          "task": 59,
+          "m": 0,
+          "n": 59,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 12,
+          "task": 12,
+          "m": 0,
+          "n": 12,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 12,
+          "task": 36,
+          "m": 0,
+          "n": 36,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 12,
+          "task": 60,
+          "m": 0,
+          "n": 60,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 13,
+          "task": 13,
+          "m": 0,
+          "n": 13,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 13,
+          "task": 37,
+          "m": 0,
+          "n": 37,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 13,
+          "task": 61,
+          "m": 0,
+          "n": 61,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 14,
+          "task": 14,
+          "m": 0,
+          "n": 14,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 14,
+          "task": 38,
+          "m": 0,
+          "n": 38,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 14,
+          "task": 62,
+          "m": 0,
+          "n": 62,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 15,
+          "task": 15,
+          "m": 0,
+          "n": 15,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 15,
+          "task": 39,
+          "m": 0,
+          "n": 39,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 15,
+          "task": 63,
+          "m": 0,
+          "n": 63,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 16,
+          "task": 16,
+          "m": 0,
+          "n": 16,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 16,
+          "task": 40,
+          "m": 0,
+          "n": 40,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 17,
+          "task": 17,
+          "m": 0,
+          "n": 17,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 17,
+          "task": 41,
+          "m": 0,
+          "n": 41,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 18,
+          "task": 18,
+          "m": 0,
+          "n": 18,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 18,
+          "task": 42,
+          "m": 0,
+          "n": 42,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 19,
+          "task": 19,
+          "m": 0,
+          "n": 19,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 19,
+          "task": 43,
+          "m": 0,
+          "n": 43,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 20,
+          "task": 20,
+          "m": 0,
+          "n": 20,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 20,
+          "task": 44,
+          "m": 0,
+          "n": 44,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 21,
+          "task": 21,
+          "m": 0,
+          "n": 21,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 21,
+          "task": 45,
+          "m": 0,
+          "n": 45,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 22,
+          "task": 22,
+          "m": 0,
+          "n": 22,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 22,
+          "task": 46,
+          "m": 0,
+          "n": 46,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 23,
+          "task": 23,
+          "m": 0,
+          "n": 23,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 23,
+          "task": 47,
+          "m": 0,
+          "n": 47,
+          "Aoffset": 0,
+          "reuses_A": true
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "M": 128,
+        "N": 24576,
+        "K": 768
+      },
+      "cube_count": 24,
+      "total_tasks": 96,
+      "after_A_loads": 24,
+      "reused_A_tasks": 72,
+      "A_rounded_bytes": 196608,
+      "B_two_stage_bytes": 262144,
+      "ownership": [
+        {
+          "core": 0,
+          "task": 0,
+          "m": 0,
+          "n": 0,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 0,
+          "task": 24,
+          "m": 0,
+          "n": 24,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 0,
+          "task": 48,
+          "m": 0,
+          "n": 48,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 0,
+          "task": 72,
+          "m": 0,
+          "n": 72,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 1,
+          "task": 1,
+          "m": 0,
+          "n": 1,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 1,
+          "task": 25,
+          "m": 0,
+          "n": 25,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 1,
+          "task": 49,
+          "m": 0,
+          "n": 49,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 1,
+          "task": 73,
+          "m": 0,
+          "n": 73,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 2,
+          "task": 2,
+          "m": 0,
+          "n": 2,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 2,
+          "task": 26,
+          "m": 0,
+          "n": 26,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 2,
+          "task": 50,
+          "m": 0,
+          "n": 50,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 2,
+          "task": 74,
+          "m": 0,
+          "n": 74,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 3,
+          "task": 3,
+          "m": 0,
+          "n": 3,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 3,
+          "task": 27,
+          "m": 0,
+          "n": 27,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 3,
+          "task": 51,
+          "m": 0,
+          "n": 51,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 3,
+          "task": 75,
+          "m": 0,
+          "n": 75,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 4,
+          "task": 4,
+          "m": 0,
+          "n": 4,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 4,
+          "task": 28,
+          "m": 0,
+          "n": 28,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 4,
+          "task": 52,
+          "m": 0,
+          "n": 52,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 4,
+          "task": 76,
+          "m": 0,
+          "n": 76,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 5,
+          "task": 5,
+          "m": 0,
+          "n": 5,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 5,
+          "task": 29,
+          "m": 0,
+          "n": 29,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 5,
+          "task": 53,
+          "m": 0,
+          "n": 53,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 5,
+          "task": 77,
+          "m": 0,
+          "n": 77,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 6,
+          "task": 6,
+          "m": 0,
+          "n": 6,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 6,
+          "task": 30,
+          "m": 0,
+          "n": 30,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 6,
+          "task": 54,
+          "m": 0,
+          "n": 54,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 6,
+          "task": 78,
+          "m": 0,
+          "n": 78,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 7,
+          "task": 7,
+          "m": 0,
+          "n": 7,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 7,
+          "task": 31,
+          "m": 0,
+          "n": 31,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 7,
+          "task": 55,
+          "m": 0,
+          "n": 55,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 7,
+          "task": 79,
+          "m": 0,
+          "n": 79,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 8,
+          "task": 8,
+          "m": 0,
+          "n": 8,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 8,
+          "task": 32,
+          "m": 0,
+          "n": 32,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 8,
+          "task": 56,
+          "m": 0,
+          "n": 56,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 8,
+          "task": 80,
+          "m": 0,
+          "n": 80,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 9,
+          "task": 9,
+          "m": 0,
+          "n": 9,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 9,
+          "task": 33,
+          "m": 0,
+          "n": 33,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 9,
+          "task": 57,
+          "m": 0,
+          "n": 57,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 9,
+          "task": 81,
+          "m": 0,
+          "n": 81,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 10,
+          "task": 10,
+          "m": 0,
+          "n": 10,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 10,
+          "task": 34,
+          "m": 0,
+          "n": 34,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 10,
+          "task": 58,
+          "m": 0,
+          "n": 58,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 10,
+          "task": 82,
+          "m": 0,
+          "n": 82,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 11,
+          "task": 11,
+          "m": 0,
+          "n": 11,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 11,
+          "task": 35,
+          "m": 0,
+          "n": 35,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 11,
+          "task": 59,
+          "m": 0,
+          "n": 59,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 11,
+          "task": 83,
+          "m": 0,
+          "n": 83,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 12,
+          "task": 12,
+          "m": 0,
+          "n": 12,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 12,
+          "task": 36,
+          "m": 0,
+          "n": 36,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 12,
+          "task": 60,
+          "m": 0,
+          "n": 60,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 12,
+          "task": 84,
+          "m": 0,
+          "n": 84,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 13,
+          "task": 13,
+          "m": 0,
+          "n": 13,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 13,
+          "task": 37,
+          "m": 0,
+          "n": 37,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 13,
+          "task": 61,
+          "m": 0,
+          "n": 61,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 13,
+          "task": 85,
+          "m": 0,
+          "n": 85,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 14,
+          "task": 14,
+          "m": 0,
+          "n": 14,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 14,
+          "task": 38,
+          "m": 0,
+          "n": 38,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 14,
+          "task": 62,
+          "m": 0,
+          "n": 62,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 14,
+          "task": 86,
+          "m": 0,
+          "n": 86,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 15,
+          "task": 15,
+          "m": 0,
+          "n": 15,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 15,
+          "task": 39,
+          "m": 0,
+          "n": 39,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 15,
+          "task": 63,
+          "m": 0,
+          "n": 63,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 15,
+          "task": 87,
+          "m": 0,
+          "n": 87,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 16,
+          "task": 16,
+          "m": 0,
+          "n": 16,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 16,
+          "task": 40,
+          "m": 0,
+          "n": 40,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 16,
+          "task": 64,
+          "m": 0,
+          "n": 64,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 16,
+          "task": 88,
+          "m": 0,
+          "n": 88,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 17,
+          "task": 17,
+          "m": 0,
+          "n": 17,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 17,
+          "task": 41,
+          "m": 0,
+          "n": 41,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 17,
+          "task": 65,
+          "m": 0,
+          "n": 65,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 17,
+          "task": 89,
+          "m": 0,
+          "n": 89,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 18,
+          "task": 18,
+          "m": 0,
+          "n": 18,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 18,
+          "task": 42,
+          "m": 0,
+          "n": 42,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 18,
+          "task": 66,
+          "m": 0,
+          "n": 66,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 18,
+          "task": 90,
+          "m": 0,
+          "n": 90,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 19,
+          "task": 19,
+          "m": 0,
+          "n": 19,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 19,
+          "task": 43,
+          "m": 0,
+          "n": 43,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 19,
+          "task": 67,
+          "m": 0,
+          "n": 67,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 19,
+          "task": 91,
+          "m": 0,
+          "n": 91,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 20,
+          "task": 20,
+          "m": 0,
+          "n": 20,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 20,
+          "task": 44,
+          "m": 0,
+          "n": 44,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 20,
+          "task": 68,
+          "m": 0,
+          "n": 68,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 20,
+          "task": 92,
+          "m": 0,
+          "n": 92,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 21,
+          "task": 21,
+          "m": 0,
+          "n": 21,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 21,
+          "task": 45,
+          "m": 0,
+          "n": 45,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 21,
+          "task": 69,
+          "m": 0,
+          "n": 69,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 21,
+          "task": 93,
+          "m": 0,
+          "n": 93,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 22,
+          "task": 22,
+          "m": 0,
+          "n": 22,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 22,
+          "task": 46,
+          "m": 0,
+          "n": 46,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 22,
+          "task": 70,
+          "m": 0,
+          "n": 70,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 22,
+          "task": 94,
+          "m": 0,
+          "n": 94,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 23,
+          "task": 23,
+          "m": 0,
+          "n": 23,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 23,
+          "task": 47,
+          "m": 0,
+          "n": 47,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 23,
+          "task": 71,
+          "m": 0,
+          "n": 71,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 23,
+          "task": 95,
+          "m": 0,
+          "n": 95,
+          "Aoffset": 0,
+          "reuses_A": true
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "M": 127,
+        "N": 12304,
+        "K": 512
+      },
+      "cube_count": 24,
+      "total_tasks": 49,
+      "after_A_loads": 24,
+      "reused_A_tasks": 25,
+      "A_rounded_bytes": 131072,
+      "B_two_stage_bytes": 262144,
+      "ownership": [
+        {
+          "core": 0,
+          "task": 0,
+          "m": 0,
+          "n": 0,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 0,
+          "task": 24,
+          "m": 0,
+          "n": 24,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 0,
+          "task": 48,
+          "m": 0,
+          "n": 48,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 1,
+          "task": 1,
+          "m": 0,
+          "n": 1,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 1,
+          "task": 25,
+          "m": 0,
+          "n": 25,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 2,
+          "task": 2,
+          "m": 0,
+          "n": 2,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 2,
+          "task": 26,
+          "m": 0,
+          "n": 26,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 3,
+          "task": 3,
+          "m": 0,
+          "n": 3,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 3,
+          "task": 27,
+          "m": 0,
+          "n": 27,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 4,
+          "task": 4,
+          "m": 0,
+          "n": 4,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 4,
+          "task": 28,
+          "m": 0,
+          "n": 28,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 5,
+          "task": 5,
+          "m": 0,
+          "n": 5,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 5,
+          "task": 29,
+          "m": 0,
+          "n": 29,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 6,
+          "task": 6,
+          "m": 0,
+          "n": 6,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 6,
+          "task": 30,
+          "m": 0,
+          "n": 30,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 7,
+          "task": 7,
+          "m": 0,
+          "n": 7,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 7,
+          "task": 31,
+          "m": 0,
+          "n": 31,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 8,
+          "task": 8,
+          "m": 0,
+          "n": 8,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 8,
+          "task": 32,
+          "m": 0,
+          "n": 32,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 9,
+          "task": 9,
+          "m": 0,
+          "n": 9,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 9,
+          "task": 33,
+          "m": 0,
+          "n": 33,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 10,
+          "task": 10,
+          "m": 0,
+          "n": 10,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 10,
+          "task": 34,
+          "m": 0,
+          "n": 34,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 11,
+          "task": 11,
+          "m": 0,
+          "n": 11,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 11,
+          "task": 35,
+          "m": 0,
+          "n": 35,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 12,
+          "task": 12,
+          "m": 0,
+          "n": 12,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 12,
+          "task": 36,
+          "m": 0,
+          "n": 36,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 13,
+          "task": 13,
+          "m": 0,
+          "n": 13,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 13,
+          "task": 37,
+          "m": 0,
+          "n": 37,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 14,
+          "task": 14,
+          "m": 0,
+          "n": 14,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 14,
+          "task": 38,
+          "m": 0,
+          "n": 38,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 15,
+          "task": 15,
+          "m": 0,
+          "n": 15,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 15,
+          "task": 39,
+          "m": 0,
+          "n": 39,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 16,
+          "task": 16,
+          "m": 0,
+          "n": 16,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 16,
+          "task": 40,
+          "m": 0,
+          "n": 40,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 17,
+          "task": 17,
+          "m": 0,
+          "n": 17,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 17,
+          "task": 41,
+          "m": 0,
+          "n": 41,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 18,
+          "task": 18,
+          "m": 0,
+          "n": 18,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 18,
+          "task": 42,
+          "m": 0,
+          "n": 42,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 19,
+          "task": 19,
+          "m": 0,
+          "n": 19,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 19,
+          "task": 43,
+          "m": 0,
+          "n": 43,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 20,
+          "task": 20,
+          "m": 0,
+          "n": 20,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 20,
+          "task": 44,
+          "m": 0,
+          "n": 44,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 21,
+          "task": 21,
+          "m": 0,
+          "n": 21,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 21,
+          "task": 45,
+          "m": 0,
+          "n": 45,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 22,
+          "task": 22,
+          "m": 0,
+          "n": 22,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 22,
+          "task": 46,
+          "m": 0,
+          "n": 46,
+          "Aoffset": 0,
+          "reuses_A": true
+        },
+        {
+          "core": 23,
+          "task": 23,
+          "m": 0,
+          "n": 23,
+          "Aoffset": 0,
+          "reuses_A": false
+        },
+        {
+          "core": 23,
+          "task": 47,
+          "m": 0,
+          "n": 47,
+          "Aoffset": 0,
+          "reuses_A": true
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "M": 128,
+        "N": 256,
+        "K": 1024
+      },
+      "cube_count": 24,
+      "total_tasks": 1,
+      "after_A_loads": 1,
+      "reused_A_tasks": 0,
+      "A_rounded_bytes": 262144,
+      "B_two_stage_bytes": 262144,
+      "ownership": [
+        {
+          "core": 0,
+          "task": 0,
+          "m": 0,
+          "n": 0,
+          "Aoffset": 0,
+          "reuses_A": false
+        }
+      ]
+    }
+  ]
+}

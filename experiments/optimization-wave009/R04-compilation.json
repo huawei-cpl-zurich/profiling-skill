@@ -1,0 +1,1034 @@
+[
+  {
+    "case_id": "W009-R04-01",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "a5bf41c700cb7ab3da650da44183ea93df6ecededce6668695d7dfef0de68ac1",
+        "name": "_triton_rope",
+        "binaries": {
+          "ttir": "232729c641bb7e1f9ede1e37611af8e5ec556006a7e2f5cd5fb52f59bba6dd53",
+          "ttadapter": "af6c2a013ad8c048502ad7d5af890c18512919eadc9600c92c007668c84dc563",
+          "npubin": "a16d0ece8ce7787da6ab9943f2059ac6a0ad1c29d4868e75e066b9ad49585b3e"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "prepared source rope_forward",
+      "arm": "before",
+      "route": "reference",
+      "source_aliases": {
+        "q": false,
+        "k": false
+      },
+      "charged_torch_copies": 2,
+      "device_kernel_calls": 0,
+      "grid": [
+        33
+      ],
+      "flags": {
+        "BACKWARD_PASS": false,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "reused_outputs": true,
+      "input_strides": {
+        "q": [
+          16896,
+          2112,
+          64,
+          1
+        ],
+        "k": [
+          4224,
+          2112,
+          64,
+          1
+        ],
+        "cos": [
+          2112,
+          64,
+          1
+        ],
+        "sin": [
+          2112,
+          64,
+          1
+        ]
+      },
+      "output_strides": [
+        [
+          16896,
+          64,
+          512,
+          1
+        ],
+        [
+          4224,
+          64,
+          128,
+          1
+        ],
+        [
+          2112,
+          64,
+          1
+        ],
+        [
+          2112,
+          64,
+          1
+        ]
+      ],
+      "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim",
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R04-01",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "2b5edcc5d2d4719f30a7c3e9f6f66307cb5a2f44888bce534396d83e53b5bfa4",
+        "name": "_strided_rope",
+        "binaries": {
+          "ttir": "41baf86ddeefe92d2a2299de2575c09f2abc95fcfb886a8b68c8cc33bcd456d3",
+          "ttadapter": "a0142bd7d79f6940e78bb6eae209512cfa2838318497928e446a6ec8b9719da2",
+          "npubin": "0944dbb7646e854f9bc9f02d1cf37f9db3abfbfde0c244576122082edf4ff263"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "prepared source rope_forward",
+      "arm": "after",
+      "route": "optimized",
+      "source_aliases": {
+        "q": false,
+        "k": false
+      },
+      "charged_torch_copies": 0,
+      "device_kernel_calls": 0,
+      "grid": [
+        33
+      ],
+      "flags": {
+        "BACKWARD_PASS": false,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "reused_outputs": true,
+      "input_strides": {
+        "q": [
+          16896,
+          2112,
+          64,
+          1
+        ],
+        "k": [
+          4224,
+          2112,
+          64,
+          1
+        ],
+        "cos": [
+          2112,
+          64,
+          1
+        ],
+        "sin": [
+          2112,
+          64,
+          1
+        ]
+      },
+      "output_strides": [
+        [
+          16896,
+          64,
+          512,
+          1
+        ],
+        [
+          4224,
+          64,
+          128,
+          1
+        ],
+        [
+          2112,
+          64,
+          1
+        ],
+        [
+          2112,
+          64,
+          1
+        ]
+      ],
+      "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim",
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R04-02",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "b3b64937f70cd309e78a7eed9b350ea6bea0cb516611dfb3cb5e6875a17ef813",
+        "name": "_triton_rope",
+        "binaries": {
+          "ttir": "edf548f26f53549fdae2982ecf39ea10a87bb72b89774c954fa2b0d70f2a775a",
+          "ttadapter": "e4142f67bb772e5b598091bb869ca68d3d1ef0f09e9bb5e546580369cb0dcf95",
+          "npubin": "9426a72585c1ed138cebdaf1fb98703f3e8eea99f32cc3c31f821a8aa911945a"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "prepared source rope_forward",
+      "arm": "before",
+      "route": "reference",
+      "source_aliases": {
+        "q": false,
+        "k": false
+      },
+      "charged_torch_copies": 2,
+      "device_kernel_calls": 0,
+      "grid": [
+        512
+      ],
+      "flags": {
+        "BACKWARD_PASS": false,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "reused_outputs": true,
+      "input_strides": {
+        "q": [
+          262144,
+          16384,
+          64,
+          1
+        ],
+        "k": [
+          65536,
+          16384,
+          64,
+          1
+        ],
+        "cos": [
+          16384,
+          64,
+          1
+        ],
+        "sin": [
+          16384,
+          64,
+          1
+        ]
+      },
+      "output_strides": [
+        [
+          262144,
+          64,
+          1024,
+          1
+        ],
+        [
+          65536,
+          64,
+          256,
+          1
+        ],
+        [
+          16384,
+          64,
+          1
+        ],
+        [
+          16384,
+          64,
+          1
+        ]
+      ],
+      "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim",
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R04-02",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "0681d95f129c1834b46ddf71c889dbf1399ca996fbbb3100658dd044f9dc9d45",
+        "name": "_strided_rope",
+        "binaries": {
+          "ttir": "d241d1c3453d13c21d6e30602f377a022afb2e4e84dfc76c828633eb52b46d17",
+          "ttadapter": "bcb90eb26bad1f40f9f7b0e58b8ce71b76adc21ab7d0c008e1bfd67771f68102",
+          "npubin": "0936615cccf8b59c532e5d462eabbf75c32157d78559dcb746c29be6d7733dbf"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "prepared source rope_forward",
+      "arm": "after",
+      "route": "optimized",
+      "source_aliases": {
+        "q": false,
+        "k": false
+      },
+      "charged_torch_copies": 0,
+      "device_kernel_calls": 0,
+      "grid": [
+        512
+      ],
+      "flags": {
+        "BACKWARD_PASS": false,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "reused_outputs": true,
+      "input_strides": {
+        "q": [
+          262144,
+          16384,
+          64,
+          1
+        ],
+        "k": [
+          65536,
+          16384,
+          64,
+          1
+        ],
+        "cos": [
+          16384,
+          64,
+          1
+        ],
+        "sin": [
+          16384,
+          64,
+          1
+        ]
+      },
+      "output_strides": [
+        [
+          262144,
+          64,
+          1024,
+          1
+        ],
+        [
+          65536,
+          64,
+          256,
+          1
+        ],
+        [
+          16384,
+          64,
+          1
+        ],
+        [
+          16384,
+          64,
+          1
+        ]
+      ],
+      "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim",
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R04-03",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "6463661e753cd1cec987c61b2ae1a0f8a8490898a3bdb680ff4d72c19bc3919c",
+        "name": "_triton_rope",
+        "binaries": {
+          "ttir": "2865a7ad0316da4131f769edd0a9b80e1841d2ca507e05bce52afacb85e44ad2",
+          "ttadapter": "676266034a4d2e1f912a11252548ef6a81efffd4e7040b896252fd020ce4574d",
+          "npubin": "a16d0ece8ce7787da6ab9943f2059ac6a0ad1c29d4868e75e066b9ad49585b3e"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "prepared source rope_forward",
+      "arm": "before",
+      "route": "reference",
+      "source_aliases": {
+        "q": false,
+        "k": false
+      },
+      "charged_torch_copies": 2,
+      "device_kernel_calls": 0,
+      "grid": [
+        256
+      ],
+      "flags": {
+        "BACKWARD_PASS": false,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "reused_outputs": true,
+      "input_strides": {
+        "q": [
+          131072,
+          16384,
+          64,
+          1
+        ],
+        "k": [
+          32768,
+          16384,
+          64,
+          1
+        ],
+        "cos": [
+          16384,
+          64,
+          1
+        ],
+        "sin": [
+          16384,
+          64,
+          1
+        ]
+      },
+      "output_strides": [
+        [
+          131072,
+          64,
+          512,
+          1
+        ],
+        [
+          32768,
+          64,
+          128,
+          1
+        ],
+        [
+          16384,
+          64,
+          1
+        ],
+        [
+          16384,
+          64,
+          1
+        ]
+      ],
+      "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim",
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R04-03",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "6fdbb1175121a7797b57e833b6d345b6408f4e54a48482999243c30c779432ee",
+        "name": "_strided_rope",
+        "binaries": {
+          "ttir": "0a4707954ab46a01a33430345e9978cb748028752eea079dc15df9580f0e08dc",
+          "ttadapter": "e658f74cd589ef187eeec3d600c67edab73dc56f68b89aada90fce7ff556e6b7",
+          "npubin": "0944dbb7646e854f9bc9f02d1cf37f9db3abfbfde0c244576122082edf4ff263"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "prepared source rope_forward",
+      "arm": "after",
+      "route": "optimized",
+      "source_aliases": {
+        "q": false,
+        "k": false
+      },
+      "charged_torch_copies": 0,
+      "device_kernel_calls": 0,
+      "grid": [
+        256
+      ],
+      "flags": {
+        "BACKWARD_PASS": false,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "reused_outputs": true,
+      "input_strides": {
+        "q": [
+          131072,
+          16384,
+          64,
+          1
+        ],
+        "k": [
+          32768,
+          16384,
+          64,
+          1
+        ],
+        "cos": [
+          16384,
+          64,
+          1
+        ],
+        "sin": [
+          16384,
+          64,
+          1
+        ]
+      },
+      "output_strides": [
+        [
+          131072,
+          64,
+          512,
+          1
+        ],
+        [
+          32768,
+          64,
+          128,
+          1
+        ],
+        [
+          16384,
+          64,
+          1
+        ],
+        [
+          16384,
+          64,
+          1
+        ]
+      ],
+      "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim",
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R04-04",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "ce5ac3029551bc5f5ada139f56a9ab1b4dbb56443683a4cf4ccdb83d6f3b188c",
+        "name": "_triton_rope",
+        "binaries": {
+          "ttir": "d4a78e0cc4a633fa1d2aa8126674e39b15ec2db0d66bb652a91519b7ca1b904b",
+          "ttadapter": "3e6828c01793a99b91ceb5d1d185b19f78f02f9212b808ece78fd92ef28029e9",
+          "npubin": "fe478a15e09658650e3fed25ad27738c43a459a7c052950c960f1c6b04960b50"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "prepared source rope_forward",
+      "arm": "before",
+      "route": "reference",
+      "source_aliases": {
+        "q": false,
+        "k": false
+      },
+      "charged_torch_copies": 2,
+      "device_kernel_calls": 0,
+      "grid": [
+        66
+      ],
+      "flags": {
+        "BACKWARD_PASS": false,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "reused_outputs": true,
+      "input_strides": {
+        "q": [
+          33792,
+          2112,
+          64,
+          1
+        ],
+        "k": [
+          8448,
+          2112,
+          64,
+          1
+        ],
+        "cos": [
+          2112,
+          64,
+          1
+        ],
+        "sin": [
+          2112,
+          64,
+          1
+        ]
+      },
+      "output_strides": [
+        [
+          33792,
+          64,
+          1024,
+          1
+        ],
+        [
+          8448,
+          64,
+          256,
+          1
+        ],
+        [
+          2112,
+          64,
+          1
+        ],
+        [
+          2112,
+          64,
+          1
+        ]
+      ],
+      "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim",
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R04-04",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "68ce09de225a5d25c5df439147357269f028e892148455b061d7ab46a33f32a3",
+        "name": "_strided_rope",
+        "binaries": {
+          "ttir": "39f18b0a2eb61be79a2f0c609df28d6857de2bdac294126e0ca058a0f121a81b",
+          "ttadapter": "eb3c8e5e05ca6866941f57092d0a2a89a5ca9cc62912d79ce81bded9d7d7ef9d",
+          "npubin": "615fb7a5cbc09420a816e8344fedc6cee7381c86de5cf365d1e7144eea7d5116"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "prepared source rope_forward",
+      "arm": "after",
+      "route": "optimized",
+      "source_aliases": {
+        "q": false,
+        "k": false
+      },
+      "charged_torch_copies": 0,
+      "device_kernel_calls": 0,
+      "grid": [
+        66
+      ],
+      "flags": {
+        "BACKWARD_PASS": false,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "reused_outputs": true,
+      "input_strides": {
+        "q": [
+          33792,
+          2112,
+          64,
+          1
+        ],
+        "k": [
+          8448,
+          2112,
+          64,
+          1
+        ],
+        "cos": [
+          2112,
+          64,
+          1
+        ],
+        "sin": [
+          2112,
+          64,
+          1
+        ]
+      },
+      "output_strides": [
+        [
+          33792,
+          64,
+          1024,
+          1
+        ],
+        [
+          8448,
+          64,
+          256,
+          1
+        ],
+        [
+          2112,
+          64,
+          1
+        ],
+        [
+          2112,
+          64,
+          1
+        ]
+      ],
+      "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim",
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R04-GA",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "130c1f3be353e1311fd2f99db27605cc4f4092c63a80060e2b7f6b778b33d0cf",
+        "name": "_triton_rope",
+        "binaries": {
+          "ttir": "61708a70e7bebd04a84333e8e513b9b3d2c0aa01310846bd1a96dcc5174cf09b",
+          "ttadapter": "75262a21fbe21b341e255718a4768621f1766a647bf6f4939601e18060c221f3",
+          "npubin": "49e39a1d561b9a972f66b253e9cc619f16b857b8bd0d87d902d237a769b6ed3b"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "prepared source rope_forward",
+      "arm": "before",
+      "route": "reference",
+      "source_aliases": {
+        "q": false,
+        "k": true
+      },
+      "charged_torch_copies": 1,
+      "device_kernel_calls": 0,
+      "grid": [
+        34
+      ],
+      "flags": {
+        "BACKWARD_PASS": false,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "reused_outputs": true,
+      "input_strides": {
+        "q": [
+          2448,
+          816,
+          48,
+          1
+        ],
+        "k": [
+          816,
+          816,
+          48,
+          1
+        ],
+        "cos": [
+          816,
+          48,
+          1
+        ],
+        "sin": [
+          816,
+          48,
+          1
+        ]
+      },
+      "output_strides": [
+        [
+          2448,
+          48,
+          144,
+          1
+        ],
+        [
+          816,
+          816,
+          48,
+          1
+        ],
+        [
+          816,
+          48,
+          1
+        ],
+        [
+          816,
+          48,
+          1
+        ]
+      ],
+      "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim",
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R04-GA",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "bb732496aecaf06fc156353070fd1baeb97d5cbf8ec0e0554605960cf675d05c",
+        "name": "_strided_rope",
+        "binaries": {
+          "ttir": "9152bcab384c2551014700b942a814511056b09de963886eb0366e556857800d",
+          "ttadapter": "57dee5e69efd471b3ac5981ba994eb3ce865dc0301f1d0e612ede3e25eef1280",
+          "npubin": "f34c332e05f21b03e4dd4f7d3acfbe14b9065d05a2f76bad85164347230cd684"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "prepared source rope_forward",
+      "arm": "after",
+      "route": "optimized",
+      "source_aliases": {
+        "q": false,
+        "k": true
+      },
+      "charged_torch_copies": 0,
+      "device_kernel_calls": 0,
+      "grid": [
+        34
+      ],
+      "flags": {
+        "BACKWARD_PASS": false,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "reused_outputs": true,
+      "input_strides": {
+        "q": [
+          2448,
+          816,
+          48,
+          1
+        ],
+        "k": [
+          816,
+          816,
+          48,
+          1
+        ],
+        "cos": [
+          816,
+          48,
+          1
+        ],
+        "sin": [
+          816,
+          48,
+          1
+        ]
+      },
+      "output_strides": [
+        [
+          2448,
+          48,
+          144,
+          1
+        ],
+        [
+          816,
+          816,
+          48,
+          1
+        ],
+        [
+          816,
+          48,
+          1
+        ],
+        [
+          816,
+          48,
+          1
+        ]
+      ],
+      "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim",
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R04-GB",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "21624cb2778982048ec31293659a89bd754b375f0dc42100bfcddc98ec2bb0ad",
+        "name": "_triton_rope",
+        "binaries": {
+          "ttir": "55df1f4ae1d10b5930c160c07f55fb08df608a6c43de3dc3248c4bd92c0ce78e",
+          "ttadapter": "f70050e5dad535521952c65f6a8330232efeaf52abbbbbf95922b73362fde3b9",
+          "npubin": "5d25f1861bf95beaafea0d1bc239770b3456ff32c76e0218868742824599ccbd"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "prepared source rope_forward",
+      "arm": "before",
+      "route": "reference",
+      "source_aliases": {
+        "q": true,
+        "k": true
+      },
+      "charged_torch_copies": 0,
+      "device_kernel_calls": 0,
+      "grid": [
+        17
+      ],
+      "flags": {
+        "BACKWARD_PASS": false,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "reused_outputs": true,
+      "input_strides": {
+        "q": [
+          4352,
+          64,
+          256,
+          1
+        ],
+        "k": [
+          2176,
+          64,
+          128,
+          1
+        ],
+        "cos": [
+          1088,
+          64,
+          1
+        ],
+        "sin": [
+          1088,
+          64,
+          1
+        ]
+      },
+      "output_strides": [
+        [
+          4352,
+          64,
+          256,
+          1
+        ],
+        [
+          2176,
+          64,
+          128,
+          1
+        ],
+        [
+          1088,
+          64,
+          1
+        ],
+        [
+          1088,
+          64,
+          1
+        ]
+      ],
+      "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim",
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W009-R04-GB",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "21624cb2778982048ec31293659a89bd754b375f0dc42100bfcddc98ec2bb0ad",
+        "name": "_triton_rope",
+        "binaries": {
+          "ttir": "55df1f4ae1d10b5930c160c07f55fb08df608a6c43de3dc3248c4bd92c0ce78e",
+          "ttadapter": "f70050e5dad535521952c65f6a8330232efeaf52abbbbbf95922b73362fde3b9",
+          "npubin": "5d25f1861bf95beaafea0d1bc239770b3456ff32c76e0218868742824599ccbd"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "prepared source rope_forward",
+      "arm": "after",
+      "route": "reference",
+      "source_aliases": {
+        "q": true,
+        "k": true
+      },
+      "charged_torch_copies": 0,
+      "device_kernel_calls": 0,
+      "grid": [
+        17
+      ],
+      "flags": {
+        "BACKWARD_PASS": false,
+        "num_stages": 1,
+        "multibuffer": false,
+        "enable_fp_fusion": false
+      },
+      "reused_outputs": true,
+      "input_strides": {
+        "q": [
+          4352,
+          64,
+          256,
+          1
+        ],
+        "k": [
+          2176,
+          64,
+          128,
+          1
+        ],
+        "cos": [
+          1088,
+          64,
+          1
+        ],
+        "sin": [
+          1088,
+          64,
+          1
+        ]
+      },
+      "output_strides": [
+        [
+          4352,
+          64,
+          256,
+          1
+        ],
+        [
+          2176,
+          64,
+          128,
+          1
+        ],
+        [
+          1088,
+          64,
+          1
+        ],
+        [
+          1088,
+          64,
+          1
+        ]
+      ],
+      "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim",
+      "compile_only_probe": true
+    }
+  }
+]

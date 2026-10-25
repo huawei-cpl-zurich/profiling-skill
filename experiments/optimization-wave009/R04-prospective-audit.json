@@ -1,0 +1,46 @@
+{
+  "kind": "source-contract-mismatch-singleton-key-head",
+  "nonfrozen": true,
+  "parameters": {
+    "B": 2,
+    "S": 19,
+    "Hq": 5,
+    "Hk": 1,
+    "D": 46
+  },
+  "q_original_strides": [
+    4370,
+    874,
+    46,
+    1
+  ],
+  "q_transpose_strides": [
+    4370,
+    46,
+    874,
+    1
+  ],
+  "q_contiguous_aliases_input": false,
+  "k_original_strides": [
+    874,
+    874,
+    46,
+    1
+  ],
+  "k_transpose_strides": [
+    874,
+    46,
+    874,
+    1
+  ],
+  "k_transpose_is_contiguous": true,
+  "k_contiguous_aliases_input": true,
+  "scientific_oracles": 0,
+  "real_compiles": 0,
+  "npu_calls": 0,
+  "remote_operations": 0,
+  "v1_sha256": "1b3ff0a44644cabd09db01908701ffc0da97e041996ccf6dd5be483e1faac2f0",
+  "v1_status": "UNEXECUTED, corrected prospectively before source implementation/math",
+  "v2_sha256": "16a5d0d8c765ab9422161acc558483462e455729605e8e22efb9fd894f02ebe0",
+  "resolution": "source GA mixed Qprivate/Kalias-mutation with original strides preserved botharms; cases/seeds/math unchanged"
+}

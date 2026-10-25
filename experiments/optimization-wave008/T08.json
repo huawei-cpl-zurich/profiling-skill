@@ -1,0 +1,114 @@
+{
+  "wave": 8,
+  "approval": "Standing user approval waves003\u2013022; datafirst optionalmodeldemonstrationsdeferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "snapshot_digest": "d4d58dabf81053a641187974ab638ccc7217607524a4080b86f02eeb592678ce",
+  "query": "c4b83c49cd88401a86f27c8a303a605c",
+  "source_receipts": "proposal.md/triton-leads.json/triton-tests-license.json/utils-query1.json +priorinventory fullpin; preserveMIT/thirdparty/Huawei/LinkedIn/vLLM notices, no rawlibrary traversal.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T08",
+  "task": "optimization-w008-rms-stat-recompute",
+  "title": "Saved statistics versus recomputation in full RMSNorm training",
+  "source_files": [
+    "source__src__triton_ascend_kernels__norm__rms_norm.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W008-T08-01",
+      "role": "gallery",
+      "seed": 80801,
+      "parameters": {
+        "rows": 32768,
+        "D": 32,
+        "offset": 1
+      }
+    },
+    {
+      "case_id": "W008-T08-02",
+      "role": "gallery",
+      "seed": 80802,
+      "parameters": {
+        "rows": 256,
+        "D": 1024,
+        "offset": 1
+      }
+    },
+    {
+      "case_id": "W008-T08-03",
+      "role": "heldout",
+      "seed": 80803,
+      "parameters": {
+        "rows": 16384,
+        "D": 64,
+        "offset": 1
+      }
+    },
+    {
+      "case_id": "W008-T08-04",
+      "role": "heldout",
+      "seed": 80804,
+      "parameters": {
+        "rows": 33,
+        "D": 2048,
+        "offset": 1
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W008-T08-GA",
+      "role": "guard",
+      "seed": 80891,
+      "parameters": {
+        "rows": 3,
+        "D": 65,
+        "offset": 0,
+        "zero_cancel": true
+      }
+    },
+    {
+      "case_id": "W008-T08-GB",
+      "role": "guard",
+      "seed": 80892,
+      "parameters": {
+        "rows": 2,
+        "D": 2048,
+        "offset": 1,
+        "fallback": true
+      }
+    }
+  ],
+  "contract": {
+    "interface": "Full prepared forward+backward training computation FP32 X/DY[rows,D],W[D], returns Y,DX,DW. Gemma mode1 eps1e-6, offset0or1. Source-style SINGLE-row forward gridrows plus public blocked backward BR1 gridactual driver-queried VECcores of selected target: nativeBZ-A3-2=48 (24Cube), priorGZ40was reference observation only; exact same source helpers/math/casting both. Common explicit sourcezeros_likeDX everyAPI +blockedgradient +samepartialDWsum; total4kernels both. Outputs reused/allocator excluded; not unchanged publicwrapper backendtiming.",
+    "before": "Forward writes Y and savedRSTD FP32[rows], backward source tl.load RSTD; samefinalDW tree/grid/BR1 (NO T02rowbatch). Common maskedother0 backward safe.",
+    "after": "Only D<=1024: forward omits RSTDstore; backward recomputes rstd with SAME source tl.sum(X*X,axiscols)/D + eps and imported triton.language.math.rsqrt, same dtype/order/reductiontile. Reuse alreadyloaded X. D>1024 EXACT cachedsource fallback in both forward/backward. Threshold fixed pre-code; heldout D2048 costcontrol fallsback declared, no false optimized coverage claim. Forward Y math unchanged; no extra instrumentation/statstore in eitherarm to defeat eliminatedstatwrite.",
+    "oracle": "One CPUFP64 RMS derivative provider once/case, m=DY*(W+offset), r=rsqrt(meanX2+eps), Y=X*r*(W+offset), DX=r*m-r^3*X*mean(mX), DW=sum_rows(DY*X*r). Inputs quantized1/128[-1,1], W[-1,1], includezeroX/cancelguard. FixedY atol2e-5 rtol2e-5,DXatol1e-4rtol1e-5,DWatol5e-4rtol3e-5, actual allerrors retain. PairYexactbits required; DX/DW numeric due possible recompute reductionlowering, no unobserved equality of internalRSTD claim. This explicitly replaces proposal standaloneRSTD observation because no extraGPUchecks/instrumentation permitted. No tolerance/posthoccases retune.",
+    "qualification": "Actualcompile/.text/resources allcasecells beforeCPUpayload/device math using compileonly probes separate from scientificfixture; ifrowsmany orD2048 resources unsupportedretain honestfail not shrinkcase. AllGPUcorrectness onceeacharm then80profileAPI forwards fourpairs, guards0. Host invalid/nonfinite/shape/eps<=0 rejectbeforecache NONFROZEN tests. Statisticalmemorybenefit tradeoff recompute reductions/cost, fullkernelspan/taskwork/gaps no physicaltraffic/roofline inference."
+  },
+  "source_files_manifest": [
+    {
+      "path": "source__src__triton_ascend_kernels__norm__rms_norm.py",
+      "sha256": "c50b342f6d45522091aadd5163908454195b13c60cd5ccc743eba7add116cddd"
+    }
+  ],
+  "contract_version": 2,
+  "target_core_receipt": {
+    "target": "bz-a3-2",
+    "actual_product": "Ascend910_9382",
+    "num_vectorcore": 48,
+    "num_aicore": 24,
+    "handle": "remote:bz-a3-2:job:20261025T005813Z-555ccbfe20ef",
+    "first_host_controller_failure": "remote:bz-a3-2:job:20261025T005652Z-805e987bad2b",
+    "first_attempt_real_compiles": 0,
+    "first_attempt_scientific_payloads": 0,
+    "first_attempt_scientific_forwards": 0,
+    "first_attempt_captures": 0
+  },
+  "clarification": "PRE-firstrealcompile/oracle/numerical/profile: source public backward always queriesactualVectorcores; inherited40ispriorGZ910B4observation, notforcednativegrid. Adapter/sourceJIT/provider alreadyquery48 correctly andUNCHANGED. Commonactualgrid48 botharms, no cases/tol/rows/reassoc/sourceflags/profileprotocolchange. Originalv1unexecuted scientifically retained; controllerliteral40assert repaired, runtime/init succeeded."
+}

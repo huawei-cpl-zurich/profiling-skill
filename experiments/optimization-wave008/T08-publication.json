@@ -1,0 +1,21 @@
+{
+  "reason": "Pre-publication host-only probe.run rejection before compilation/launch; compile-only probe remains available",
+  "measured_source_hashes": {
+    "rms_training.py": "88e0c0b8a70224ec2a9053b73d8e361a8711a8234a571746fab0594796501f22",
+    "rms_training_kernel.py": "e694ab99ff6f727a483a1298cbe73490606b8c147a51ed597d42fa58cb041e65",
+    "rms_training_contract.py": "64505785a7a8ad8a6557e49d481023715e09eed26a4eefe0ce84d467761fec34"
+  },
+  "published_source_hashes": {
+    "rms_training.py": "875d1e0fa0f8a08bc1f83f28dfdb9593a6302c7d6a3f4fc7bec9a8cd777b613b",
+    "rms_training_kernel.py": "e694ab99ff6f727a483a1298cbe73490606b8c147a51ed597d42fa58cb041e65",
+    "rms_training_contract.py": "64505785a7a8ad8a6557e49d481023715e09eed26a4eefe0ce84d467761fec34"
+  },
+  "scientific_source": "T08-results.json",
+  "changed_JIT": false,
+  "changed_CPU_provider": false,
+  "new_frozen_payloads": 0,
+  "new_real_compilations": 0,
+  "new_scientific_apis": 0,
+  "new_captures": 0,
+  "validation": "Four NONFROZEN CPU/mock tests pass locally and CPU-only on the capable A3 host, including no compile/launch on probe.run before/after compile_only"
+}

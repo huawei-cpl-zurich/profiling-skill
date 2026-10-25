@@ -1,0 +1,99 @@
+{
+  "wave": 8,
+  "approval": "Standing user approval waves003\u2013022; datafirst optionalmodeldemonstrationsdeferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "snapshot_digest": "92fb5efaf51aa786cdd8d1a5869dd952486dffcdb039897d790393947a2aad54",
+  "query": "c4b83c49cd88401a86f27c8a303a605c",
+  "source_receipts": "proposal.md/triton-leads.json/triton-tests-license.json/utils-query1.json +priorinventory fullpin; preserveMIT/thirdparty/Huawei/LinkedIn/vLLM notices, no rawlibrary traversal.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T04",
+  "task": "optimization-w008-clipped-backward-saturation",
+  "title": "Uniform saturated-gate specialization in clipped SwiGLU backward",
+  "source_files": [
+    "mindspeed_ops__arch32__triton__clipped_swiglu.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W008-T04-01",
+      "role": "gallery",
+      "seed": 80401,
+      "parameters": {
+        "M": 128,
+        "K": 1024,
+        "pattern": "saturated"
+      }
+    },
+    {
+      "case_id": "W008-T04-02",
+      "role": "gallery",
+      "seed": 80402,
+      "parameters": {
+        "M": 33,
+        "K": 1000,
+        "pattern": "unsaturated"
+      }
+    },
+    {
+      "case_id": "W008-T04-03",
+      "role": "heldout",
+      "seed": 80403,
+      "parameters": {
+        "M": 1024,
+        "K": 1024,
+        "pattern": "saturated_half_up_clipped"
+      }
+    },
+    {
+      "case_id": "W008-T04-04",
+      "role": "heldout",
+      "seed": 80404,
+      "parameters": {
+        "M": 256,
+        "K": 1024,
+        "pattern": "mixed_every_tile"
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W008-T04-GA",
+      "role": "guard",
+      "seed": 80491,
+      "parameters": {
+        "M": 3,
+        "K": 65,
+        "pattern": "exact_clamp_boundaries"
+      }
+    },
+    {
+      "case_id": "W008-T04-GB",
+      "role": "guard",
+      "seed": 80492,
+      "parameters": {
+        "M": 1,
+        "K": 17,
+        "pattern": "zeros_signed_cancellation"
+      }
+    }
+  ],
+  "contract": {
+    "interface": "Prepared backward component FP32 contiguous GUP[M,2K],DY[M,K], private DGUP[M,2K]. alpha1.702 limit7 finite inputs [-12,12], DY[-1,1]. Source dtype block picker unchanged common both; no autotune. API includes entire backward kernel, outputs reused both arms; no allocator latency claim.",
+    "before": "Exact source backward graph/clamp strict-outside subgradient, with source row/column indexing, all stores/masks. Same common compiler flags both arms.",
+    "after": "Only runtime scalar predicate ALL ACTIVE gate>LIMIT across complete source tile. Inactive lanes identity TRUE. If saturated, DG=+0 and DU=where(-L<=u<=L,dy*(L*sigmoid(L*ALPHA)),+0), preserving source multiplication parentheses; constant sigmoid SAME FP32 operand/cast path not Python double. Otherwise exact source graph. Common tilepicker unchanged; no early return skipping stores. Runtime guard branch must compile; unsupported stops no arithmetic redesign beyond portability-equivalent repairs.",
+    "oracle": "One independent CPU FP64 formula provider per case. Clamp derivatives retained at gate==L and u==+/-L, zero strictly outside. DG and DU all finite, fixed atol2e-5 rtol2e-5; saturated DG exactly positive zero, clipped DU positive zero. GA includes nextafter(7,+inf),7,nextafter(7,-inf),u=-7,+7,and neighboring floats to distinguish strict/inclusive edges. GB includes zero/signed/cancellation tails. Numerical not universal paired-bit contract; report actual pair bits/errors. No tolerance changes after data.",
+    "inputs": "Deterministic quantized 1/64 input grid. saturated gates [8,12], unsaturated [-3,3]; mixed every tile alternating 8/-2; saturated-half-up-clipped alternating up +/-9 and bounded [-5,5]. DY quantized 1/64. Guard overrides explicit only. Host invalid odd dimension,negative/nonfinite limit,dtype/strides reject before scientific cache in NONFROZEN tests.",
+    "claims": "Prospective benefit fewer sigmoid/graph ops versus predicate reduction/branch cost; task/PMU evidence no calibrated roofline claim. Source hardware comments are provenance not installed resource proof."
+  },
+  "source_files_manifest": [
+    {
+      "path": "mindspeed_ops__arch32__triton__clipped_swiglu.py",
+      "sha256": "786d6bcce46e49cd485f310da096df2075907f3454875a82ed08bd89e6ab1b01"
+    }
+  ]
+}

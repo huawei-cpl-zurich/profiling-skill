@@ -1,0 +1,22 @@
+{
+  "reason": "Review P2: publish host compilation cache only after all components qualify; retry failed qualification before launches",
+  "scientific_results": "T02-results.json",
+  "measured_source_hashes": {
+    "rms_backward.py": "2f55247846c4199a452849da7fa0d666d9e8e068d4a3658089be0523a13db469",
+    "rms_backward_kernel.py": "382bf950069bfde136eb20fca34abe9fb842c5be65952d2b68a3e3447bb259f2",
+    "rms_backward_contract.py": "4cdce5bc81263ef19dd0cb54199bebb54a8e607ecbf26c73cef721bfe89c0a56"
+  },
+  "published_source_hashes": {
+    "rms_backward_kernel.py": "382bf950069bfde136eb20fca34abe9fb842c5be65952d2b68a3e3447bb259f2",
+    "rms_backward.py": "6a54d1393d3c70034d8e74d001e93b0421fa92312b7cbabf65a911d0c054e0ed",
+    "rms_backward_contract.py": "4cdce5bc81263ef19dd0cb54199bebb54a8e607ecbf26c73cef721bfe89c0a56",
+    "rms_backward_cli.py": "1a45aa4efb722f37f30474f5fdc45b296059c4305561e9b96146dfaaf5a83126"
+  },
+  "changed_scientific_kernel": false,
+  "changed_cpu_provider": false,
+  "new_frozen_oracles": 0,
+  "new_real_compilations": 0,
+  "new_device_apis": 0,
+  "new_captures": 0,
+  "validation": "CPU-only functional mock failures at backward and final reduction; compile_only and run retry paths"
+}

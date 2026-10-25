@@ -1,0 +1,107 @@
+{
+  "wave": 9,
+  "approval": "Standing user approval waves003\u2013022; datafirst.",
+  "study_kind": "source-backed-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "query": "61093052e4af41c5b2132db2cd524089",
+  "source_receipts": "bodies.json/tests-license.json/proposals.md; original source inventory full immutable pin; MIT plus Huawei/vLLM/DeepLink third-party notices retained.",
+  "protocol": "Compile/codegen/resource allcasepairs via input-only prototypes BEFORE scientificCPUexpected. Six cached CPU payloads ONCE, numerical correctness ONCE perarm/case/source then exactly10preparedcompleteAPI profilingforwards/arm of4mainpairs; guards0captures. No GPUwarmups/autotune/extraunprofiledtiming/profiledIOinspection. Retainnegative/noop/unsupported/failed results and originalsource/binary/fixture/version bindings. No postdata case/tolerance/flag retuning. Actualtarget/compiler/product/cores queried, never inherited GZ40. Complete operation spans/tasktime/union/gaps/raw10samples/PMUs diagnostic not ordinarylatency/physicaltraffic/roofline proof.",
+  "study_id": "R02",
+  "task": "optimization-w009-pack-prefix",
+  "title": "Amortize repeated ragged sequence prefix scans",
+  "source_files": [
+    "bodies/src/triton_ascend_kernels/index/pack_unpack.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W009-R02-01",
+      "role": "gallery",
+      "seed": 90201,
+      "parameters": {
+        "B": 4,
+        "Lmax": 32,
+        "D": 64
+      }
+    },
+    {
+      "case_id": "W009-R02-02",
+      "role": "gallery",
+      "seed": 90202,
+      "parameters": {
+        "B": 32,
+        "Lmax": 64,
+        "D": 128
+      }
+    },
+    {
+      "case_id": "W009-R02-03",
+      "role": "heldout",
+      "seed": 90203,
+      "parameters": {
+        "B": 128,
+        "Lmax": 64,
+        "D": 256
+      }
+    },
+    {
+      "case_id": "W009-R02-04",
+      "role": "heldout",
+      "seed": 90204,
+      "parameters": {
+        "B": 256,
+        "Lmax": 128,
+        "D": 256
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W009-R02-GA",
+      "role": "guard",
+      "seed": 90291,
+      "parameters": {
+        "B": 3,
+        "Lmax": 17,
+        "D": 65,
+        "lengths": [
+          0,
+          17,
+          3
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R02-GB",
+      "role": "guard",
+      "seed": 90292,
+      "parameters": {
+        "B": 1,
+        "Lmax": 1,
+        "D": 1,
+        "lengths": [
+          1
+        ],
+        "signed_zero": true
+      }
+    }
+  ],
+  "contract": {
+    "interface": "FULLprepared pack-then-unpack computation FP32 X[N,D],int32lengths[B],N=sumlengths>0,Lmax=maxlengthpositive provided/CPUvalidatedonce. Outputpacked[B,Lmax,D]androundtrip[N,D] BOTHlogicaloutputs returned. Lengths0..Lmax, mainseededragged firstlength0/lastLmax; Xquantized1/64[-2,2],PAD=-9.5 fixedFP32. Source host .item/sumallocation outsidepreparedscopeBOTH, notfreshvendorPythonAPI latency.",
+    "before": "Exact source _pack_seq_kernel AND active LAST _unpack_seq_triton_kernel definition(214\u2013253), eachprogramseriallysumslengths[0:pid_b]. CommonBT64BD64/grid(B,cdivL/64,cdivD/64), preservepackPADstore thenvalidstore and masks. BothcompleteAPIs2kernels.",
+    "after": "Only one GPU exclusiveint32prefix scan insideEVERYAPI producingB+1starts/endtotal, reusedbyotherwiseSAMEpack/unpack; replacein_startloopwithprefix[pid_b]. No freeCPUprecomputedmetadata, no scan cachingoutsideAPI/no storefusion. Prefixsingleprogramnextpow2B<=256, nooverflow N<=32768. Completeafter3kernels; prefixlaunch/storage charged.",
+    "oracle": "One CPU integerprefix+explicitindependentpacking provider once/case; expectALLFP32packed/roundtripbits, everypadding-9.5bit, roundtrip=X. Afterinternalprefix checkedagainstcachedCPUexpectedoncewithincorrectness (no extraGPUmath), allinputsimmutable/canaries/shape/dtype/arity explicit. GB Xone -0 copiedbitwise. Numeric6onceeacharm then80APIprofiles8caps,guards0.",
+    "physical": "PreparedcontiguousX/packed/out,pointerandPADDEDoffsetproofsigned32safe includingmaskedptrformation; allVALIDmaxindices withinstorage, no fallbackinventedforzero-lenrows. Common maskedloadother0 portability safety allowedBOTHbeforemath becauseinactivevaluesneverstored. Invalidlength/dtype/shape/negative/nonintegral/sum mismatch hostrejectbeforecache NONFROZENtests.",
+    "claims": "Metadataamortization benefit largeB/manytiles versus extra prefixlaunch costsmallB; rawcount2vs3kernels/allnecessarywork included. Preserve source fixedsame tile/math; no claim hostsync/allocationelimination or measuredphysicaltraffic."
+  },
+  "source_files_manifest": [
+    {
+      "path": "bodies/src/triton_ascend_kernels/index/pack_unpack.py",
+      "sha256": "c405e98e9eb80382d4526b41612d6fc83a619c69619bd126af367aa2176468fd"
+    }
+  ]
+}

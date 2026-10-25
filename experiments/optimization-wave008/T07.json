@@ -1,0 +1,106 @@
+{
+  "wave": 8,
+  "approval": "Standing user approval waves003\u2013022; datafirst optionalmodeldemonstrationsdeferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "snapshot_digest": "d4d58dabf81053a641187974ab638ccc7217607524a4080b86f02eeb592678ce",
+  "query": "c4b83c49cd88401a86f27c8a303a605c",
+  "source_receipts": "proposal.md/triton-leads.json/triton-tests-license.json/utils-query1.json +priorinventory fullpin; preserveMIT/thirdparty/Huawei/LinkedIn/vLLM notices, no rawlibrary traversal.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T07",
+  "task": "optimization-w008-compressor-cache-epilogue",
+  "title": "Guard residual hazards when fusing Compressor cache writes",
+  "source_files": [
+    "source__src__triton_ascend_kernels__attention__compressor.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W008-T07-01",
+      "role": "gallery",
+      "seed": 80701,
+      "parameters": {
+        "M": 128,
+        "cache_size": 8,
+        "ratio": 2,
+        "start_pos": 0
+      }
+    },
+    {
+      "case_id": "W008-T07-02",
+      "role": "gallery",
+      "seed": 80702,
+      "parameters": {
+        "M": 64,
+        "cache_size": 64,
+        "ratio": 2,
+        "start_pos": 0
+      }
+    },
+    {
+      "case_id": "W008-T07-03",
+      "role": "heldout",
+      "seed": 80703,
+      "parameters": {
+        "M": 256,
+        "cache_size": 16,
+        "ratio": 4,
+        "start_pos": 0
+      }
+    },
+    {
+      "case_id": "W008-T07-04",
+      "role": "heldout",
+      "seed": 80704,
+      "parameters": {
+        "M": 129,
+        "cache_size": 7,
+        "ratio": 2,
+        "start_pos": 0
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W008-T07-GA",
+      "role": "guard",
+      "seed": 80791,
+      "parameters": {
+        "M": 17,
+        "cache_size": 8,
+        "ratio": 2,
+        "start_pos": 1
+      }
+    },
+    {
+      "case_id": "W008-T07-GB",
+      "role": "guard",
+      "seed": 80792,
+      "parameters": {
+        "M": 9,
+        "cache_size": 4,
+        "ratio": 4,
+        "start_pos": 2
+      }
+    }
+  ],
+  "contract": {
+    "interface": "FULL prepared BSND B1 Compressor computation with private FP32 state_cache[1,C,1024], BF16 X[1,M,5120], WKV/WGATE[512,5120], norm_w[512], FP32 projections, BF16 output[1,ceil(M/ratio),512]. Mutable returned cache validated entire storage plus output including unwritten zero rows. Output/cache buffers prepared/reused both, baseline output zeroed EVERYAPI as source, cache initialization once before correctness each arm, no free reset inside profile. Main no residual cache reads, so repeated updates idempotent. Guard each arm own cloned initial cache, correctnessonly.",
+    "before": "Original K1projection(s)->K2pool->K3cacheupdate ordering. Common BM32 BN64 BK128 GROUP8 controlled source-valid config BOTH; source <=64 dualprojection, >64 separateprojection preserved both (no T01combination). Exact sourcepool/math/cacheupdate. Metadata prepared once both/no per-call hostdevicecopies claimed. Common sourcezerooutputlaunch included everyAPI; no T11optimization.",
+    "after": "Only host B1 uniformBSND and used_len=M and start_pos%ratio==0 and nonalias/unique mapped cache row guard. Add cache epilogue stores to SAME projections, preserving separate output writes. Only final tail_count=min(M,C) rows write slot=(start_pos+token)%C; one writer/slot and each projection owns its own KV/SCORE half. Projection completion before unchangedpool; omit K3 only qualifiedpath. Residual guard FALSE uses EXACT entire original K1->K2->K3 preserving reads-before-overwrite. Never fuse alltokens when M>C (would race). No other kernel/math/index/order transforms.",
+    "oracle": "Once CPU exact quantized dot certificate X/W q/128 q[-16,16], intdot bound<2^24 and /16384 exact FP32, both projections independently. Stable FP64 pool using projected FP32 and initial cached FP32 for residual, REQUIRED pooledBF16 round then FP64 RMS eps1e-20/norm_w BF16 then BF16 output. Fixed output atol.03125 rtol.015625, projection/cache exact FP32 bit contract; baseline/candidate output exact paired bits required as pool identical. Cached untouched slots/halves bitwise remain initialized, all full returned rows checked incl zero pad. Normweights dyadic [.5,1], cache bounded dyadic[-1,1]. No adjustmentaftertiming.",
+    "proof": "Before device compile write ownership proof valid+PADDED lane masks; offsetrange fits sourceaddress width. M129 partial output row stayszero both. Residualcase firstgroup reads oldcache tokenbeforeK3 even if cachewrap; only sourcefallback allowed. Actual code artifacts/resources/engine compile allcases beforemath, no hardwareoccupancyinference. NONFROZEN tests invalidmetadata/cachealiases/duplicatecachemapping reject pre-cache. Fullprepareddevicecomputation span/work/gaps only no allocator/unmodifiedvendor throughput claim."
+  },
+  "source_files_manifest": [
+    {
+      "path": "source__src__triton_ascend_kernels__attention__compressor.py",
+      "sha256": "5b1d0219bedea1e56615b69305fad9d464679a2ce9d0ae1ed0beaba4e60fb4c4"
+    }
+  ],
+  "contract_version": 2,
+  "clarification": "BEFOREcode/scientificCPUfixtures: full pinned Compressor caller passes eps1e-20 (pool/decode callsites), not1e-6; both arms/oracle use source1e-20. Originalv1retainedunexecuted. T06component deliberately commonparameterized1e-6 remains unchanged and is NOT publiccallerdefault."
+}

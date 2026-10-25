@@ -1,0 +1,123 @@
+{
+  "wave": 9,
+  "approval": "Standing user approval waves003\u2013022; datafirst.",
+  "study_kind": "source-backed-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "query": "61093052e4af41c5b2132db2cd524089",
+  "source_receipts": "bodies.json/tests-license.json/proposals.md; original source inventory full immutable pin; MIT plus Huawei/vLLM/DeepLink third-party notices retained.",
+  "protocol": "Compile/codegen/resource allcasepairs via input-only prototypes BEFORE scientificCPUexpected. Six cached CPU payloads ONCE, numerical correctness ONCE perarm/case/source then exactly10preparedcompleteAPI profilingforwards/arm of4mainpairs; guards0captures. No GPUwarmups/autotune/extraunprofiledtiming/profiledIOinspection. Retainnegative/noop/unsupported/failed results and originalsource/binary/fixture/version bindings. No postdata case/tolerance/flag retuning. Actualtarget/compiler/product/cores queried, never inherited GZ40. Complete operation spans/tasktime/union/gaps/raw10samples/PMUs diagnostic not ordinarylatency/physicaltraffic/roofline proof.",
+  "study_id": "R04",
+  "task": "optimization-w009-rope-layout",
+  "title": "Eliminate materialized RoPE input layout copies while preserving outputs",
+  "source_files": [
+    "bodies/src/triton_ascend_kernels/index/rope.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W009-R04-01",
+      "role": "gallery",
+      "seed": 90401,
+      "parameters": {
+        "B": 1,
+        "S": 33,
+        "Hq": 8,
+        "Hk": 2,
+        "D": 64,
+        "cos_B": 1,
+        "producer": "BHSD"
+      }
+    },
+    {
+      "case_id": "W009-R04-02",
+      "role": "gallery",
+      "seed": 90402,
+      "parameters": {
+        "B": 2,
+        "S": 256,
+        "Hq": 16,
+        "Hk": 4,
+        "D": 64,
+        "cos_B": 2,
+        "producer": "BHSD"
+      }
+    },
+    {
+      "case_id": "W009-R04-03",
+      "role": "heldout",
+      "seed": 90403,
+      "parameters": {
+        "B": 1,
+        "S": 256,
+        "Hq": 8,
+        "Hk": 2,
+        "D": 64,
+        "cos_B": 1,
+        "producer": "BHSD"
+      }
+    },
+    {
+      "case_id": "W009-R04-04",
+      "role": "heldout",
+      "seed": 90404,
+      "parameters": {
+        "B": 2,
+        "S": 33,
+        "Hq": 16,
+        "Hk": 4,
+        "D": 64,
+        "cos_B": 1,
+        "producer": "BHSD"
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W009-R04-GA",
+      "role": "guard",
+      "seed": 90491,
+      "parameters": {
+        "B": 2,
+        "S": 17,
+        "Hq": 3,
+        "Hk": 1,
+        "D": 48,
+        "cos_B": 2,
+        "producer": "BHSD"
+      }
+    },
+    {
+      "case_id": "W009-R04-GB",
+      "role": "guard",
+      "seed": 90492,
+      "parameters": {
+        "B": 1,
+        "S": 17,
+        "Hq": 4,
+        "Hk": 2,
+        "D": 64,
+        "cos_B": 1,
+        "producer": "BSHD-backing"
+      }
+    }
+  ],
+  "contract": {
+    "interface": "Forward-only prepared rope_forward component. LogicalFP32Q[B,Hq,S,D],K[B,Hk,S,D]; four main cases physically contiguousBHSD, cos/sin contiguous[cos_B,S,D] wherecos_B=1orB. Mainoriginalinputsimmutable, outputsprivateBSHDbackingsreturnedBHSDviews with exactsourceoutputstrides and noalias. ReturnQrot,Krot,cos,sin samefour-arity as source. Noautograd/backward claims.",
+    "before": "Exactsource _triton_rope forward. TransposeBHSD->BSHD then TWO real device copies into privatecontiguousBSHD Q/K scratch, then sameinplacevendor rotarykernel. Include bothcopy operations in EVERY preparedAPI; no freecopiesoutsidecapture. Preallocatedscratch excludesallocatorBOTH. cos/sin contiguousalready ->no copy. Commononeprogrampertoken/paddedheads/dim/prefusionflags.",
+    "after": "Single modifiedsource rotarykernel: readoriginalBHSDinput using explicitbatch/head/sequence/dimstrides and writeprivatecontiguousBSHDoutput. Sameoneprogrampertoken, vectors/padheads/padD, cos/sin loads/broadcast, cast/arithmeticorder as original. Onlyreplace Q/Kloadaddressing andseparateoutputptrstores. NOtrigcomputation/noheadlooprepartition/R03 combination. Tradeoff originalBHSDstridedheadgather versus fewer2copies andlaunches; source-derivedtrafficclaimonly.",
+    "oracle": "ONEindependent CPUFP64halfrotationprovider percase onexactrepresentedFP32 inputs; Q/Kseededinteger/128[-1,1], cos/sin seed-derivedanglestrig roundedtointeger/256[-1,1], secondhalfduplicatesfirsthalf. Productsandsums exactFP32dyadics (integerproducts<=32768 plus sum<=65536). Primaryallnumericaloutputexact equality withCPUexpected; reportpairedFP32bitsinclzero-sign separately (oraclezero-signnotguaranteed). CheckallQ/K,cos/sinidentity,tuplearity/dtype/shape/strides/halos andinputimmutable forBHSD main/GA. Inputs/cos/sin nooverlap; supportBbroadcast. SIXcachedCPUfixturesonce after12compileprobes, correctnessonce/arm/case then80profileAPIforwards8captures guards0.",
+    "physical": "GA nonpowerheads3/1,D48 exactsource masks/padD64; do NOTclamp backwardlimits. GB BSHD-backing input is logicalBHSDtransposeview: original .transpose.contiguous isIDENTITY aliases callerinput, source mutates it INPLACE. Botharms GB MUSTuse exactoriginal inplacekernel withZEROcopy onownindependentinputbacking andreturnalias expectedstrides; primaryguard validatesONEmutation/allrotatedvalues plusoutputalias, cos/sinimmutable. Noafteroutofplace mutationchange forGB, no profilingGB/nofakecopybenefit. Do notassertGBinputimmutable. MainBHSDstorage beforecopyandafterprivateout mustpreserveinput. InvalidmixedproducerQK/layout/dtype/oddD/nonfinite/shapealiasrejectbeforecache usingNONFROZENtests.",
+    "compilation": "Input-onlyprototypes preserveactualphysicalBHSDandBSHD-backedview strides forALL12. Probe.run raises withoutlaunch. Transactionalcompilecache. Beforemain2Torchcopyops+1Tritonrotate; aftermain1Tritonrotate; traceclassifyactualcopytasktypes/noassumednames. If frameworkdoesnot supportactualvendorreporttasktype, retainraw/markmeasurementunsupported ratherthan excludechargedwork. GuardGB originalinplace no-scientific-replay qualification.",
+    "claims": "Scopedpreparedforward and mainphysicallyBHSD producer cases only. Preserveobservablelayout/alias/mutation explicitly includingidentity-copyguard. Predictedbenefitremovedstaging dependsstridedreadcost; no claimgenericrope_forward defaultproducerperformance. Source-applicationnovelty0. Noordinarylatency/physicalHBMtraffic/occupancy/roofline proof fromspans orcodecounts."
+  },
+  "source_files_manifest": [
+    {
+      "path": "bodies/src/triton_ascend_kernels/index/rope.py",
+      "sha256": "80015a5782fcefc6d22b22f828710157787acddd531db8b17baea7eebee112ee"
+    }
+  ]
+}

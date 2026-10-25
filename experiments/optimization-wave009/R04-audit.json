@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "errors": [],
+  "exit": 0,
+  "inventory": "R04-inventory.json",
+  "coverage": "R04-coverage.json",
+  "command": "python ~/.agents/skills/triton-guarded-kernel/scripts/audit_contract.py experiments/optimization-wave009/R04-coverage.json --inventory experiments/optimization-wave009/R04-inventory.json --json",
+  "scope": "all six original cases, source-stride/alias/mutation manual proof and candidate selection"
+}

@@ -1,0 +1,4324 @@
+{
+  "status": "complete",
+  "study_id": "R04",
+  "target": "bz-a3-2",
+  "product": "9382 Ascend910V1",
+  "physical_die": 0,
+  "npu": 0,
+  "chip": 0,
+  "logical_device": 0,
+  "observed_cube_cores": 24,
+  "observed_vector_cores": 48,
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "matrix_sha256": "16a5d0d8c765ab9422161acc558483462e455729605e8e22efb9fd894f02ebe0",
+  "compact_archive_sha256": "e0bb9ffdb654a63f55ed6e297ea70cb758a0750ea30fe41681a440d20ecbb235",
+  "compact_files": 391,
+  "raw_codegen_sha256": "f7fea58f1b3c38c9e1f612c8162b1c40292952bbe14052357266c9498f578252",
+  "raw_coverage_sha256": "926e2d1572ab4a80dfca611b40dc22574d8f4b4348347626ecd422c87dc20679",
+  "counts": {
+    "scientific_cpu_payloads": 6,
+    "numeric_correctness_calls": 12,
+    "profiled_api_calls": 80,
+    "captures": 8,
+    "guard_captures": 0
+  },
+  "runtime": {
+    "packages": {
+      "torch": "2.10.0+cpu",
+      "torch-npu": "2.10.0",
+      "triton": "3.5.0",
+      "triton-ascend": "3.2.2"
+    },
+    "tools": {
+      "msprof": {
+        "exit": 255,
+        "stdout": "\nUsage:\n      msprof [--options]\n\nThis is subcommand for operator optimization situation:\n      op                                Use binary msopprof to operator optimization (msprof op ...)\n\nOptions:\n      --output                          <Optional> Specify the directory that is used for storing data results.\n      --application                     <Optional> Specify application path, considering the risk of privilege escalation, please pay attention to\n\t\t\t\t\t\t   the group of the application and confirm whether it is the same as the user currently.\n\t\t\t\t\t\t   [Note] This option will be discarded in later versions.\n\t\t\t\t\t\t   you can try to use: msprof [msprof arguments] <app> [app arguments]\n      --ascendcl                        <Optional> Show acl profiling data, the default value is on.\n      --ge-api                          <Optional> Specify if report GE event, the default value is off. The possible parameters are 'l0', 'l1' or 'off'.\n      --runtime-api                     <Optional> Show runtime api profiling data, the default value is off.\n      --task-time                       <Optional> Show task profiling data, the default value is on. The possible parameters are 'l0', 'l1', 'l2', 'l3', 'on' or 'off'.\n      --task-memory                     <Optional> Show the memory usage of the operator, the default value is off. The possible parameters are 'on' or 'off'.\n      --ai-core                         <Optional> Turn on / off the ai core profiling, the default value is on when collecting app Profiling.\n      --aic-mode                        <Optional> Set the aic profiling mode to task-based or sample-based.\n\t\t\t\t\t\t   In task-based mode, profiling data will be collected by tasks.\n\t\t\t\t\t\t   In sample-based mode, profiling data will be collected in a specific interval.\n\t\t\t\t\t\t   The default value is task-based in AI task mode, sample-based in system mode.\n      --aic-freq                        <Optional> The aic sampling frequency in hertz, the default value is 100 Hz, the range is 1 to 100 Hz.\n      --environment                     <Optional> User app custom environment variable configuration.\n      --sys-period                      <Optional> Set total sampling period of system profiling in seconds.\n      --sys-devices                     <Optional> Specify the profiling scope by device ID when collect sys profiling.The value is all or ID list (split with ',').\n      --msproftx                        <Optional> Show msproftx and mstx data, the default value is off.\n      --mstx-domain-include             <Optional> Choose to only include mstx events from a comma separated list of domains;\n\t\t\t\t\t\t   `default` filters the mstx default domain;\n\t\t\t\t\t\t   The switch is only applicable when parameter msproftx is set to on;\n\t\t\t\t\t\t   The switch cannot be set with mstx-domain-exclude at the same time.\n      --mstx-domain-exclude             <Optional> Choose to exclude mstx events from a comma separated list of domains;\n\t\t\t\t\t\t   `default` excludes the mstx default domain;\n\t\t\t\t\t\t   The switch is only applicable when parameter msproftx is set to on;\n\t\t\t\t\t\t   The switch cannot be set with mstx-domain-include at the same time.\n      --storage-limit                   <Optional> Specify the output directory volume. range 200MB ~ 4294967295MB.\n      --hccl                            <Optional> Show hccl profiling data, the default value is off. [Note] This option will be discarded in later versions.\n      --model-execution                 <Optional> Show ge model execution profiling data, the default value is off. [Note] This option will be discarded in later versions.\n      --aic-metrics                     <Optional> The aic metrics groups, include ArithmeticUtilization, PipeUtilization, Memory, MemoryL0, ResourceConflictRatio, MemoryUB, L2Cache, MemoryAccess.\n\t\t\t\t\t\t   the default value is PipeUtilization.\n      --python-path                     <Optional> Specify the python interpreter path that is used for analysis, please ensure the python version is 3.7.5 or later.\n      --parse                           <Optional> Switch for using msprof to parse collecting data, the default value is off.\n      --query                           <Optional> Switch for using msprof to query collecting data, the default value is off.\n      --export                          <Optional> Switch for using msprof to export collecting data, the default value is off.\n      --clear                           <Optional> Switch for using msprof to analyze or export data in clear mode, the default value is off.\n      --analyze                         <Optional> Switch for using msprof to analyze collecting data, the default value is off.\n      --rule                            <Optional> Switch specified rule for using msprof to analyze collecting data, include communication, communication_matrix.\n\t\t\t\t\t\t   the default value is communication,communication_matrix.\n      --iteration-id                    <Optional> The export iteration id, only used when argument export is on, the default value is 1.\n      --model-id                        <Optional> The export model id, only used when argument export is on, msprof will export minium accessible model by default.\n      --summary-format                  <Optional> The export summary file format, only used when argument export is on, include csv, json, the default value is csv.\n      --type                            <Optional> The export type, only used when argument `export` is on \n\t\t\t\t\t\t   or when collecting data, include text, db.\n\t\t\t\t\t\t   the default value is text(which will also export the database).\n      --reports                         <Optional> Specify the path that is used for controlling the export scope of collecting results\n      --aicpu                           <Optional> Show aicpu profiling data, the default value is off.\n      --sys-hardware-mem                <Optional> LLC, DDR, HBM acquisition switch, optional on / off, the default value is off.\n      --sys-hardware-mem-freq           <Optional> LLC, DDR, HBM acquisition frequency, range 1 ~ 100, the default value is 50, unit Hz.\n      --llc-profiling                   <Optional> The llc profiling groups, include read, write. the default value is read.\n      --sys-cpu-profiling               <Optional> The CPU acquisition switch, optional on / off,the default value is off.\n      --sys-cpu-freq                    <Optional> The cpu sampling frequency in hertz. the default value is 50 Hz, the range is 1 to 50 Hz.\n      --sys-profiling                   <Optional> The System CPU usage and system memory acquisition switch,the default value is off.\n      --sys-sampling-freq               <Optional> The sys sampling frequency in hertz. the default value is 10 Hz, the range is 1 to 10 Hz.\n      --sys-pid-profiling               <Optional> The CPU usage of the process and the memory acquisition switch of the process,the default value is off.\n      --sys-pid-sampling-freq           <Optional> The pid sampling frequency in hertz. the default value is 10 Hz, the range is 1 to 10 Hz.\n      --sys-io-profiling                <Optional> NIC, ROCE acquisition switch, the default value is off.\n      --sys-io-sampling-freq            <Optional> NIC, ROCE acquisition frequency, range 1 ~ 100, the default value is 100, unit Hz.\n      --instr-profiling                 <Optional> Show instr profiling data, the default value is off.\n      --instr-profiling-freq            <Optional> The instr profiling sampling period in clock-cycle, the default value is 1000 cycle, the range is 300 to 30000 cycle.\n      --sys-interconnection-profiling   <Optional> PCIE, HCCS acquisition switch, the default value is off.\n      --sys-interconnection-freq        <Optional> PCIE, HCCS acquisition frequency, range 1 ~ 50, the default value is 50, unit Hz.\n      --dvpp-profiling                  <Optional> DVPP acquisition switch, the default value is off.\n      --dvpp-freq                       <Optional> DVPP acquisition frequency, range 1 ~ 100, the default value is 50, unit Hz.\n      --l2                              <Optional> L2 Cache and SMMU acquisition switch. The default value is off.\n      --host-sys                        <Optional> The host-sys data type, include cpu, mem, disk, network, osrt, numa\n      --host-sys-pid                    <Optional> Set the PID of the app process for which you want to collect performance data.\n      --host-sys-usage                  <Optional> The host-sys-usage data type, include cpu, mem.(full-platform)\n      --host-sys-usage-freq             <Optional> The sampling frequency in hertz. the default value is 50 Hz the range is 1 to 50 Hz.\n      --dynamic                         <Optional> Dynamic profiling switch, the default value is off.\n      --pid                             <Optional> Dynamic profiling pids of the target processes\n      --delay                           <Optional> Collect start delay time in seconds, range 1 ~ 4294967295s.\n      --duration                        <Optional> Collection duration in seconds, range 1 ~ 4294967295s.\n      --help                            <Optional> help message.\n",
+        "stderr": "<toolkit>/ascend-toolkit/latest/bin/msprof: unrecognized option '--version'\n"
+      },
+      "bishengir-compile": {
+        "exit": 0,
+        "stdout": "bishengir-compile 1.2.0 (/usr1/BiSheng/npuir-a3/bishengir 8796a8ac1508 2026-07-31) \nllvm 19.1.7 2430ab069eb1\nRelease build\n\n",
+        "stderr": ""
+      },
+      "hivmc": {
+        "exit": 0,
+        "stdout": "hivmc 0.3.0 (4ace068b0b12 2026-07-31)\nRelease build\n\n",
+        "stderr": ""
+      },
+      "bisheng": {
+        "exit": 0,
+        "stdout": "2026-07-30T20:53:21+08:00 clang version 15.0.5 (clang-5c68a1cb1231 flang-5c68a1cb1231)\nTarget: aarch64-unknown-linux-gnu\nThread model: posix\nInstalledDir: <toolkit>/ascend-toolkit/latest/bin\n",
+        "stderr": ""
+      },
+      "ccec": {
+        "exit": 0,
+        "stdout": "2026-07-30T20:53:21+08:00 clang version 15.0.5 (clang-5c68a1cb1231 flang-5c68a1cb1231)\nTarget: aarch64-unknown-linux-gnu\nThread model: posix\nInstalledDir: <toolkit>/ascend-toolkit/latest/bin\n",
+        "stderr": ""
+      }
+    },
+    "torch_npu_metric": "'ACL_AICORE_PIPE_UTILIZATION'",
+    "triton_version": "3.2.0",
+    "profiler_supported_options": {
+      "exit": 0,
+      "stdout": "msopprof (MindStudio Profiler For Operator) is part of MindStudio Operator-dev Tools.\nUsed for Ascend C operator profiling by running on the board.\n\nOptions:\n\n  -v, --version                             Show version information.\n  -h, --help                                Show help message.\n      --config=<FILE>                       Json file for op config path.\n      --application=<FILE>                  Executable file path.\n      --output=<PATH>                       Output path.\n                                              PATH:default \"./\"\n      --aic-metrics=<TYPE>                  Enable collection ability type:\n                                              TYPE:ArithmeticUtilization | MemoryUB | Memory | MemoryL0 | L2Cache |\n                                                | PipeUtilization | ResourceConflictRatio | Default | BasicInfo | Roofline |\n                                                | Occupancy | TimelineDetail | KernelScale | Source | MemoryDetail |\n      --kernel-name=<NAME>                  Specify the kernel name to profile.\n                                              Not effective in config mode.\n      --launch-count=<LIMIT>                Number of kernel that can be collected.\n                                              LIMIT:1-5000, default: 1\n      --launch-skip-before-match=<SKIP>     Set the number of kernel launch to skip\n                                              before starting to analyze the kernel.\n                                              SKIP:0-1000, default: 0\n      --replay-mode=<MODE>                  Data collection replay mode.\n                                              MODE:application|kernel|range, default: kernel\n      --kill=<SWITCH>                       Kill op process when the number of kernel reaches launch-count.\n                                              SWITCH:on|off, default: off\n      --mstx=<SWITCH>                       Enable mstx API or not.\n                                              SWITCH:on|off, default: off\n      --mstx-include=<RANGE>                Specify the mstx range for msprof op to be collected.\n      --warm-up=<TIMES>                     Set the number of warm up times.\n                                              TIMES:0-500, default: 5\n      --dump=<SWITCH>                       Enable or disable dump flushed to disk mode. Only effective when\n                                              --aic-metrics=<TIMELINEDETAIL>.\n                                              SWITCH:on|off, default: off\n      --core-id=<ID>                        Specify the id of cores to be parsed.\n                                              Only effective when --aic-metrics=<TIMELINEDETAIL> and only\n                                              effective in simulation products.\n      --custom-input=<FILE>                 Json file for op custom input.\n",
+      "stderr": ""
+    },
+    "observed_toolkit_version_contents": [
+      "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_asc-devkit_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+    ]
+  },
+  "codegen_status": "all12 input-only JIT binaries compiled; mainbefore2Torchcopyops+sourceJIT, afterstridedJIT; actualtasknames/types retained",
+  "timing_scope": "Instrumented prepared source rope_forward, input transfers/validation/allocations outside BOTH; private output reuse and source alias exceptions; main before2realTorchcopies+sourceJIT vs afterstridedJIT; no ordinary latency/physical traffic/occupancy/roofline claim",
+  "cases": [
+    {
+      "case_id": "W009-R04-01",
+      "role": "gallery",
+      "parameters": {
+        "B": 1,
+        "S": 33,
+        "Hq": 8,
+        "Hk": 2,
+        "D": 64,
+        "cos_B": 1,
+        "producer": "BHSD"
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_numerical": true,
+            "source_alias_checks": {
+              "q": true,
+              "k": true
+            },
+            "source_aliases": [
+              false,
+              false
+            ],
+            "zero_sign_oracle_gate": false
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "paired_exact_bits": true,
+            "passed": true,
+            "exact_numerical": true,
+            "source_alias_checks": {
+              "q": true,
+              "k": true
+            },
+            "source_aliases": [
+              false,
+              false
+            ],
+            "zero_sign_oracle_gate": false
+          }
+        }
+      },
+      "fixture_sha256": "9357aaedef4fd16b0b19ec517ad66697478ca994b8b85fdabbfaa9ffe58c4958",
+      "source_sha256": {
+        "rope_layout.py": "5aebdd33e05c94ecabf0006776cc393d4ad9c3a01f09eb35206e94d49a36961d",
+        "rope_layout_contract.py": "2dd1268c2cdf5c6d1d132590b9605e553f18fb6ac289fa58908f102b0354be40",
+        "rope_layout_source.py": "e174937043477128f23f080e81f3f0c7defb6df165e9d51f690522b54b32a0b8",
+        "rope_layout_kernels.py": "357c27c8af370ce804beed8d4788890941dd2983fb68647ff0994d8c3bad8831"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "component": "prepared source rope_forward",
+            "arm": "before",
+            "route": "reference",
+            "source_aliases": {
+              "q": false,
+              "k": false
+            },
+            "charged_torch_copies": 2,
+            "device_kernel_calls": 1,
+            "grid": [
+              33
+            ],
+            "flags": {
+              "BACKWARD_PASS": false,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "reused_outputs": true,
+            "input_strides": {
+              "q": [
+                16896,
+                2112,
+                64,
+                1
+              ],
+              "k": [
+                4224,
+                2112,
+                64,
+                1
+              ],
+              "cos": [
+                2112,
+                64,
+                1
+              ],
+              "sin": [
+                2112,
+                64,
+                1
+              ]
+            },
+            "output_strides": [
+              [
+                16896,
+                64,
+                512,
+                1
+              ],
+              [
+                4224,
+                64,
+                128,
+                1
+              ],
+              [
+                2112,
+                64,
+                1
+              ],
+              [
+                2112,
+                64,
+                1
+              ]
+            ],
+            "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim"
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.47982001304626465,
+              0.33428001403808594,
+              0.30932000279426575,
+              0.32811999320983887,
+              0.2955999970436096,
+              0.29354000091552734,
+              0.3069800138473511,
+              0.29350000619888306,
+              0.41707998514175415,
+              0.30809998512268066
+            ],
+            "count": 10,
+            "mean": 0.3366340011358261,
+            "sample_sd": 0.0622654240945897
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                31.841,
+                31.161,
+                27.1605,
+                27.84,
+                30.161,
+                31.160999999999998,
+                27.280499999999996,
+                27.6005,
+                31.5405,
+                30.901
+              ],
+              "count": 10,
+              "mean": 29.6647,
+              "sample_sd": 1.9451753734132398
+            },
+            "device_active_union_us": {
+              "samples": [
+                31.841,
+                31.161,
+                27.1605,
+                27.84,
+                30.161,
+                31.161,
+                27.2805,
+                27.6005,
+                31.5405,
+                30.901
+              ],
+              "count": 10,
+              "mean": 29.6647,
+              "sample_sd": 1.9451753734132395
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                181.6435,
+                133.503,
+                135.862,
+                156.463,
+                140.723,
+                144.1425,
+                147.883,
+                125.082,
+                142.563,
+                166.064
+              ],
+              "count": 10,
+              "mean": 147.3929,
+              "sample_sd": 16.687547997101177
+            },
+            "operation_active_union_us": {
+              "samples": [
+                31.841,
+                31.161,
+                27.1605,
+                27.84,
+                30.161,
+                31.161,
+                27.2805,
+                27.6005,
+                31.5405,
+                30.901
+              ],
+              "count": 10,
+              "mean": 29.6647,
+              "sample_sd": 1.9451753734132395
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                149.8025,
+                102.342,
+                108.7015,
+                128.623,
+                110.562,
+                112.9815,
+                120.6025,
+                97.4815,
+                111.0225,
+                135.163
+              ],
+              "count": 10,
+              "mean": 117.7282,
+              "sample_sd": 16.0093325528858
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_triton_rope",
+              "aclnnInplaceCopy_TransposeAiCore_Transpose"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "a5bf41c700cb7ab3da650da44183ea93df6ecededce6668695d7dfef0de68ac1",
+              "name": "_triton_rope",
+              "binaries": {
+                "ttir": "232729c641bb7e1f9ede1e37611af8e5ec556006a7e2f5cd5fb52f59bba6dd53",
+                "ttadapter": "af6c2a013ad8c048502ad7d5af890c18512919eadc9600c92c007668c84dc563",
+                "npubin": "a16d0ece8ce7787da6ab9943f2059ac6a0ad1c29d4868e75e066b9ad49585b3e"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "a5bf41c700cb7ab3da650da44183ea93df6ecededce6668695d7dfef0de68ac1",
+              "name": "_triton_rope",
+              "binaries": {
+                "ttir": "232729c641bb7e1f9ede1e37611af8e5ec556006a7e2f5cd5fb52f59bba6dd53",
+                "ttadapter": "af6c2a013ad8c048502ad7d5af890c18512919eadc9600c92c007668c84dc563",
+                "npubin": "a16d0ece8ce7787da6ab9943f2059ac6a0ad1c29d4868e75e066b9ad49585b3e"
+              }
+            }
+          ],
+          "trace_sha256": "093060eeddfdc0f1d10f6cc5fd0559934c9a5162847716b15bac4a96e4043fee",
+          "accounting_sha256": "63f4c224e38dcbeba8d32153390c659a0cbc9d264faecad1b49f71c4a0d603b9"
+        },
+        "after": {
+          "metadata": {
+            "component": "prepared source rope_forward",
+            "arm": "after",
+            "route": "optimized",
+            "source_aliases": {
+              "q": false,
+              "k": false
+            },
+            "charged_torch_copies": 0,
+            "device_kernel_calls": 1,
+            "grid": [
+              33
+            ],
+            "flags": {
+              "BACKWARD_PASS": false,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "reused_outputs": true,
+            "input_strides": {
+              "q": [
+                16896,
+                2112,
+                64,
+                1
+              ],
+              "k": [
+                4224,
+                2112,
+                64,
+                1
+              ],
+              "cos": [
+                2112,
+                64,
+                1
+              ],
+              "sin": [
+                2112,
+                64,
+                1
+              ]
+            },
+            "output_strides": [
+              [
+                16896,
+                64,
+                512,
+                1
+              ],
+              [
+                4224,
+                64,
+                128,
+                1
+              ],
+              [
+                2112,
+                64,
+                1
+              ],
+              [
+                2112,
+                64,
+                1
+              ]
+            ],
+            "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim"
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.7550600171089172,
+              0.4027999937534332,
+              0.28082001209259033,
+              0.2748199999332428,
+              0.26627999544143677,
+              0.26989999413490295,
+              0.2546199858188629,
+              0.2603600025177002,
+              0.2611199915409088,
+              0.2581000030040741
+            ],
+            "count": 10,
+            "mean": 0.32838799953460696,
+            "sample_sd": 0.15618065252372143
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                6.78,
+                6.32,
+                5.24,
+                5.6005,
+                5.5805,
+                5.1,
+                4.7805,
+                5.7005,
+                5.28,
+                4.94
+              ],
+              "count": 10,
+              "mean": 5.5322000000000005,
+              "sample_sd": 0.620438250128264
+            },
+            "device_active_union_us": {
+              "samples": [
+                6.78,
+                6.32,
+                5.24,
+                5.6005,
+                5.5805,
+                5.1,
+                4.7805,
+                5.7005,
+                5.28,
+                4.94
+              ],
+              "count": 10,
+              "mean": 5.5322000000000005,
+              "sample_sd": 0.620438250128264
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                6.78,
+                6.32,
+                5.24,
+                5.6005,
+                5.5805,
+                5.1,
+                4.7805,
+                5.7005,
+                5.28,
+                4.94
+              ],
+              "count": 10,
+              "mean": 5.5322000000000005,
+              "sample_sd": 0.620438250128264
+            },
+            "operation_active_union_us": {
+              "samples": [
+                6.78,
+                6.32,
+                5.24,
+                5.6005,
+                5.5805,
+                5.1,
+                4.7805,
+                5.7005,
+                5.28,
+                4.94
+              ],
+              "count": 10,
+              "mean": 5.5322000000000005,
+              "sample_sd": 0.620438250128264
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_strided_rope"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "2b5edcc5d2d4719f30a7c3e9f6f66307cb5a2f44888bce534396d83e53b5bfa4",
+              "name": "_strided_rope",
+              "binaries": {
+                "ttir": "41baf86ddeefe92d2a2299de2575c09f2abc95fcfb886a8b68c8cc33bcd456d3",
+                "ttadapter": "a0142bd7d79f6940e78bb6eae209512cfa2838318497928e446a6ec8b9719da2",
+                "npubin": "0944dbb7646e854f9bc9f02d1cf37f9db3abfbfde0c244576122082edf4ff263"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "2b5edcc5d2d4719f30a7c3e9f6f66307cb5a2f44888bce534396d83e53b5bfa4",
+              "name": "_strided_rope",
+              "binaries": {
+                "ttir": "41baf86ddeefe92d2a2299de2575c09f2abc95fcfb886a8b68c8cc33bcd456d3",
+                "ttadapter": "a0142bd7d79f6940e78bb6eae209512cfa2838318497928e446a6ec8b9719da2",
+                "npubin": "0944dbb7646e854f9bc9f02d1cf37f9db3abfbfde0c244576122082edf4ff263"
+              }
+            }
+          ],
+          "trace_sha256": "d243c1b6a0d7f9bb8c9c6ea336ab06619e5c3c0db78d9bdd46a102f407ba2439",
+          "accounting_sha256": "fc012a001b53a8690b7674772de317bd870aa80e7eea9ca2ac71945a4b1aa262"
+        }
+      },
+      "actual_charged_task_types": {
+        "before": {
+          "scope": "all operation tasks retained without copy-name/type guessing",
+          "charged_torch_copy_calls_per_api": 2,
+          "tasks": [
+            {
+              "task": {
+                "task_id": "2517347776:47:238:0:4294967295",
+                "correlation_id": "async_npu:1792898231946008359",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 1133.989,
+                "duration_us": 12.6605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:239:0:4294967295",
+                "correlation_id": "async_npu:1792898231946021039",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 1146.669,
+                "duration_us": 12.78
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:240:0:4294967295",
+                "correlation_id": "async_npu:1792898231946183602",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 1309.232,
+                "duration_us": 6.4005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:243:0:4294967295",
+                "correlation_id": "async_npu:1792898231946512489",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 1638.119,
+                "duration_us": 13.2605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:244:0:4294967295",
+                "correlation_id": "async_npu:1792898231946525769",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 1651.399,
+                "duration_us": 13.2805
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:245:0:4294967295",
+                "correlation_id": "async_npu:1792898231946641372",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 1767.002,
+                "duration_us": 4.62
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:248:0:4294967295",
+                "correlation_id": "async_npu:1792898231946941698",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2067.328,
+                "duration_us": 11.5
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:249:0:4294967295",
+                "correlation_id": "async_npu:1792898231946953218",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2078.848,
+                "duration_us": 11.4805
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:250:0:4294967295",
+                "correlation_id": "async_npu:1792898231947073380",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 2199.01,
+                "duration_us": 4.18
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:253:0:4294967295",
+                "correlation_id": "async_npu:1792898231947344906",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2470.536,
+                "duration_us": 11.78
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:254:0:4294967295",
+                "correlation_id": "async_npu:1792898231947372826",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2498.456,
+                "duration_us": 11.8
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:255:0:4294967295",
+                "correlation_id": "async_npu:1792898231947497109",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 2622.739,
+                "duration_us": 4.26
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:258:0:4294967295",
+                "correlation_id": "async_npu:1792898231947758814",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2884.444,
+                "duration_us": 12.7405
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:259:0:4294967295",
+                "correlation_id": "async_npu:1792898231947786974",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2912.604,
+                "duration_us": 12.7405
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:260:0:4294967295",
+                "correlation_id": "async_npu:1792898231947894857",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 3020.487,
+                "duration_us": 4.68
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:263:0:4294967295",
+                "correlation_id": "async_npu:1792898231948196403",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3322.033,
+                "duration_us": 13.28
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:264:0:4294967295",
+                "correlation_id": "async_npu:1792898231948209703",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3335.333,
+                "duration_us": 13.4805
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:265:0:4294967295",
+                "correlation_id": "async_npu:1792898231948336145",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 3461.775,
+                "duration_us": 4.4005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:268:0:4294967295",
+                "correlation_id": "async_npu:1792898231948577050",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3702.68,
+                "duration_us": 11.62
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:269:0:4294967295",
+                "correlation_id": "async_npu:1792898231948605251",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3730.881,
+                "duration_us": 11.5605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:270:0:4294967295",
+                "correlation_id": "async_npu:1792898231948720833",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 3846.463,
+                "duration_us": 4.1
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:273:0:4294967295",
+                "correlation_id": "async_npu:1792898231949012339",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 4137.969,
+                "duration_us": 11.9005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:274:0:4294967295",
+                "correlation_id": "async_npu:1792898231949024259",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 4149.889,
+                "duration_us": 11.84
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:275:0:4294967295",
+                "correlation_id": "async_npu:1792898231949133561",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 4259.191,
+                "duration_us": 3.86
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:278:0:4294967295",
+                "correlation_id": "async_npu:1792898231949534009",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 4659.639,
+                "duration_us": 14.7605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:279:0:4294967295",
+                "correlation_id": "async_npu:1792898231949548790",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 4674.42,
+                "duration_us": 12.64
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:280:0:4294967295",
+                "correlation_id": "async_npu:1792898231949672432",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 4798.062,
+                "duration_us": 4.14
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:283:0:4294967295",
+                "correlation_id": "async_npu:1792898231949930157",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 5055.787,
+                "duration_us": 13.3205
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:284:0:4294967295",
+                "correlation_id": "async_npu:1792898231949961378",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 5087.008,
+                "duration_us": 13.2805
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:285:0:4294967295",
+                "correlation_id": "async_npu:1792898231950091921",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 5217.551,
+                "duration_us": 4.3
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            }
+          ]
+        },
+        "after": {
+          "scope": "all operation tasks retained without copy-name/type guessing",
+          "charged_torch_copy_calls_per_api": 0,
+          "tasks": [
+            {
+              "task": {
+                "task_id": "2517347776:47:288:0:4294967295",
+                "correlation_id": "async_npu:1792898236725501668",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 1037.438,
+                "duration_us": 6.78
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:291:0:4294967295",
+                "correlation_id": "async_npu:1792898236725995778",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 1531.548,
+                "duration_us": 6.32
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:294:0:4294967295",
+                "correlation_id": "async_npu:1792898236726381626",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 1917.396,
+                "duration_us": 5.24
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:297:0:4294967295",
+                "correlation_id": "async_npu:1792898236726762773",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 2298.543,
+                "duration_us": 5.6005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:300:0:4294967295",
+                "correlation_id": "async_npu:1792898236727113680",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 2649.45,
+                "duration_us": 5.5805
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:303:0:4294967295",
+                "correlation_id": "async_npu:1792898236727484028",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 3019.798,
+                "duration_us": 5.1
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:306:0:4294967295",
+                "correlation_id": "async_npu:1792898236727843555",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 3379.325,
+                "duration_us": 4.7805
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:309:0:4294967295",
+                "correlation_id": "async_npu:1792898236728192822",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 3728.592,
+                "duration_us": 5.7005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:312:0:4294967295",
+                "correlation_id": "async_npu:1792898236728539229",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 4074.999,
+                "duration_us": 5.28
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:315:0:4294967295",
+                "correlation_id": "async_npu:1792898236728887636",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 4423.406,
+                "duration_us": 4.94
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            }
+          ]
+        }
+      },
+      "oracle_generation_calls": 1,
+      "actual_task_summary": {
+        "before": [
+          {
+            "name": "_triton_rope",
+            "type": "AI_VECTOR_CORE",
+            "count": 10
+          },
+          {
+            "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+            "type": "AI_VECTOR_CORE",
+            "count": 20
+          }
+        ],
+        "after": [
+          {
+            "name": "_strided_rope",
+            "type": "AI_VECTOR_CORE",
+            "count": 10
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R04-02",
+      "role": "gallery",
+      "parameters": {
+        "B": 2,
+        "S": 256,
+        "Hq": 16,
+        "Hk": 4,
+        "D": 64,
+        "cos_B": 2,
+        "producer": "BHSD"
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_numerical": true,
+            "source_alias_checks": {
+              "q": true,
+              "k": true
+            },
+            "source_aliases": [
+              false,
+              false
+            ],
+            "zero_sign_oracle_gate": false
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "paired_exact_bits": true,
+            "passed": true,
+            "exact_numerical": true,
+            "source_alias_checks": {
+              "q": true,
+              "k": true
+            },
+            "source_aliases": [
+              false,
+              false
+            ],
+            "zero_sign_oracle_gate": false
+          }
+        }
+      },
+      "fixture_sha256": "ede95ba0d19bf81643b22d13679b7c9aeb5ea60fa6034305e98fadfd98502274",
+      "source_sha256": {
+        "rope_layout.py": "5aebdd33e05c94ecabf0006776cc393d4ad9c3a01f09eb35206e94d49a36961d",
+        "rope_layout_contract.py": "2dd1268c2cdf5c6d1d132590b9605e553f18fb6ac289fa58908f102b0354be40",
+        "rope_layout_source.py": "e174937043477128f23f080e81f3f0c7defb6df165e9d51f690522b54b32a0b8",
+        "rope_layout_kernels.py": "357c27c8af370ce804beed8d4788890941dd2983fb68647ff0994d8c3bad8831"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "component": "prepared source rope_forward",
+            "arm": "before",
+            "route": "reference",
+            "source_aliases": {
+              "q": false,
+              "k": false
+            },
+            "charged_torch_copies": 2,
+            "device_kernel_calls": 1,
+            "grid": [
+              512
+            ],
+            "flags": {
+              "BACKWARD_PASS": false,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "reused_outputs": true,
+            "input_strides": {
+              "q": [
+                262144,
+                16384,
+                64,
+                1
+              ],
+              "k": [
+                65536,
+                16384,
+                64,
+                1
+              ],
+              "cos": [
+                16384,
+                64,
+                1
+              ],
+              "sin": [
+                16384,
+                64,
+                1
+              ]
+            },
+            "output_strides": [
+              [
+                262144,
+                64,
+                1024,
+                1
+              ],
+              [
+                65536,
+                64,
+                256,
+                1
+              ],
+              [
+                16384,
+                64,
+                1
+              ],
+              [
+                16384,
+                64,
+                1
+              ]
+            ],
+            "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim"
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.044700026512146,
+              0.4309200048446655,
+              0.4239400029182434,
+              0.423880010843277,
+              0.3994399905204773,
+              0.5164200067520142,
+              0.3958599865436554,
+              0.45458000898361206,
+              0.4876999855041504,
+              0.36406001448631287
+            ],
+            "count": 10,
+            "mean": 0.4941500037908554,
+            "sample_sd": 0.19850226309786156
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                51.8605,
+                49.921,
+                50.5015,
+                48.8815,
+                49.1815,
+                53.401,
+                50.221000000000004,
+                46.7005,
+                52.721000000000004,
+                50.641
+              ],
+              "count": 10,
+              "mean": 50.40305,
+              "sample_sd": 1.9531387623515144
+            },
+            "device_active_union_us": {
+              "samples": [
+                51.8605,
+                49.921,
+                50.5015,
+                48.8815,
+                49.1815,
+                53.401,
+                50.221,
+                46.7005,
+                52.721,
+                50.641
+              ],
+              "count": 10,
+              "mean": 50.40305,
+              "sample_sd": 1.9531387623515135
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                7.105427357601002e-15,
+                0.0,
+                7.105427357601002e-15,
+                0.0
+              ],
+              "count": 10,
+              "mean": 1.4210854715202005e-15,
+              "sample_sd": 2.995911226518785e-15
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                496.67,
+                214.1445,
+                205.1845,
+                232.4055,
+                217.5645,
+                201.104,
+                224.385,
+                227.984,
+                252.645,
+                194.8445
+              ],
+              "count": 10,
+              "mean": 246.69315,
+              "sample_sd": 89.42606309374925
+            },
+            "operation_active_union_us": {
+              "samples": [
+                51.8605,
+                49.921,
+                50.5015,
+                48.8815,
+                49.1815,
+                53.401,
+                50.221,
+                46.7005,
+                52.721,
+                50.641
+              ],
+              "count": 10,
+              "mean": 50.40305,
+              "sample_sd": 1.9531387623515135
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                444.8095,
+                164.2235,
+                154.683,
+                183.524,
+                168.383,
+                147.703,
+                174.164,
+                181.2835,
+                199.924,
+                144.2035
+              ],
+              "count": 10,
+              "mean": 196.2901,
+              "sample_sd": 88.98487829207588
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_triton_rope",
+              "aclnnInplaceCopy_TransposeAiCore_Transpose"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "b3b64937f70cd309e78a7eed9b350ea6bea0cb516611dfb3cb5e6875a17ef813",
+              "name": "_triton_rope",
+              "binaries": {
+                "ttir": "edf548f26f53549fdae2982ecf39ea10a87bb72b89774c954fa2b0d70f2a775a",
+                "ttadapter": "e4142f67bb772e5b598091bb869ca68d3d1ef0f09e9bb5e546580369cb0dcf95",
+                "npubin": "9426a72585c1ed138cebdaf1fb98703f3e8eea99f32cc3c31f821a8aa911945a"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "b3b64937f70cd309e78a7eed9b350ea6bea0cb516611dfb3cb5e6875a17ef813",
+              "name": "_triton_rope",
+              "binaries": {
+                "ttir": "edf548f26f53549fdae2982ecf39ea10a87bb72b89774c954fa2b0d70f2a775a",
+                "ttadapter": "e4142f67bb772e5b598091bb869ca68d3d1ef0f09e9bb5e546580369cb0dcf95",
+                "npubin": "9426a72585c1ed138cebdaf1fb98703f3e8eea99f32cc3c31f821a8aa911945a"
+              }
+            }
+          ],
+          "trace_sha256": "c1e73f4a42928441eaba2d5571eeca60131eb08d278a02d92973c93fc62c019f",
+          "accounting_sha256": "b075dcf71e16eb4099f3ab3f0aa8d467714e9c6b7d721c5ac8f5610654d65c16"
+        },
+        "after": {
+          "metadata": {
+            "component": "prepared source rope_forward",
+            "arm": "after",
+            "route": "optimized",
+            "source_aliases": {
+              "q": false,
+              "k": false
+            },
+            "charged_torch_copies": 0,
+            "device_kernel_calls": 1,
+            "grid": [
+              512
+            ],
+            "flags": {
+              "BACKWARD_PASS": false,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "reused_outputs": true,
+            "input_strides": {
+              "q": [
+                262144,
+                16384,
+                64,
+                1
+              ],
+              "k": [
+                65536,
+                16384,
+                64,
+                1
+              ],
+              "cos": [
+                16384,
+                64,
+                1
+              ],
+              "sin": [
+                16384,
+                64,
+                1
+              ]
+            },
+            "output_strides": [
+              [
+                262144,
+                64,
+                1024,
+                1
+              ],
+              [
+                65536,
+                64,
+                256,
+                1
+              ],
+              [
+                16384,
+                64,
+                1
+              ],
+              [
+                16384,
+                64,
+                1
+              ]
+            ],
+            "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim"
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.9957799911499023,
+              0.30136001110076904,
+              0.29183998703956604,
+              0.3212999999523163,
+              0.2707799971103668,
+              0.2819400131702423,
+              0.2659200131893158,
+              0.2879199981689453,
+              0.2762399911880493,
+              0.26708000898361206
+            ],
+            "count": 10,
+            "mean": 0.3560160011053085,
+            "sample_sd": 0.225435283936461
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                15.3,
+                12.5005,
+                12.64,
+                13.3205,
+                13.9005,
+                12.78,
+                12.82,
+                13.4005,
+                13.3205,
+                12.56
+              ],
+              "count": 10,
+              "mean": 13.254249999999999,
+              "sample_sd": 0.8481228045906245
+            },
+            "device_active_union_us": {
+              "samples": [
+                15.3,
+                12.5005,
+                12.64,
+                13.3205,
+                13.9005,
+                12.78,
+                12.82,
+                13.4005,
+                13.3205,
+                12.56
+              ],
+              "count": 10,
+              "mean": 13.254249999999999,
+              "sample_sd": 0.8481228045906245
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                15.3,
+                12.5005,
+                12.64,
+                13.3205,
+                13.9005,
+                12.78,
+                12.82,
+                13.4005,
+                13.3205,
+                12.56
+              ],
+              "count": 10,
+              "mean": 13.254249999999999,
+              "sample_sd": 0.8481228045906245
+            },
+            "operation_active_union_us": {
+              "samples": [
+                15.3,
+                12.5005,
+                12.64,
+                13.3205,
+                13.9005,
+                12.78,
+                12.82,
+                13.4005,
+                13.3205,
+                12.56
+              ],
+              "count": 10,
+              "mean": 13.254249999999999,
+              "sample_sd": 0.8481228045906245
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_strided_rope"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "0681d95f129c1834b46ddf71c889dbf1399ca996fbbb3100658dd044f9dc9d45",
+              "name": "_strided_rope",
+              "binaries": {
+                "ttir": "d241d1c3453d13c21d6e30602f377a022afb2e4e84dfc76c828633eb52b46d17",
+                "ttadapter": "bcb90eb26bad1f40f9f7b0e58b8ce71b76adc21ab7d0c008e1bfd67771f68102",
+                "npubin": "0936615cccf8b59c532e5d462eabbf75c32157d78559dcb746c29be6d7733dbf"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "0681d95f129c1834b46ddf71c889dbf1399ca996fbbb3100658dd044f9dc9d45",
+              "name": "_strided_rope",
+              "binaries": {
+                "ttir": "d241d1c3453d13c21d6e30602f377a022afb2e4e84dfc76c828633eb52b46d17",
+                "ttadapter": "bcb90eb26bad1f40f9f7b0e58b8ce71b76adc21ab7d0c008e1bfd67771f68102",
+                "npubin": "0936615cccf8b59c532e5d462eabbf75c32157d78559dcb746c29be6d7733dbf"
+              }
+            }
+          ],
+          "trace_sha256": "93e89771016c92bdb12a8d34e1e48011d07baee09cdab7eb8bce5f70a4c5e8d8",
+          "accounting_sha256": "b2a60e0e9be9c0ef7e7158fb411c9ed27dbd87f7eb00fd3646f11036c787bc5f"
+        }
+      },
+      "actual_charged_task_types": {
+        "before": {
+          "scope": "all operation tasks retained without copy-name/type guessing",
+          "charged_torch_copy_calls_per_api": 2,
+          "tasks": [
+            {
+              "task": {
+                "task_id": "2517347776:47:318:0:4294967295",
+                "correlation_id": "async_npu:1792898241486615348",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 792.378,
+                "duration_us": 20.1405
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:319:0:4294967295",
+                "correlation_id": "async_npu:1792898241486649209",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 826.239,
+                "duration_us": 14.7
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:320:0:4294967295",
+                "correlation_id": "async_npu:1792898241487094998",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 1272.028,
+                "duration_us": 17.02
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:323:0:4294967295",
+                "correlation_id": "async_npu:1792898241487454105",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 1631.135,
+                "duration_us": 19.9405
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:324:0:4294967295",
+                "correlation_id": "async_npu:1792898241487475325",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 1652.355,
+                "duration_us": 14.58
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:325:0:4294967295",
+                "correlation_id": "async_npu:1792898241487652849",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 1829.879,
+                "duration_us": 15.4005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:328:0:4294967295",
+                "correlation_id": "async_npu:1792898241487989235",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2166.265,
+                "duration_us": 20.1805
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:329:0:4294967295",
+                "correlation_id": "async_npu:1792898241488009436",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2186.466,
+                "duration_us": 15.0605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:330:0:4294967295",
+                "correlation_id": "async_npu:1792898241488179159",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 2356.189,
+                "duration_us": 15.2605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:333:0:4294967295",
+                "correlation_id": "async_npu:1792898241488538326",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2715.356,
+                "duration_us": 19.3005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:334:0:4294967295",
+                "correlation_id": "async_npu:1792898241488567127",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2744.157,
+                "duration_us": 14.1405
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:335:0:4294967295",
+                "correlation_id": "async_npu:1792898241488755291",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 2932.321,
+                "duration_us": 15.4405
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:338:0:4294967295",
+                "correlation_id": "async_npu:1792898241489078077",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3255.107,
+                "duration_us": 19.1005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:339:0:4294967295",
+                "correlation_id": "async_npu:1792898241489105758",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3282.788,
+                "duration_us": 14.4405
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:340:0:4294967295",
+                "correlation_id": "async_npu:1792898241489280001",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 3457.031,
+                "duration_us": 15.6405
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:343:0:4294967295",
+                "correlation_id": "async_npu:1792898241489741530",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3918.56,
+                "duration_us": 19.9005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:344:0:4294967295",
+                "correlation_id": "async_npu:1792898241489769271",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3946.301,
+                "duration_us": 17.7605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:345:0:4294967295",
+                "correlation_id": "async_npu:1792898241489926894",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 4103.924,
+                "duration_us": 15.74
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:348:0:4294967295",
+                "correlation_id": "async_npu:1792898241490287961",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 4464.991,
+                "duration_us": 19.9405
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:349:0:4294967295",
+                "correlation_id": "async_npu:1792898241490317042",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 4494.072,
+                "duration_us": 14.8405
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:350:0:4294967295",
+                "correlation_id": "async_npu:1792898241490496906",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 4673.936,
+                "duration_us": 15.44
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:353:0:4294967295",
+                "correlation_id": "async_npu:1792898241490860373",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 5037.403,
+                "duration_us": 18.7605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:354:0:4294967295",
+                "correlation_id": "async_npu:1792898241490879153",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 5056.183,
+                "duration_us": 12.42
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:355:0:4294967295",
+                "correlation_id": "async_npu:1792898241491072837",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 5249.867,
+                "duration_us": 15.52
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:358:0:4294967295",
+                "correlation_id": "async_npu:1792898241491515026",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 5692.056,
+                "duration_us": 22.7605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:359:0:4294967295",
+                "correlation_id": "async_npu:1792898241491541406",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 5718.436,
+                "duration_us": 14.3605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:360:0:4294967295",
+                "correlation_id": "async_npu:1792898241491752071",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 5929.101,
+                "duration_us": 15.6
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:363:0:4294967295",
+                "correlation_id": "async_npu:1792898241492180359",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 6357.389,
+                "duration_us": 19.8605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:364:0:4294967295",
+                "correlation_id": "async_npu:1792898241492200260",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 6377.29,
+                "duration_us": 14.94
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:365:0:4294967295",
+                "correlation_id": "async_npu:1792898241492359363",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 6536.393,
+                "duration_us": 15.8405
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            }
+          ]
+        },
+        "after": {
+          "scope": "all operation tasks retained without copy-name/type guessing",
+          "charged_torch_copy_calls_per_api": 0,
+          "tasks": [
+            {
+              "task": {
+                "task_id": "2517347776:47:368:0:4294967295",
+                "correlation_id": "async_npu:1792898246236189663",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 1310.633,
+                "duration_us": 15.3
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:371:0:4294967295",
+                "correlation_id": "async_npu:1792898246236611351",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 1732.321,
+                "duration_us": 12.5005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:374:0:4294967295",
+                "correlation_id": "async_npu:1792898246237000619",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 2121.589,
+                "duration_us": 12.64
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:377:0:4294967295",
+                "correlation_id": "async_npu:1792898246237434227",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 2555.197,
+                "duration_us": 13.3205
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:380:0:4294967295",
+                "correlation_id": "async_npu:1792898246237810795",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 2931.765,
+                "duration_us": 13.9005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:383:0:4294967295",
+                "correlation_id": "async_npu:1792898246238196743",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 3317.713,
+                "duration_us": 12.78
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:386:0:4294967295",
+                "correlation_id": "async_npu:1792898246238554830",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 3675.8,
+                "duration_us": 12.82
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:389:0:4294967295",
+                "correlation_id": "async_npu:1792898246238930617",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 4051.587,
+                "duration_us": 13.4005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:392:0:4294967295",
+                "correlation_id": "async_npu:1792898246239307665",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 4428.635,
+                "duration_us": 13.3205
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:395:0:4294967295",
+                "correlation_id": "async_npu:1792898246239674552",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 4795.522,
+                "duration_us": 12.56
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            }
+          ]
+        }
+      },
+      "oracle_generation_calls": 1,
+      "actual_task_summary": {
+        "before": [
+          {
+            "name": "_triton_rope",
+            "type": "AI_VECTOR_CORE",
+            "count": 10
+          },
+          {
+            "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+            "type": "AI_VECTOR_CORE",
+            "count": 20
+          }
+        ],
+        "after": [
+          {
+            "name": "_strided_rope",
+            "type": "AI_VECTOR_CORE",
+            "count": 10
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R04-03",
+      "role": "heldout",
+      "parameters": {
+        "B": 1,
+        "S": 256,
+        "Hq": 8,
+        "Hk": 2,
+        "D": 64,
+        "cos_B": 1,
+        "producer": "BHSD"
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_numerical": true,
+            "source_alias_checks": {
+              "q": true,
+              "k": true
+            },
+            "source_aliases": [
+              false,
+              false
+            ],
+            "zero_sign_oracle_gate": false
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "paired_exact_bits": true,
+            "passed": true,
+            "exact_numerical": true,
+            "source_alias_checks": {
+              "q": true,
+              "k": true
+            },
+            "source_aliases": [
+              false,
+              false
+            ],
+            "zero_sign_oracle_gate": false
+          }
+        }
+      },
+      "fixture_sha256": "b0e250f31c2bbae042e38a01abc1b25c49c37869cc3ba69d3c06e7c98f51760b",
+      "source_sha256": {
+        "rope_layout.py": "5aebdd33e05c94ecabf0006776cc393d4ad9c3a01f09eb35206e94d49a36961d",
+        "rope_layout_contract.py": "2dd1268c2cdf5c6d1d132590b9605e553f18fb6ac289fa58908f102b0354be40",
+        "rope_layout_source.py": "e174937043477128f23f080e81f3f0c7defb6df165e9d51f690522b54b32a0b8",
+        "rope_layout_kernels.py": "357c27c8af370ce804beed8d4788890941dd2983fb68647ff0994d8c3bad8831"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "component": "prepared source rope_forward",
+            "arm": "before",
+            "route": "reference",
+            "source_aliases": {
+              "q": false,
+              "k": false
+            },
+            "charged_torch_copies": 2,
+            "device_kernel_calls": 1,
+            "grid": [
+              256
+            ],
+            "flags": {
+              "BACKWARD_PASS": false,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "reused_outputs": true,
+            "input_strides": {
+              "q": [
+                131072,
+                16384,
+                64,
+                1
+              ],
+              "k": [
+                32768,
+                16384,
+                64,
+                1
+              ],
+              "cos": [
+                16384,
+                64,
+                1
+              ],
+              "sin": [
+                16384,
+                64,
+                1
+              ]
+            },
+            "output_strides": [
+              [
+                131072,
+                64,
+                512,
+                1
+              ],
+              [
+                32768,
+                64,
+                128,
+                1
+              ],
+              [
+                16384,
+                64,
+                1
+              ],
+              [
+                16384,
+                64,
+                1
+              ]
+            ],
+            "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim"
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.8862599730491638,
+              0.32506000995635986,
+              0.3128800094127655,
+              0.3178600072860718,
+              0.3104200065135956,
+              0.4376800060272217,
+              0.2906000018119812,
+              0.2808400094509125,
+              0.29965999722480774,
+              0.31407999992370605
+            ],
+            "count": 10,
+            "mean": 0.37753400206565857,
+            "sample_sd": 0.18391320647314074
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                39.960499999999996,
+                37.6405,
+                33.481,
+                34.0005,
+                35.3805,
+                36.3805,
+                33.7405,
+                34.621,
+                36.7205,
+                35.221
+              ],
+              "count": 10,
+              "mean": 35.71465,
+              "sample_sd": 2.0157000031695627
+            },
+            "device_active_union_us": {
+              "samples": [
+                39.9605,
+                37.6405,
+                33.481,
+                34.0005,
+                35.3805,
+                36.3805,
+                33.7405,
+                34.621,
+                36.7205,
+                35.221
+              ],
+              "count": 10,
+              "mean": 35.71465,
+              "sample_sd": 2.0157000031695644
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                428.4485,
+                143.923,
+                148.1025,
+                136.302,
+                167.103,
+                147.023,
+                147.143,
+                150.2825,
+                147.082,
+                155.6035
+              ],
+              "count": 10,
+              "mean": 177.1013,
+              "sample_sd": 88.67321999848659
+            },
+            "operation_active_union_us": {
+              "samples": [
+                39.9605,
+                37.6405,
+                33.481,
+                34.0005,
+                35.3805,
+                36.3805,
+                33.7405,
+                34.621,
+                36.7205,
+                35.221
+              ],
+              "count": 10,
+              "mean": 35.71465,
+              "sample_sd": 2.0157000031695644
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                388.488,
+                106.2825,
+                114.6215,
+                102.3015,
+                131.7225,
+                110.6425,
+                113.4025,
+                115.6615,
+                110.3615,
+                120.3825
+              ],
+              "count": 10,
+              "mean": 141.38665,
+              "sample_sd": 87.19239870158471
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_triton_rope",
+              "aclnnInplaceCopy_TransposeAiCore_Transpose"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "6463661e753cd1cec987c61b2ae1a0f8a8490898a3bdb680ff4d72c19bc3919c",
+              "name": "_triton_rope",
+              "binaries": {
+                "ttir": "2865a7ad0316da4131f769edd0a9b80e1841d2ca507e05bce52afacb85e44ad2",
+                "ttadapter": "676266034a4d2e1f912a11252548ef6a81efffd4e7040b896252fd020ce4574d",
+                "npubin": "a16d0ece8ce7787da6ab9943f2059ac6a0ad1c29d4868e75e066b9ad49585b3e"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "6463661e753cd1cec987c61b2ae1a0f8a8490898a3bdb680ff4d72c19bc3919c",
+              "name": "_triton_rope",
+              "binaries": {
+                "ttir": "2865a7ad0316da4131f769edd0a9b80e1841d2ca507e05bce52afacb85e44ad2",
+                "ttadapter": "676266034a4d2e1f912a11252548ef6a81efffd4e7040b896252fd020ce4574d",
+                "npubin": "a16d0ece8ce7787da6ab9943f2059ac6a0ad1c29d4868e75e066b9ad49585b3e"
+              }
+            }
+          ],
+          "trace_sha256": "f39ff4a65b3a32759afa379160cb4c062cdd2fd4eec055fe4df2044608e488f4",
+          "accounting_sha256": "e1da597d5e4f4f438e831dca6e7c741c113b31932080613483d8f098bc3b0285"
+        },
+        "after": {
+          "metadata": {
+            "component": "prepared source rope_forward",
+            "arm": "after",
+            "route": "optimized",
+            "source_aliases": {
+              "q": false,
+              "k": false
+            },
+            "charged_torch_copies": 0,
+            "device_kernel_calls": 1,
+            "grid": [
+              256
+            ],
+            "flags": {
+              "BACKWARD_PASS": false,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "reused_outputs": true,
+            "input_strides": {
+              "q": [
+                131072,
+                16384,
+                64,
+                1
+              ],
+              "k": [
+                32768,
+                16384,
+                64,
+                1
+              ],
+              "cos": [
+                16384,
+                64,
+                1
+              ],
+              "sin": [
+                16384,
+                64,
+                1
+              ]
+            },
+            "output_strides": [
+              [
+                131072,
+                64,
+                512,
+                1
+              ],
+              [
+                32768,
+                64,
+                128,
+                1
+              ],
+              [
+                16384,
+                64,
+                1
+              ],
+              [
+                16384,
+                64,
+                1
+              ]
+            ],
+            "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim"
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.8830400109291077,
+              0.2732999920845032,
+              0.2705000042915344,
+              0.2556599974632263,
+              0.24566000699996948,
+              0.2632000148296356,
+              0.2885800004005432,
+              0.38708001375198364,
+              0.2608200013637543,
+              0.24181999266147614
+            ],
+            "count": 10,
+            "mean": 0.3369660034775734,
+            "sample_sd": 0.1962878783511461
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                11.6005,
+                9.02,
+                8.74,
+                9.58,
+                9.5405,
+                8.7805,
+                9.44,
+                9.84,
+                10.22,
+                9.44
+              ],
+              "count": 10,
+              "mean": 9.62015,
+              "sample_sd": 0.8328438912678789
+            },
+            "device_active_union_us": {
+              "samples": [
+                11.6005,
+                9.02,
+                8.74,
+                9.58,
+                9.5405,
+                8.7805,
+                9.44,
+                9.84,
+                10.22,
+                9.44
+              ],
+              "count": 10,
+              "mean": 9.62015,
+              "sample_sd": 0.8328438912678789
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                11.6005,
+                9.02,
+                8.74,
+                9.58,
+                9.5405,
+                8.7805,
+                9.44,
+                9.84,
+                10.22,
+                9.44
+              ],
+              "count": 10,
+              "mean": 9.62015,
+              "sample_sd": 0.8328438912678789
+            },
+            "operation_active_union_us": {
+              "samples": [
+                11.6005,
+                9.02,
+                8.74,
+                9.58,
+                9.5405,
+                8.7805,
+                9.44,
+                9.84,
+                10.22,
+                9.44
+              ],
+              "count": 10,
+              "mean": 9.62015,
+              "sample_sd": 0.8328438912678789
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_strided_rope"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "6fdbb1175121a7797b57e833b6d345b6408f4e54a48482999243c30c779432ee",
+              "name": "_strided_rope",
+              "binaries": {
+                "ttir": "0a4707954ab46a01a33430345e9978cb748028752eea079dc15df9580f0e08dc",
+                "ttadapter": "e658f74cd589ef187eeec3d600c67edab73dc56f68b89aada90fce7ff556e6b7",
+                "npubin": "0944dbb7646e854f9bc9f02d1cf37f9db3abfbfde0c244576122082edf4ff263"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "6fdbb1175121a7797b57e833b6d345b6408f4e54a48482999243c30c779432ee",
+              "name": "_strided_rope",
+              "binaries": {
+                "ttir": "0a4707954ab46a01a33430345e9978cb748028752eea079dc15df9580f0e08dc",
+                "ttadapter": "e658f74cd589ef187eeec3d600c67edab73dc56f68b89aada90fce7ff556e6b7",
+                "npubin": "0944dbb7646e854f9bc9f02d1cf37f9db3abfbfde0c244576122082edf4ff263"
+              }
+            }
+          ],
+          "trace_sha256": "2e9d71d182e13ca9705b6f06bbc24930f6b7efecf7585678ef40811c4c65452c",
+          "accounting_sha256": "58ab62593af7da7cb22290169a887e16217158f4c11f06ea6e798499b0a22fcd"
+        }
+      },
+      "actual_charged_task_types": {
+        "before": {
+          "scope": "all operation tasks retained without copy-name/type guessing",
+          "charged_torch_copy_calls_per_api": 2,
+          "tasks": [
+            {
+              "task": {
+                "task_id": "2517347776:47:398:0:4294967295",
+                "correlation_id": "async_npu:1792898251007047467",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 702.057,
+                "duration_us": 14.38
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:399:0:4294967295",
+                "correlation_id": "async_npu:1792898251007076107",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 730.697,
+                "duration_us": 12.78
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:400:0:4294967295",
+                "correlation_id": "async_npu:1792898251007463115",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 1117.705,
+                "duration_us": 12.8005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:403:0:4294967295",
+                "correlation_id": "async_npu:1792898251007739880",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 1394.47,
+                "duration_us": 15.0205
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:404:0:4294967295",
+                "correlation_id": "async_npu:1792898251007754921",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 1409.511,
+                "duration_us": 13.34
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:405:0:4294967295",
+                "correlation_id": "async_npu:1792898251007874523",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 1529.113,
+                "duration_us": 9.28
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:408:0:4294967295",
+                "correlation_id": "async_npu:1792898251008147929",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 1802.519,
+                "duration_us": 13.3
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:409:0:4294967295",
+                "correlation_id": "async_npu:1792898251008161249",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 1815.839,
+                "duration_us": 11.6005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:410:0:4294967295",
+                "correlation_id": "async_npu:1792898251008287451",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 1942.041,
+                "duration_us": 8.5805
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:413:0:4294967295",
+                "correlation_id": "async_npu:1792898251008547557",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2202.147,
+                "duration_us": 13.54
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:414:0:4294967295",
+                "correlation_id": "async_npu:1792898251008561137",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2215.727,
+                "duration_us": 11.8805
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:415:0:4294967295",
+                "correlation_id": "async_npu:1792898251008675279",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 2329.869,
+                "duration_us": 8.58
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:418:0:4294967295",
+                "correlation_id": "async_npu:1792898251008918864",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2573.454,
+                "duration_us": 13.5605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:419:0:4294967295",
+                "correlation_id": "async_npu:1792898251008947565",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2602.155,
+                "duration_us": 12.74
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:420:0:4294967295",
+                "correlation_id": "async_npu:1792898251009076887",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 2731.477,
+                "duration_us": 9.08
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:423:0:4294967295",
+                "correlation_id": "async_npu:1792898251009464735",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3119.325,
+                "duration_us": 14.1405
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:424:0:4294967295",
+                "correlation_id": "async_npu:1792898251009478895",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3133.485,
+                "duration_us": 13.34
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:425:0:4294967295",
+                "correlation_id": "async_npu:1792898251009602858",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 3257.448,
+                "duration_us": 8.9
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:428:0:4294967295",
+                "correlation_id": "async_npu:1792898251009864563",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3519.153,
+                "duration_us": 13.3805
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:429:0:4294967295",
+                "correlation_id": "async_npu:1792898251009877983",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3532.573,
+                "duration_us": 11.52
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:430:0:4294967295",
+                "correlation_id": "async_npu:1792898251010002866",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 3657.456,
+                "duration_us": 8.84
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:433:0:4294967295",
+                "correlation_id": "async_npu:1792898251010252351",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3906.941,
+                "duration_us": 13.56
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:434:0:4294967295",
+                "correlation_id": "async_npu:1792898251010289291",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3943.881,
+                "duration_us": 11.8805
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:435:0:4294967295",
+                "correlation_id": "async_npu:1792898251010393453",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 4048.043,
+                "duration_us": 9.1805
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:438:0:4294967295",
+                "correlation_id": "async_npu:1792898251010645159",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 4299.749,
+                "duration_us": 14.42
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:439:0:4294967295",
+                "correlation_id": "async_npu:1792898251010659599",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 4314.189,
+                "duration_us": 13.3005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:440:0:4294967295",
+                "correlation_id": "async_npu:1792898251010783241",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 4437.831,
+                "duration_us": 9.0
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:443:0:4294967295",
+                "correlation_id": "async_npu:1792898251011018706",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 4673.296,
+                "duration_us": 13.4605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:444:0:4294967295",
+                "correlation_id": "async_npu:1792898251011032186",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 4686.776,
+                "duration_us": 12.7
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:445:0:4294967295",
+                "correlation_id": "async_npu:1792898251011165249",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 4819.839,
+                "duration_us": 9.0605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            }
+          ]
+        },
+        "after": {
+          "scope": "all operation tasks retained without copy-name/type guessing",
+          "charged_torch_copy_calls_per_api": 0,
+          "tasks": [
+            {
+              "task": {
+                "task_id": "2517347776:47:448:0:4294967295",
+                "correlation_id": "async_npu:1792898255755184929",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 1132.579,
+                "duration_us": 11.6005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:451:0:4294967295",
+                "correlation_id": "async_npu:1792898255755568477",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 1516.127,
+                "duration_us": 9.02
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:454:0:4294967295",
+                "correlation_id": "async_npu:1792898255755924664",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 1872.314,
+                "duration_us": 8.74
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:457:0:4294967295",
+                "correlation_id": "async_npu:1792898255756291572",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 2239.222,
+                "duration_us": 9.58
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:460:0:4294967295",
+                "correlation_id": "async_npu:1792898255756637598",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 2585.248,
+                "duration_us": 9.5405
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:463:0:4294967295",
+                "correlation_id": "async_npu:1792898255756986045",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 2933.695,
+                "duration_us": 8.7805
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:466:0:4294967295",
+                "correlation_id": "async_npu:1792898255757367353",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 3315.003,
+                "duration_us": 9.44
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:469:0:4294967295",
+                "correlation_id": "async_npu:1792898255757825582",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 3773.232,
+                "duration_us": 9.84
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:472:0:4294967295",
+                "correlation_id": "async_npu:1792898255758200750",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 4148.4,
+                "duration_us": 10.22
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:475:0:4294967295",
+                "correlation_id": "async_npu:1792898255758550137",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 4497.787,
+                "duration_us": 9.44
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            }
+          ]
+        }
+      },
+      "oracle_generation_calls": 1,
+      "actual_task_summary": {
+        "before": [
+          {
+            "name": "_triton_rope",
+            "type": "AI_VECTOR_CORE",
+            "count": 10
+          },
+          {
+            "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+            "type": "AI_VECTOR_CORE",
+            "count": 20
+          }
+        ],
+        "after": [
+          {
+            "name": "_strided_rope",
+            "type": "AI_VECTOR_CORE",
+            "count": 10
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R04-04",
+      "role": "heldout",
+      "parameters": {
+        "B": 2,
+        "S": 33,
+        "Hq": 16,
+        "Hk": 4,
+        "D": 64,
+        "cos_B": 1,
+        "producer": "BHSD"
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_numerical": true,
+            "source_alias_checks": {
+              "q": true,
+              "k": true
+            },
+            "source_aliases": [
+              false,
+              false
+            ],
+            "zero_sign_oracle_gate": false
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "paired_exact_bits": true,
+            "passed": true,
+            "exact_numerical": true,
+            "source_alias_checks": {
+              "q": true,
+              "k": true
+            },
+            "source_aliases": [
+              false,
+              false
+            ],
+            "zero_sign_oracle_gate": false
+          }
+        }
+      },
+      "fixture_sha256": "575d588f427c873d9ec295716c64c66742bc763b9473a378b11b26ba72e4bb5c",
+      "source_sha256": {
+        "rope_layout.py": "5aebdd33e05c94ecabf0006776cc393d4ad9c3a01f09eb35206e94d49a36961d",
+        "rope_layout_contract.py": "2dd1268c2cdf5c6d1d132590b9605e553f18fb6ac289fa58908f102b0354be40",
+        "rope_layout_source.py": "e174937043477128f23f080e81f3f0c7defb6df165e9d51f690522b54b32a0b8",
+        "rope_layout_kernels.py": "357c27c8af370ce804beed8d4788890941dd2983fb68647ff0994d8c3bad8831"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "component": "prepared source rope_forward",
+            "arm": "before",
+            "route": "reference",
+            "source_aliases": {
+              "q": false,
+              "k": false
+            },
+            "charged_torch_copies": 2,
+            "device_kernel_calls": 1,
+            "grid": [
+              66
+            ],
+            "flags": {
+              "BACKWARD_PASS": false,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "reused_outputs": true,
+            "input_strides": {
+              "q": [
+                33792,
+                2112,
+                64,
+                1
+              ],
+              "k": [
+                8448,
+                2112,
+                64,
+                1
+              ],
+              "cos": [
+                2112,
+                64,
+                1
+              ],
+              "sin": [
+                2112,
+                64,
+                1
+              ]
+            },
+            "output_strides": [
+              [
+                33792,
+                64,
+                1024,
+                1
+              ],
+              [
+                8448,
+                64,
+                256,
+                1
+              ],
+              [
+                2112,
+                64,
+                1
+              ],
+              [
+                2112,
+                64,
+                1
+              ]
+            ],
+            "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim"
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.9205800294876099,
+              0.328139990568161,
+              0.3304400146007538,
+              0.29767999053001404,
+              0.29934000968933105,
+              0.3228999972343445,
+              0.3083600103855133,
+              0.2727400064468384,
+              0.38086000084877014,
+              0.3304600119590759
+            ],
+            "count": 10,
+            "mean": 0.3791500061750412,
+            "sample_sd": 0.19235388936202427
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                40.2205,
+                37.301,
+                35.700500000000005,
+                35.9405,
+                37.861000000000004,
+                37.3405,
+                35.7205,
+                36.0405,
+                38.0805,
+                39.5005
+              ],
+              "count": 10,
+              "mean": 37.3706,
+              "sample_sd": 1.5893751532529308
+            },
+            "device_active_union_us": {
+              "samples": [
+                40.2205,
+                37.301,
+                35.7005,
+                35.9405,
+                37.861,
+                37.3405,
+                35.7205,
+                36.0405,
+                38.0805,
+                39.5005
+              ],
+              "count": 10,
+              "mean": 37.3706,
+              "sample_sd": 1.5893751532529314
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                7.105427357601002e-15,
+                0.0,
+                7.105427357601002e-15,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 1.4210854715202005e-15,
+              "sample_sd": 2.995911226518785e-15
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                451.2485,
+                135.1235,
+                145.522,
+                132.602,
+                141.3025,
+                136.242,
+                130.062,
+                134.222,
+                152.483,
+                152.743
+              ],
+              "count": 10,
+              "mean": 171.15505,
+              "sample_sd": 98.73895888977212
+            },
+            "operation_active_union_us": {
+              "samples": [
+                40.2205,
+                37.301,
+                35.7005,
+                35.9405,
+                37.861,
+                37.3405,
+                35.7205,
+                36.0405,
+                38.0805,
+                39.5005
+              ],
+              "count": 10,
+              "mean": 37.3706,
+              "sample_sd": 1.5893751532529314
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                411.028,
+                97.8225,
+                109.8215,
+                96.6615,
+                103.4415,
+                98.9015,
+                94.3415,
+                98.1815,
+                114.4025,
+                113.2425
+              ],
+              "count": 10,
+              "mean": 133.78445,
+              "sample_sd": 97.67750060401436
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_triton_rope",
+              "aclnnInplaceCopy_TransposeAiCore_Transpose"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "ce5ac3029551bc5f5ada139f56a9ab1b4dbb56443683a4cf4ccdb83d6f3b188c",
+              "name": "_triton_rope",
+              "binaries": {
+                "ttir": "d4a78e0cc4a633fa1d2aa8126674e39b15ec2db0d66bb652a91519b7ca1b904b",
+                "ttadapter": "3e6828c01793a99b91ceb5d1d185b19f78f02f9212b808ece78fd92ef28029e9",
+                "npubin": "fe478a15e09658650e3fed25ad27738c43a459a7c052950c960f1c6b04960b50"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "ce5ac3029551bc5f5ada139f56a9ab1b4dbb56443683a4cf4ccdb83d6f3b188c",
+              "name": "_triton_rope",
+              "binaries": {
+                "ttir": "d4a78e0cc4a633fa1d2aa8126674e39b15ec2db0d66bb652a91519b7ca1b904b",
+                "ttadapter": "3e6828c01793a99b91ceb5d1d185b19f78f02f9212b808ece78fd92ef28029e9",
+                "npubin": "fe478a15e09658650e3fed25ad27738c43a459a7c052950c960f1c6b04960b50"
+              }
+            }
+          ],
+          "trace_sha256": "c20dacb00d4db4618b78e679f6231f0370a17999dada0d5c990dad1a6a453361",
+          "accounting_sha256": "2cd2e868070037a8f1e57562c24124c45cc8d2c71468f899853f66ed55b38f73"
+        },
+        "after": {
+          "metadata": {
+            "component": "prepared source rope_forward",
+            "arm": "after",
+            "route": "optimized",
+            "source_aliases": {
+              "q": false,
+              "k": false
+            },
+            "charged_torch_copies": 0,
+            "device_kernel_calls": 1,
+            "grid": [
+              66
+            ],
+            "flags": {
+              "BACKWARD_PASS": false,
+              "num_stages": 1,
+              "multibuffer": false,
+              "enable_fp_fusion": false
+            },
+            "reused_outputs": true,
+            "input_strides": {
+              "q": [
+                33792,
+                2112,
+                64,
+                1
+              ],
+              "k": [
+                8448,
+                2112,
+                64,
+                1
+              ],
+              "cos": [
+                2112,
+                64,
+                1
+              ],
+              "sin": [
+                2112,
+                64,
+                1
+              ]
+            },
+            "output_strides": [
+              [
+                33792,
+                64,
+                1024,
+                1
+              ],
+              [
+                8448,
+                64,
+                256,
+                1
+              ],
+              [
+                2112,
+                64,
+                1
+              ],
+              [
+                2112,
+                64,
+                1
+              ]
+            ],
+            "allocator_scope": "preallocated inputs/private BSHD outputs outside BOTH APIs; actual Torch copies every before call; no allocator/ordinary latency claim"
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.951960027217865,
+              0.37040001153945923,
+              0.3662799894809723,
+              0.3483999967575073,
+              0.3705599904060364,
+              0.48802000284194946,
+              0.3846000134944916,
+              0.3541800081729889,
+              0.34248000383377075,
+              0.3268600106239319
+            ],
+            "count": 10,
+            "mean": 0.4303740054368973,
+            "sample_sd": 0.18847891206825984
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                10.06,
+                7.14,
+                6.6205,
+                7.56,
+                7.54,
+                6.96,
+                7.5,
+                7.9,
+                8.2205,
+                7.4405
+              ],
+              "count": 10,
+              "mean": 7.69415,
+              "sample_sd": 0.9462932670278398
+            },
+            "device_active_union_us": {
+              "samples": [
+                10.06,
+                7.14,
+                6.6205,
+                7.56,
+                7.54,
+                6.96,
+                7.5,
+                7.9,
+                8.2205,
+                7.4405
+              ],
+              "count": 10,
+              "mean": 7.69415,
+              "sample_sd": 0.9462932670278398
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                10.06,
+                7.14,
+                6.6205,
+                7.56,
+                7.54,
+                6.96,
+                7.5,
+                7.9,
+                8.2205,
+                7.4405
+              ],
+              "count": 10,
+              "mean": 7.69415,
+              "sample_sd": 0.9462932670278398
+            },
+            "operation_active_union_us": {
+              "samples": [
+                10.06,
+                7.14,
+                6.6205,
+                7.56,
+                7.54,
+                6.96,
+                7.5,
+                7.9,
+                8.2205,
+                7.4405
+              ],
+              "count": 10,
+              "mean": 7.69415,
+              "sample_sd": 0.9462932670278398
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_strided_rope"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "68ce09de225a5d25c5df439147357269f028e892148455b061d7ab46a33f32a3",
+              "name": "_strided_rope",
+              "binaries": {
+                "ttir": "39f18b0a2eb61be79a2f0c609df28d6857de2bdac294126e0ca058a0f121a81b",
+                "ttadapter": "eb3c8e5e05ca6866941f57092d0a2a89a5ca9cc62912d79ce81bded9d7d7ef9d",
+                "npubin": "615fb7a5cbc09420a816e8344fedc6cee7381c86de5cf365d1e7144eea7d5116"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "68ce09de225a5d25c5df439147357269f028e892148455b061d7ab46a33f32a3",
+              "name": "_strided_rope",
+              "binaries": {
+                "ttir": "39f18b0a2eb61be79a2f0c609df28d6857de2bdac294126e0ca058a0f121a81b",
+                "ttadapter": "eb3c8e5e05ca6866941f57092d0a2a89a5ca9cc62912d79ce81bded9d7d7ef9d",
+                "npubin": "615fb7a5cbc09420a816e8344fedc6cee7381c86de5cf365d1e7144eea7d5116"
+              }
+            }
+          ],
+          "trace_sha256": "a0fbccdc460b36fe8ca4b4abc00731c624cba47e2030672c586e39f43a54b209",
+          "accounting_sha256": "1be2c5047ab9410f1aea39bc3bc430a4ff333a7c906b07256651934cf68a9767"
+        }
+      },
+      "actual_charged_task_types": {
+        "before": {
+          "scope": "all operation tasks retained without copy-name/type guessing",
+          "charged_torch_copy_calls_per_api": 2,
+          "tasks": [
+            {
+              "task": {
+                "task_id": "2517347776:47:478:0:4294967295",
+                "correlation_id": "async_npu:1792898260541746075",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 747.685,
+                "duration_us": 17.22
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:479:0:4294967295",
+                "correlation_id": "async_npu:1792898260541777515",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 779.125,
+                "duration_us": 12.74
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:480:0:4294967295",
+                "correlation_id": "async_npu:1792898260542187063",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 1188.673,
+                "duration_us": 10.2605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:483:0:4294967295",
+                "correlation_id": "async_npu:1792898260542486829",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 1488.439,
+                "duration_us": 17.8205
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:484:0:4294967295",
+                "correlation_id": "async_npu:1792898260542504670",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 1506.28,
+                "duration_us": 13.3
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:485:0:4294967295",
+                "correlation_id": "async_npu:1792898260542615772",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 1617.382,
+                "duration_us": 6.1805
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:488:0:4294967295",
+                "correlation_id": "async_npu:1792898260542896998",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 1898.608,
+                "duration_us": 17.96
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:489:0:4294967295",
+                "correlation_id": "async_npu:1792898260542914978",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 1916.588,
+                "duration_us": 12.0005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:490:0:4294967295",
+                "correlation_id": "async_npu:1792898260543036780",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 2038.39,
+                "duration_us": 5.74
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:493:0:4294967295",
+                "correlation_id": "async_npu:1792898260543305186",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2306.796,
+                "duration_us": 18.3605
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:494:0:4294967295",
+                "correlation_id": "async_npu:1792898260543323566",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2325.176,
+                "duration_us": 11.86
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:495:0:4294967295",
+                "correlation_id": "async_npu:1792898260543432068",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 2433.678,
+                "duration_us": 5.72
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:498:0:4294967295",
+                "correlation_id": "async_npu:1792898260543704374",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2705.984,
+                "duration_us": 18.6205
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:499:0:4294967295",
+                "correlation_id": "async_npu:1792898260543723014",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 2724.624,
+                "duration_us": 12.72
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:500:0:4294967295",
+                "correlation_id": "async_npu:1792898260543839156",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 2840.766,
+                "duration_us": 6.5205
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:503:0:4294967295",
+                "correlation_id": "async_npu:1792898260544104882",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3106.492,
+                "duration_us": 17.4205
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:504:0:4294967295",
+                "correlation_id": "async_npu:1792898260544122322",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3123.932,
+                "duration_us": 13.32
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:505:0:4294967295",
+                "correlation_id": "async_npu:1792898260544234524",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 3236.134,
+                "duration_us": 6.6
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:508:0:4294967295",
+                "correlation_id": "async_npu:1792898260544503250",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3504.86,
+                "duration_us": 17.8205
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:509:0:4294967295",
+                "correlation_id": "async_npu:1792898260544529870",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3531.48,
+                "duration_us": 11.58
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:510:0:4294967295",
+                "correlation_id": "async_npu:1792898260544626992",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 3628.602,
+                "duration_us": 6.32
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:513:0:4294967295",
+                "correlation_id": "async_npu:1792898260544898138",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3899.748,
+                "duration_us": 18.16
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:514:0:4294967295",
+                "correlation_id": "async_npu:1792898260544916338",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 3917.948,
+                "duration_us": 11.8805
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:515:0:4294967295",
+                "correlation_id": "async_npu:1792898260545026360",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 4027.97,
+                "duration_us": 6.0
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:518:0:4294967295",
+                "correlation_id": "async_npu:1792898260545362887",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 4364.497,
+                "duration_us": 18.4005
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:519:0:4294967295",
+                "correlation_id": "async_npu:1792898260545381307",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 4382.917,
+                "duration_us": 12.78
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:520:0:4294967295",
+                "correlation_id": "async_npu:1792898260545508470",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 4510.08,
+                "duration_us": 6.9
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:523:0:4294967295",
+                "correlation_id": "async_npu:1792898260545785395",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 4787.005,
+                "duration_us": 19.4405
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:524:0:4294967295",
+                "correlation_id": "async_npu:1792898260545804856",
+                "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+                "kind": "device",
+                "start_us": 4806.466,
+                "duration_us": 13.28
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:525:0:4294967295",
+                "correlation_id": "async_npu:1792898260545931358",
+                "name": "_triton_rope",
+                "kind": "device",
+                "start_us": 4932.968,
+                "duration_us": 6.78
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            }
+          ]
+        },
+        "after": {
+          "scope": "all operation tasks retained without copy-name/type guessing",
+          "charged_torch_copy_calls_per_api": 0,
+          "tasks": [
+            {
+              "task": {
+                "task_id": "2517347776:47:528:0:4294967295",
+                "correlation_id": "async_npu:1792898265311344145",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 1192.745,
+                "duration_us": 10.06
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:531:0:4294967295",
+                "correlation_id": "async_npu:1792898265311817555",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 1666.155,
+                "duration_us": 7.14
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:534:0:4294967295",
+                "correlation_id": "async_npu:1792898265312309104",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 2157.704,
+                "duration_us": 6.6205
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:537:0:4294967295",
+                "correlation_id": "async_npu:1792898265312820175",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 2668.775,
+                "duration_us": 7.56
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:540:0:4294967295",
+                "correlation_id": "async_npu:1792898265313341105",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 3189.705,
+                "duration_us": 7.54
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:543:0:4294967295",
+                "correlation_id": "async_npu:1792898265313949797",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 3798.397,
+                "duration_us": 6.96
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:546:0:4294967295",
+                "correlation_id": "async_npu:1792898265314448667",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 4297.267,
+                "duration_us": 7.5
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:549:0:4294967295",
+                "correlation_id": "async_npu:1792898265314928097",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 4776.697,
+                "duration_us": 7.9
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:552:0:4294967295",
+                "correlation_id": "async_npu:1792898265315437147",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 5285.747,
+                "duration_us": 8.2205
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            },
+            {
+              "task": {
+                "task_id": "2517347776:47:555:0:4294967295",
+                "correlation_id": "async_npu:1792898265315890416",
+                "name": "_strided_rope",
+                "kind": "device",
+                "start_us": 5739.016,
+                "duration_us": 7.4405
+              },
+              "raw_task_type": "AI_VECTOR_CORE",
+              "linked_host_operator": null
+            }
+          ]
+        }
+      },
+      "oracle_generation_calls": 1,
+      "actual_task_summary": {
+        "before": [
+          {
+            "name": "_triton_rope",
+            "type": "AI_VECTOR_CORE",
+            "count": 10
+          },
+          {
+            "name": "aclnnInplaceCopy_TransposeAiCore_Transpose",
+            "type": "AI_VECTOR_CORE",
+            "count": 20
+          }
+        ],
+        "after": [
+          {
+            "name": "_strided_rope",
+            "type": "AI_VECTOR_CORE",
+            "count": 10
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R04-GA",
+      "role": "guard",
+      "parameters": {
+        "B": 2,
+        "S": 17,
+        "Hq": 3,
+        "Hk": 1,
+        "D": 48,
+        "cos_B": 2,
+        "producer": "BHSD"
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_numerical": true,
+            "source_alias_checks": {
+              "q": true,
+              "k": true
+            },
+            "source_aliases": [
+              false,
+              true
+            ],
+            "zero_sign_oracle_gate": false
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "paired_exact_bits": true,
+            "passed": true,
+            "exact_numerical": true,
+            "source_alias_checks": {
+              "q": true,
+              "k": true
+            },
+            "source_aliases": [
+              false,
+              true
+            ],
+            "zero_sign_oracle_gate": false
+          }
+        }
+      },
+      "fixture_sha256": "6389fcee0af248bcf523a13a84353d8c38158562c7ec96d8411ca375c623460e",
+      "source_sha256": {
+        "rope_layout.py": "5aebdd33e05c94ecabf0006776cc393d4ad9c3a01f09eb35206e94d49a36961d",
+        "rope_layout_contract.py": "2dd1268c2cdf5c6d1d132590b9605e553f18fb6ac289fa58908f102b0354be40",
+        "rope_layout_source.py": "e174937043477128f23f080e81f3f0c7defb6df165e9d51f690522b54b32a0b8",
+        "rope_layout_kernels.py": "357c27c8af370ce804beed8d4788890941dd2983fb68647ff0994d8c3bad8831"
+      },
+      "oracle_generation_calls": 1
+    },
+    {
+      "case_id": "W009-R04-GB",
+      "role": "guard",
+      "parameters": {
+        "B": 1,
+        "S": 17,
+        "Hq": 4,
+        "Hk": 2,
+        "D": 64,
+        "cos_B": 1,
+        "producer": "BSHD-backing"
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_numerical": true,
+            "source_alias_checks": {
+              "q": true,
+              "k": true
+            },
+            "source_aliases": [
+              true,
+              true
+            ],
+            "zero_sign_oracle_gate": false
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "paired_exact_bits": true,
+            "passed": true,
+            "exact_numerical": true,
+            "source_alias_checks": {
+              "q": true,
+              "k": true
+            },
+            "source_aliases": [
+              true,
+              true
+            ],
+            "zero_sign_oracle_gate": false
+          }
+        }
+      },
+      "fixture_sha256": "b31b41432a2719a07aef7d895d3e6aa3b124e186d914eae7ced526752d20efb3",
+      "source_sha256": {
+        "rope_layout.py": "5aebdd33e05c94ecabf0006776cc393d4ad9c3a01f09eb35206e94d49a36961d",
+        "rope_layout_contract.py": "2dd1268c2cdf5c6d1d132590b9605e553f18fb6ac289fa58908f102b0354be40",
+        "rope_layout_source.py": "e174937043477128f23f080e81f3f0c7defb6df165e9d51f690522b54b32a0b8",
+        "rope_layout_kernels.py": "357c27c8af370ce804beed8d4788890941dd2983fb68647ff0994d8c3bad8831"
+      },
+      "oracle_generation_calls": 1
+    }
+  ],
+  "contract_version": 2,
+  "v1_status": "retained UNEXECUTED, prospective GA mixed-alias clarification before code/math",
+  "science_handle": "remote:bz-a3-2:job:20261025T031704Z-83714a5b2424",
+  "readout_handle": "remote:bz-a3-2:job:20261025T031938Z-b5b75729c4c6",
+  "release": {
+    "handle": "remote:bz-a3-2:job:20261025T031938Z-1526c004c022",
+    "proof_sha256": "69cedd7d24ae0f603ac6fd40b6398f4d14dc932f1e39996d18f735353ad6bafd",
+    "no_live_group": true,
+    "die0_and_both_exports_free": true,
+    "proc_empty": true
+  },
+  "counts_scope": "12 correctness API forwards plus their validation; 80 profiled complete API forwards; metadata device_kernel_calls=1 denotes explicit Triton call only, charged_torch_copies and actual raw task counts reported separately",
+  "retuning": false,
+  "scientific_replays": 0
+}

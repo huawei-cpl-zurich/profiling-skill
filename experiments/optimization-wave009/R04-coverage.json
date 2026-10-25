@@ -1,0 +1,131 @@
+{
+  "cases": [
+    {
+      "name": "W009-R04-01",
+      "performance": true,
+      "scenario": [
+        "gallery",
+        "fp32-logical-BHSD",
+        "layout-and-alias-aware-rope"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "source BHSD and BSHD backing strides, private BSHD outputs or exactsource aliasedviews incl singletonK; active/padded addresses manuallybounded; sourcehalo32; exactdyadicFP64 numeric plus reported pairedbits; primaryinputimmutability/mutation/alias predicates v2"
+      },
+      "selected_candidate_kernels": [
+        "_strided_rope"
+      ],
+      "scope": "whole prepared rope_forward; charged Torch copies included before; exact source stride/alias/mutation and four-output predicates; exact dyadic numeric Q/K, paired signed-zero bits reported separately"
+    },
+    {
+      "name": "W009-R04-02",
+      "performance": true,
+      "scenario": [
+        "gallery",
+        "fp32-logical-BHSD",
+        "layout-and-alias-aware-rope"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "source BHSD and BSHD backing strides, private BSHD outputs or exactsource aliasedviews incl singletonK; active/padded addresses manuallybounded; sourcehalo32; exactdyadicFP64 numeric plus reported pairedbits; primaryinputimmutability/mutation/alias predicates v2"
+      },
+      "selected_candidate_kernels": [
+        "_strided_rope"
+      ],
+      "scope": "whole prepared rope_forward; charged Torch copies included before; exact source stride/alias/mutation and four-output predicates; exact dyadic numeric Q/K, paired signed-zero bits reported separately"
+    },
+    {
+      "name": "W009-R04-03",
+      "performance": true,
+      "scenario": [
+        "heldout",
+        "fp32-logical-BHSD",
+        "layout-and-alias-aware-rope"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "source BHSD and BSHD backing strides, private BSHD outputs or exactsource aliasedviews incl singletonK; active/padded addresses manuallybounded; sourcehalo32; exactdyadicFP64 numeric plus reported pairedbits; primaryinputimmutability/mutation/alias predicates v2"
+      },
+      "selected_candidate_kernels": [
+        "_strided_rope"
+      ],
+      "scope": "whole prepared rope_forward; charged Torch copies included before; exact source stride/alias/mutation and four-output predicates; exact dyadic numeric Q/K, paired signed-zero bits reported separately"
+    },
+    {
+      "name": "W009-R04-04",
+      "performance": true,
+      "scenario": [
+        "heldout",
+        "fp32-logical-BHSD",
+        "layout-and-alias-aware-rope"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "source BHSD and BSHD backing strides, private BSHD outputs or exactsource aliasedviews incl singletonK; active/padded addresses manuallybounded; sourcehalo32; exactdyadicFP64 numeric plus reported pairedbits; primaryinputimmutability/mutation/alias predicates v2"
+      },
+      "selected_candidate_kernels": [
+        "_strided_rope"
+      ],
+      "scope": "whole prepared rope_forward; charged Torch copies included before; exact source stride/alias/mutation and four-output predicates; exact dyadic numeric Q/K, paired signed-zero bits reported separately"
+    },
+    {
+      "name": "W009-R04-GA",
+      "performance": false,
+      "scenario": [
+        "guard",
+        "fp32-logical-BHSD",
+        "layout-and-alias-aware-rope"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "source BHSD and BSHD backing strides, private BSHD outputs or exactsource aliasedviews incl singletonK; active/padded addresses manuallybounded; sourcehalo32; exactdyadicFP64 numeric plus reported pairedbits; primaryinputimmutability/mutation/alias predicates v2"
+      },
+      "selected_candidate_kernels": [
+        "_strided_rope"
+      ],
+      "scope": "whole prepared rope_forward; charged Torch copies included before; exact source stride/alias/mutation and four-output predicates; exact dyadic numeric Q/K, paired signed-zero bits reported separately"
+    },
+    {
+      "name": "W009-R04-GB",
+      "performance": false,
+      "scenario": [
+        "guard",
+        "fp32-logical-BHSD",
+        "layout-and-alias-aware-rope"
+      ],
+      "correct": true,
+      "route": "reference",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "source BHSD and BSHD backing strides, private BSHD outputs or exactsource aliasedviews incl singletonK; active/padded addresses manuallybounded; sourcehalo32; exactdyadicFP64 numeric plus reported pairedbits; primaryinputimmutability/mutation/alias predicates v2"
+      },
+      "fallback_reason": "both arms exactoriginal inplace zero-copy source fallback; inputs mutate once and output aliases/strides preserved",
+      "selected_candidate_kernels": [
+        "_triton_rope"
+      ],
+      "scope": "whole prepared rope_forward; charged Torch copies included before; exact source stride/alias/mutation and four-output predicates; exact dyadic numeric Q/K, paired signed-zero bits reported separately"
+    }
+  ]
+}

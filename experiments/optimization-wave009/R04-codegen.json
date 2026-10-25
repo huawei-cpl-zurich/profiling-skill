@@ -1,0 +1,231 @@
+{
+  "overall": {
+    "status": "all12-input-only-JIT-binaries-compiled",
+    "component_scope": "main before 2actual Torch copy operations plus source JIT; after1strided JIT; GA1beforeQcopy/Kalias botharms; GBsource-inplace0copies botharms",
+    "detail": "all IR/binaries/ELF text+allocated+relocations/resources retained; Torch copy kernel implementation only observed in actual profiling; no assumed copy kernel name"
+  },
+  "cases": [
+    {
+      "case_id": "W009-R04-01",
+      "arms": {
+        "before": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 972,
+                "sha256": "e2e9c0047e880899c47a0db7413df53afa6b36bd61290a5e249f41d854e60eeb",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1716,
+                "sha256": "9fc7182fab9be0e0f0b5186179cbbf691dba31fbeafc1c5b5344a0bb25234066",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R04-02",
+      "arms": {
+        "before": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1028,
+                "sha256": "ef6d845ae501bf1a56c13f1bf8f2423c9922b7443cac9350d8be2d584dd49b08",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1992,
+                "sha256": "036519bb62cc198bb5a15f6370d2719e3dfe9c60f5c33ff7d241eb6fb47bccec",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R04-03",
+      "arms": {
+        "before": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 972,
+                "sha256": "e2e9c0047e880899c47a0db7413df53afa6b36bd61290a5e249f41d854e60eeb",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1716,
+                "sha256": "9fc7182fab9be0e0f0b5186179cbbf691dba31fbeafc1c5b5344a0bb25234066",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R04-04",
+      "arms": {
+        "before": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 972,
+                "sha256": "16fe0f9f6b84aac6eab0b45a57ffaf1dc9fe53209224915334060f481659a807",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1972,
+                "sha256": "6c7e1bd00c6429dce2831be57197e87997963af22d311885c29f6a4caf3d0ce4",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R04-GA",
+      "arms": {
+        "before": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1348,
+                "sha256": "6a90235b464e40f52bd88914010c143f03442bbea7134e22f49ee4c7da044609",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 1620,
+                "sha256": "e24c1c468914ce13ce40cf29d04e99b6b1284d2dbe8604ae65064bb924487f17",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R04-GB",
+      "arms": {
+        "before": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 972,
+                "sha256": "f05680ee1b4debd1dbd509035179537ea81a4d005614a32143065b1484900038",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "index": 0,
+            "sections": [
+              {
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 972,
+                "sha256": "f05680ee1b4debd1dbd509035179537ea81a4d005614a32143065b1484900038",
+                "link": 0,
+                "info": 0
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

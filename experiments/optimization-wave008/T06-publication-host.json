@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "study_id": "T06",
+  "scope": "Public host compatibility fix after artifact-only readout recovery; measured scientific data unchanged",
+  "measured_source_sha256": {
+    "examples/optimization-library/triton/compressor_pool_kernel.py": "d06a9822da7af2e8911cea49af03236c7df36da09f75103fad5a6de98ae94dcb",
+    "examples/optimization-library/triton/compressor_pool_contract.py": "9d772aef8a4e3214a30d749dde9d8f415c8e408317b9922780aea6b09da59fd6",
+    "examples/optimization-library/triton/compressor_pool.py": "c5960435f145b216174920446e263750b8ceeaa244e1e4b0815bf7790b225347",
+    "examples/optimization-library/triton/compressor_pool_NOTICE.txt": "3421af925aaa95203a08a0a54e7fc8787fda8bc6e80fb5a37ba934e98b848e35",
+    "tests/test_optimization_compressor_pool.py": "231189652eb3725780ffb33326b4f970b2ee8365a682644e81f555d26a94394a",
+    "experiments/optimization-wave008/T06.json": "d0eaacb2804a713aa2a9c1d0ac3d5d59f39af25e9dd4904f310437f5f6a8a5ae"
+  },
+  "publication_host_sha256": {
+    "examples/optimization-library/triton/compressor_pool.py": "09396a6a74627aaebec59f7272e47bce9c2973ec0baa6857d2b48039a3e7f8d6",
+    "tests/test_optimization_compressor_pool.py": "925307f79cb098a98173be0d136b10de0e9e42e7140e092cda770ed79a9ef212"
+  },
+  "changes": [
+    "Explicit FP32 residual compile-probe cache buffer, preserving original default-FP32 ABI.",
+    "CPU diagnostic quantile probabilities match error dtype/device.",
+    "NONFROZEN mocked regression validates both arms under global float64/float16, prototype cache FP32/no-launch, restoring defaults in finally."
+  ],
+  "unchanged": [
+    "kernel/JIT source",
+    "independent CPU provider",
+    "frozen matrix/seeds/tolerances/common EPS1e-6/configuration",
+    "original six CPU payloads/compiler/binaries/12correct/80profiles/8captures"
+  ],
+  "new_scientific_activity": {
+    "frozen_cpu_oracles": 0,
+    "real_compiles": 0,
+    "npu_forwards": 0,
+    "profiles": 0
+  },
+  "cpu_only_gate": {
+    "handle": "remote:bz-a3-2:job:20261025T030954Z-82dab3bdc10b",
+    "terminal_state": "completed",
+    "exit_code": 0,
+    "receipt": {
+      "status": "complete",
+      "tests": 5,
+      "real_backend_imports": [],
+      "real_compile_calls": 0,
+      "npu_forwards": 0,
+      "scientific_frozen_fixtures": 0,
+      "profiles": 0,
+      "scope": "CPU-only public host compatibility gate; original scientific qualification unchanged",
+      "bundle_sha256": "1d53d29c351ed08bb1da3660f75142717fe71b9ecdb1ce12948185f82c8e69e2"
+    },
+    "bundle": {
+      "token": "optimization-w008-compressor-ratio2-pooling-publication-cpu-v1-be4cb4e7",
+      "sha256": "1d53d29c351ed08bb1da3660f75142717fe71b9ecdb1ce12948185f82c8e69e2",
+      "bytes": 301483,
+      "files": 73
+    },
+    "stdout_sha256": "fd89515c09699709933587950249904d0f9b99bd489478baffa471a6746e5cec",
+    "stderr_sha256": "b3bfed48d3a3e2522f5da9256a06a029627b5951d357286554a7b484bff84164"
+  }
+}

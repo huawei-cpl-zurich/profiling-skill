@@ -1,0 +1,100 @@
+{
+  "wave": 9,
+  "approval": "Standing user approval waves003\u2013022; datafirst.",
+  "study_kind": "source-backed-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "query": "61093052e4af41c5b2132db2cd524089",
+  "source_receipts": "bodies.json/tests-license.json/proposals.md; original source inventory full immutable pin; MIT plus Huawei/vLLM/DeepLink third-party notices retained.",
+  "protocol": "Compile/codegen/resource allcasepairs via input-only prototypes BEFORE scientificCPUexpected. Six cached CPU payloads ONCE, numerical correctness ONCE perarm/case/source then exactly10preparedcompleteAPI profilingforwards/arm of4mainpairs; guards0captures. No GPUwarmups/autotune/extraunprofiledtiming/profiledIOinspection. Retainnegative/noop/unsupported/failed results and originalsource/binary/fixture/version bindings. No postdata case/tolerance/flag retuning. Actualtarget/compiler/product/cores queried, never inherited GZ40. Complete operation spans/tasktime/union/gaps/raw10samples/PMUs diagnostic not ordinarylatency/physicaltraffic/roofline proof.",
+  "study_id": "R08",
+  "task": "optimization-w009-logsoftmax-online",
+  "title": "Replace three log-softmax input passes with online two-pass reduction",
+  "source_files": [
+    "bodies/src/triton_ascend_kernels/deterministic/log_softmax_batch_invariant.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W009-R08-01",
+      "role": "gallery",
+      "seed": 90801,
+      "parameters": {
+        "rows": 8,
+        "cols": 2049
+      },
+      "scenario_designation": "gallery-cost"
+    },
+    {
+      "case_id": "W009-R08-02",
+      "role": "gallery",
+      "seed": 90802,
+      "parameters": {
+        "rows": 32,
+        "cols": 8192
+      },
+      "scenario_designation": "gallery-benefit"
+    },
+    {
+      "case_id": "W009-R08-03",
+      "role": "heldout",
+      "seed": 90803,
+      "parameters": {
+        "rows": 128,
+        "cols": 16385
+      },
+      "scenario_designation": "heldout-benefit"
+    },
+    {
+      "case_id": "W009-R08-04",
+      "role": "heldout",
+      "seed": 90804,
+      "parameters": {
+        "rows": 256,
+        "cols": 32768
+      },
+      "scenario_designation": "heldout-benefit"
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W009-R08-GA",
+      "role": "guard",
+      "seed": 90891,
+      "parameters": {
+        "rows": 3,
+        "cols": 17,
+        "uniform_row": true
+      }
+    },
+    {
+      "case_id": "W009-R08-GB",
+      "role": "guard",
+      "seed": 90892,
+      "parameters": {
+        "rows": 2,
+        "cols": 2049,
+        "row_padding": 7,
+        "extreme_finite": true
+      }
+    }
+  ],
+  "contract": {
+    "interface": "PreparedFP32last-axislog-softmax kernelcomponent X[rows,cols], privateFP32out[rows,cols], rows/colspositive. Mainscontiguousrowmajor; GBactualpaddedrowbacking stridecols+7 commonBOTH kernelsupport. No publicwrapperreshape/contiguouscopy/allocator/dtypeconversion claim, notgradientorall-infinite/NaNsupport. Everyinputfiniteabs<=80; outputallfinite.",
+    "before": "Exactpinned _log_softmax_kernel BLOCK2048, gridactualVEC, rows_per_block=ceil(rows/actualVEC), same contiguousassignedrowloops. Threeinputpasses: globalmax, sumexp(x-max), final(x-max)-logsum. Finalmaskedloadother0 portabilityfix BOTH inactivevaluesnotstored. Commonstage1/multibufferFalse/fusionFalse, no retiling/autotune.",
+    "after": "Onlyreplace separatefirstmax+secondexp-sum passes withstandardonline firstpass: blockmax, m_new=max(m,blockmax), d=d*exp(m-m_new)+sum(where(mask,exp(x-m_new),0)), m=m_new. ThenSAMEfinaloutputloop (x-m)-log(d), samegrid/core-rowmapping/BLOCK2048/casts/outputdtype. Initialm=-inf,d=0, everyfirstchunkhasvalidentrybecausecols>0. No compensatedsum/differentprecision/parallelchunkmerge. Fewerinputpass vs extraexp/rescale anddifferentrounding; pairedbitidentityNOTrequired.",
+    "oracle": "ONEindependentCPUFP64stablelogsumexp payload percase, finalx-max-logsumexp exactrepresentedFP32input. Fixedall-outputatol4e-5rtol2e-6; eachrowexp(logsoftmax)FP64sumwithin2e-5/duplicate-rowoutputbitconsistency withinonecorrectnessAPI, noextraGPUexp/testmath. Numericalloutputs/dtype/shape/tuplearity/halos/immutablebacking andpairedmaxerror/bitsreportedsecondary. SixcachedCPUfixturesonce AFTER12input-onlycode/resourcecells. CorrectnessONCEperarmcase then80fullAPIprofiles8captures guards0; no extraNPUbatchpartition/normalizationchecks beyondCPUinspectionsolecorrectnessoutputs.",
+    "fixtures": "Mainseededinteger/64 jitter[-32,32]/64 pluschunkdependentcenter linearlyfrom-24to24 acrossceil(cols/2048), evenrowsascendingcenters/oddrowsdescending tostressonlineupdates. Firsttwoinputrowsduplicateexactvalues forwithin-single-API rowconsistency (preservepatternforotherrows). GAsmalluniform row values-8,0,8 exercisespartial2048mask; GBextremefinite +/-80 andactualrowpadding7distinctsentinels, plusjitterboundedcontract. No NaN/inf ornonpositivecols performsdevicework; hostrejectBEFOREcache withNONFROZENtests. BF16outsidecurrentscopeexplicitnotclaimverified.",
+    "physical": "Mainint32maxindex256*32768-1 andGBpaddedstride bounds storage-safe; input/outputrowstridesexplicit, privateoutputhalos checkedONCE, allpaddinginputsunchanged, nohiddencontiguouscopyGB. Probeactualstridepreservingemptybackingview, .runraises0launch; transactionalALLcomponentcompilequalification beforemath. ActualnativeVEC48 queriedreceipt neverinheritedGZ40. SourceguardwholeELFidentityallowedaspartial-small-controlcontrast, not excuse toforceflags/skipmainnegative.",
+    "claims": "Prospectivebenefit02/03/04wide4/9/16chunkrows reducedinputpass,01cols2049only2chunkscostriskonlineexp/rescale, notpromisedloss. Sourceknownonline-softmaxtechniquenovelty0 newoperatorapplication. Meancompleteoperation-spans/tasktime/raw10samples andsupportedPMUs only; noordinarylatency/physicalDRAMtraffic/occupancy/rooflineproof. No data-dependentmatrix/tol/flagretuning. Retaincompiler/noop/fail/negative outcomes. Huawei/SGLang/MIT+thirdpartynotices retained."
+  },
+  "source_files_manifest": [
+    {
+      "path": "bodies/src/triton_ascend_kernels/deterministic/log_softmax_batch_invariant.py",
+      "sha256": "1245243b76b193df6eb4b2fdd9d6efc991bd2fc36ce1bce51149db33bbb8a096"
+    }
+  ]
+}

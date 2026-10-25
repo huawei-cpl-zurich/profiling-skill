@@ -1,0 +1,13 @@
+{
+  "case_id": "W004-W06-04",
+  "role": "heldout",
+  "seed": 4604,
+  "parameters": {
+    "E": 512,
+    "N": 512,
+    "D": 16,
+    "distribution": "one-edge-per-destination-permutation"
+  },
+  "scenario_designation": "heldout-cost",
+  "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+}

@@ -1,0 +1,13 @@
+{
+  "case_id": "W004-W06-02",
+  "role": "gallery",
+  "seed": 4602,
+  "parameters": {
+    "E": 256,
+    "N": 256,
+    "D": 8,
+    "distribution": "one-edge-per-destination-permutation"
+  },
+  "scenario_designation": "gallery-cost",
+  "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+}

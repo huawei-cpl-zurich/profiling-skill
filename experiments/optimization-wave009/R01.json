@@ -1,0 +1,100 @@
+{
+  "wave": 9,
+  "approval": "Standing user approval waves003\u2013022; datafirst.",
+  "study_kind": "source-backed-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "query": "61093052e4af41c5b2132db2cd524089",
+  "source_receipts": "bodies.json/tests-license.json/proposals.md; original source inventory full immutable pin; MIT plus Huawei/vLLM/DeepLink third-party notices retained.",
+  "protocol": "Compile/codegen/resource allcasepairs via input-only prototypes BEFORE scientificCPUexpected. Six cached CPU payloads ONCE, numerical correctness ONCE perarm/case/source then exactly10preparedcompleteAPI profilingforwards/arm of4mainpairs; guards0captures. No GPUwarmups/autotune/extraunprofiledtiming/profiledIOinspection. Retainnegative/noop/unsupported/failed results and originalsource/binary/fixture/version bindings. No postdata case/tolerance/flag retuning. Actualtarget/compiler/product/cores queried, never inherited GZ40. Complete operation spans/tasktime/union/gaps/raw10samples/PMUs diagnostic not ordinarylatency/physicaltraffic/roofline proof.",
+  "study_id": "R01",
+  "task": "optimization-w009-awq-expansion",
+  "title": "Expand packed AWQ words and reuse group metadata",
+  "source_files": [
+    "bodies/src/triton_ascend_kernels/gemm/awq_triton.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W009-R01-01",
+      "role": "gallery",
+      "seed": 90101,
+      "parameters": {
+        "K": 128,
+        "N": 128,
+        "group": 32
+      }
+    },
+    {
+      "case_id": "W009-R01-02",
+      "role": "gallery",
+      "seed": 90102,
+      "parameters": {
+        "K": 256,
+        "N": 256,
+        "group": 64
+      }
+    },
+    {
+      "case_id": "W009-R01-03",
+      "role": "heldout",
+      "seed": 90103,
+      "parameters": {
+        "K": 512,
+        "N": 512,
+        "group": 128
+      }
+    },
+    {
+      "case_id": "W009-R01-04",
+      "role": "heldout",
+      "seed": 90104,
+      "parameters": {
+        "K": 1024,
+        "N": 128,
+        "group": 1024
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W009-R01-GA",
+      "role": "guard",
+      "seed": 90191,
+      "parameters": {
+        "K": 96,
+        "N": 136,
+        "group": 32,
+        "all_nibbles_signed_words": true
+      }
+    },
+    {
+      "case_id": "W009-R01-GB",
+      "role": "guard",
+      "seed": 90192,
+      "parameters": {
+        "K": 33,
+        "N": 8,
+        "group": 33,
+        "all_nibbles_signed_words": true
+      }
+    }
+  ],
+  "contract": {
+    "interface": "Prepared dequantization COMPONENT contiguous int32 qweight[K,N/8],qzeros[K/group,N/8],FP16 scales[K/group,N],FP16privateout[K,N]. SourceAWQzero-point nibble format, NO+1 offset; notgenericcheckpoint interoperability. Nmultiple8,Kpositive,group32/64/128orK, tilescannotcrossgroups; common BY16/BX16packedwords =>same16x128outputtile/gridboth. Alloffsets/bytes/paddedlanes signed32safe.",
+    "before": "Explicit conventional educational per-output-lane unpack/address calculation, not claim retrieved optimizedvendor baseline. Eachcolumn j loads packedword j//8, shift permutation[0,4,1,5,2,6,3,7],group row index perrow. Same finalsubtract/multiply/cast/rounding as source.",
+    "after": "Exact pinned awq_dequantize_kernel packed load once perword +threeinterleave expansion and scalar group metadata-row broadcast. Common16x16packedconfig source-valid BOTH. Only expose word/group reuse, no GEMM/splitK/tiling/flags changes; lowerednoop possible do notforcecontrast.",
+    "oracle": "One independent CPU uint32 logical shift/mask nibbledecoder forbothqweight/qzeros then integerdifference, scales q/256 qinteger[4,64]. absintegerproduct<=960<1024 hence FP16result EXACTdyadic normal or+0; require ALLFP16outputbits equal independentexpected BOTHarms. Signedint32words/all16nibbles include negative packedpatterns. Validgroup K33singlefullgroup permits BYtail; reject multi-group tilesstraddling group boundaries beforecache.",
+    "guards": "GA maskedpackedwordtailN136 plusallnibblevalues, GB K33singlefullgroup lastrowtail/N8 includeswholeword; frozen guards numericonce0captures. NONFROZEN invaliddivisibility/group/dtype/strides/domain/alias rejects beforecache.",
+    "claims": "Expected fewer duplicatedload/indexrequests and metadata work versus interleave/livevectors; actualphysicalHBMbytes/instructioncount not inferred from source. Source/example operatorapplication novelty0, compileractualidentity/code/resources gate beforemath; allocatorreuse excluded BOTH."
+  },
+  "source_files_manifest": [
+    {
+      "path": "bodies/src/triton_ascend_kernels/gemm/awq_triton.py",
+      "sha256": "0e0c64739bf1524918412fc166f5e0bf4e57fd38367a68c6930e0b5c2bbf385a"
+    }
+  ]
+}

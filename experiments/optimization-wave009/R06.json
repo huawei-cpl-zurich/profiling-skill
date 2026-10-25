@@ -1,0 +1,126 @@
+{
+  "wave": 9,
+  "approval": "Standing user approval waves003\u2013022; datafirst.",
+  "study_kind": "source-backed-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "query": "61093052e4af41c5b2132db2cd524089",
+  "source_receipts": "bodies.json/tests-license.json/proposals.md; original source inventory full immutable pin; MIT plus Huawei/vLLM/DeepLink third-party notices retained.",
+  "protocol": "Compile/codegen/resource allcasepairs via input-only prototypes BEFORE scientificCPUexpected. Six cached CPU payloads ONCE, numerical correctness ONCE perarm/case/source then exactly10preparedcompleteAPI profilingforwards/arm of4mainpairs; guards0captures. No GPUwarmups/autotune/extraunprofiledtiming/profiledIOinspection. Retainnegative/noop/unsupported/failed results and originalsource/binary/fixture/version bindings. No postdata case/tolerance/flag retuning. Actualtarget/compiler/product/cores queried, never inherited GZ40. Complete operation spans/tasktime/union/gaps/raw10samples/PMUs diagnostic not ordinarylatency/physicaltraffic/roofline proof.",
+  "study_id": "R06",
+  "task": "optimization-w009-causal-state-window",
+  "title": "Directly address causal convolution state taps",
+  "source_files": [
+    "bodies/src/triton_ascend_kernels/conv/causal_conv1d_update.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W009-R06-01",
+      "role": "gallery",
+      "seed": 90601,
+      "parameters": {
+        "B": 4,
+        "D": 2048,
+        "bias": false,
+        "silu": false,
+        "indexed": false
+      },
+      "scenario_designation": "gallery-cost"
+    },
+    {
+      "case_id": "W009-R06-02",
+      "role": "gallery",
+      "seed": 90602,
+      "parameters": {
+        "B": 16,
+        "D": 2064,
+        "bias": true,
+        "silu": true,
+        "indexed": true
+      },
+      "scenario_designation": "gallery-benefit"
+    },
+    {
+      "case_id": "W009-R06-03",
+      "role": "heldout",
+      "seed": 90603,
+      "parameters": {
+        "B": 32,
+        "D": 4096,
+        "bias": true,
+        "silu": false,
+        "indexed": false
+      },
+      "scenario_designation": "heldout-benefit"
+    },
+    {
+      "case_id": "W009-R06-04",
+      "role": "heldout",
+      "seed": 90604,
+      "parameters": {
+        "B": 64,
+        "D": 2048,
+        "bias": false,
+        "silu": true,
+        "indexed": true
+      },
+      "scenario_designation": "heldout-benefit"
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W009-R06-GA",
+      "role": "guard",
+      "seed": 90691,
+      "parameters": {
+        "B": 3,
+        "D": 48,
+        "bias": true,
+        "silu": false,
+        "indexed": true,
+        "slots": 5,
+        "indices": [
+          -1,
+          4,
+          1
+        ]
+      }
+    },
+    {
+      "case_id": "W009-R06-GB",
+      "role": "guard",
+      "seed": 90692,
+      "parameters": {
+        "B": 1,
+        "D": 16,
+        "bias": true,
+        "silu": true,
+        "indexed": true,
+        "slots": 2,
+        "indices": [
+          1
+        ]
+      }
+    }
+  ],
+  "contract": {
+    "interface": "Prepared fullseq1causal_conv1d_update, FP32x[B,D]contiguous and MUTABLEprivateownedperarm (publicoutaliasesx), FP32state[slots,D,3] physicalCONTIGUOUS CHANNEL-MAJOR(stridesD*3,3,1) MUTABLEprivateperarm, FP32weight[D,4]contiguous andoptionalbias[D]. Width4/state3/seq1 ONLY; source defaultvalidate_data=False. Sourcevalidate_dataTrueassertfeaturestride1isNOTsupportedclaim: actualkernel flatload+reshapegraph consumesstated physicalchannel-major. No seq2/multi-token/num_accepted_tokens/gradients.",
+    "before": "Exactsource _causal_conv1d_update_kernel_no_cache_len_no_mtp inclreshape/transposes+insert/extract_slice statewindow+sameFP32tapreduction/bias/SiLU. PreservedefaultDIM_BLOCK picker dim&-dim, threshold2048elsehalveuntil<=1024 wheninitial>2048, align_val16, gridB. D2064 ->16tile129loops, D4096 ->1024tile4loops; no retile/autotune. Pinallsourceview/slicehelpers supported onlyifcompileprobe passes.",
+    "after": "SamegridB,perdoffsloop/commonDIM_BLOCK/flags. Readoldstate taps directlyviaaddress channel*3+tap, loadcurrentx, formlogical4xDIM_BLOCK tapmatrix bymaskedloads/where; sameweight tapaddresses channel*4+tap, SAME tl.sum over4tapaxis thenbias/optionalresult/(1+exp(-result)). Shiftstate direct offsets oldtap1,oldtap2,oldx BEFOREoverwritingx without localreshape/transposes/insert/extract_slice. Allloadsneededbeforesamecomponentstores; no state/output race/duplicateindexallowed. No alternativeSiLU/serialdifferentreductiontree/sourcehelperchange. Ifcompilerrecognizesbothcodeidentical, retainnoopnotforcecontrast.",
+    "oracle": "ONEindependentCPUFP64 depthwise4tap scalar provider fromINITIAL representedinputs plusnewstate[oldtap1,oldtap2,OLDx]; outreplacesx. FP32x/state integer/128[-64,64],weightsinteger/256[-32,32],biasinteger/256[-32,32]. Boundedpreact<=.375 sofinite/numericallystable. Fixedalloutputatol2e-6rtol2e-5 includingSiLU; nonSiLUexactnumeric dyadic. NewstateALLbits expectedexactcopy includingunusedslots, inputxOUTPUTshape/dtype/alias andcanary; immutableweight/bias/indices. ReportpairedoutputbitssecondarynotstrictuniversalSiLUbitguarantee. SixcachedCPUinitialfixturesonce AFTERall12inputonlycompile/code/resources; correctnessonce/arm/case THEN80fullAPIprofileforwards8captures guards0.",
+    "stateful_profile": "Publicsource MUTATES BOTHx ANDstate. Eacharm getsindependentidenticalinitialprivateGPUcopies ONCEprepare. Itssolecorrectness API advancesboth once. ProfilingthenTENMORE fullstatefulupdates withoutextrafreeinput/stateresets, BOTHarmsstartfromtheironce-correctness-advancedstate; weightsfixed andboundedrecurrence. DoNOTcopyresetx/state outsideprofileanddonot addunrequestedIOinspectionafterprofile. Retainthisevolvinginputsemantics prominently, notclaimsfixedindependentdecode-tokenlatency. NoadditionalCPUscientifictrajectoryneededandnoextraNPUvalidation.",
+    "indices": "Indexedmains allocateB+2slots, stateindicesseedpermutationof[0..B-1]+1, uniquenonnegative. Nonindexedslotspidimplicit,slotsB. GAindices[-1,4,1],sourcePAD_SLOT_ID=-1 skiprow0 mustleaveitsxandallunselectedstatesbitwiseunchanged; GBsinglelastslot andD16 edge. Hostrejectduplicatepositiveindices/negativeexcept-1/outofrange/stride/dtype/shape/alias/unsupportedseq2 BEFOREcache withNONFROZENtests. Fullhalo x/stateprivateowned includingunusedslots oncechecked. No tensor-to-hostinspectionprofile.",
+    "physical": "Retainedconv-index-layout-proof.json genericCPUindexpermutation proof demonstrates originalreshapegraph exactly channel-major[D,taps] -> tap-major[taps,D], inverseexactforDIM_BLOCK16multiple; NOTscientificexpectedgeneration. EveryactualDIM_BLOCKpositive16multiple,Ddivisible,flatstateoffset channel*3+tap/outputoffsetxchannel; allmaxbyteaddressesfitint32 andstorage; source state_len3/seq1 cat4 directwidth4path. x/out alias explicitlyallowed oneheadowningallitschannels, stateindexunique preventsraces. Probesactualmutablebufferlayouts with.runreject,transactionalqualification beforemath.",
+    "claims": "Potentialbenefitavoidlocalrearrangement/slicevectorliveness, costriskextra address/maskedgather vscompileroptimizedlocaltranspose; 01smallB underfillsactualVEC,02/03/04benefitprobes notpromisedwins. Code/resourceidentityscreenbeforemath mayterminalnoop/unsupportedvendor-slice lowering. Novelty0, nophysicaltraffic/occupancy/roofline orordinarylatencyclaims fromspans. Source andTriDao/vLLM/Huawei notices+MIT retained."
+  },
+  "source_files_manifest": [
+    {
+      "path": "bodies/src/triton_ascend_kernels/conv/causal_conv1d_update.py",
+      "sha256": "f1558c2192b777b529ed482a50e32afc034fd1b47c4f4002921f7b023c901dd0"
+    }
+  ]
+}

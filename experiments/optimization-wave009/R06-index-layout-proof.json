@@ -1,0 +1,77 @@
+{
+  "kind": "CPU index-only physical permutation proof, no scientific fixtures or kernel math",
+  "checks": [
+    {
+      "nonfrozen_DIM_BLOCK": 16,
+      "taps": 1,
+      "forward_is_tap_major_transpose": true,
+      "inverse_restores_channel_major": true
+    },
+    {
+      "nonfrozen_DIM_BLOCK": 16,
+      "taps": 3,
+      "forward_is_tap_major_transpose": true,
+      "inverse_restores_channel_major": true
+    },
+    {
+      "nonfrozen_DIM_BLOCK": 16,
+      "taps": 4,
+      "forward_is_tap_major_transpose": true,
+      "inverse_restores_channel_major": true
+    },
+    {
+      "nonfrozen_DIM_BLOCK": 32,
+      "taps": 1,
+      "forward_is_tap_major_transpose": true,
+      "inverse_restores_channel_major": true
+    },
+    {
+      "nonfrozen_DIM_BLOCK": 32,
+      "taps": 3,
+      "forward_is_tap_major_transpose": true,
+      "inverse_restores_channel_major": true
+    },
+    {
+      "nonfrozen_DIM_BLOCK": 32,
+      "taps": 4,
+      "forward_is_tap_major_transpose": true,
+      "inverse_restores_channel_major": true
+    },
+    {
+      "nonfrozen_DIM_BLOCK": 64,
+      "taps": 1,
+      "forward_is_tap_major_transpose": true,
+      "inverse_restores_channel_major": true
+    },
+    {
+      "nonfrozen_DIM_BLOCK": 64,
+      "taps": 3,
+      "forward_is_tap_major_transpose": true,
+      "inverse_restores_channel_major": true
+    },
+    {
+      "nonfrozen_DIM_BLOCK": 64,
+      "taps": 4,
+      "forward_is_tap_major_transpose": true,
+      "inverse_restores_channel_major": true
+    },
+    {
+      "nonfrozen_DIM_BLOCK": 128,
+      "taps": 1,
+      "forward_is_tap_major_transpose": true,
+      "inverse_restores_channel_major": true
+    },
+    {
+      "nonfrozen_DIM_BLOCK": 128,
+      "taps": 3,
+      "forward_is_tap_major_transpose": true,
+      "inverse_restores_channel_major": true
+    },
+    {
+      "nonfrozen_DIM_BLOCK": 128,
+      "taps": 4,
+      "forward_is_tap_major_transpose": true,
+      "inverse_restores_channel_major": true
+    }
+  ]
+}

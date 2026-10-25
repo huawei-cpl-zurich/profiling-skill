@@ -1,0 +1,25 @@
+{
+  "expected_failure": true,
+  "actual_exit": 1,
+  "audit": {
+    "errors": [
+      "case 'W009-R06-01' lacks a passing correctness result",
+      "case 'W009-R06-01' route must be optimized or reference",
+      "case 'W009-R06-02' lacks a passing correctness result",
+      "case 'W009-R06-02' route must be optimized or reference",
+      "case 'W009-R06-03' lacks a passing correctness result",
+      "case 'W009-R06-03' route must be optimized or reference",
+      "case 'W009-R06-04' lacks a passing correctness result",
+      "case 'W009-R06-04' route must be optimized or reference",
+      "case 'W009-R06-GA' lacks a passing correctness result",
+      "case 'W009-R06-GA' route must be optimized or reference",
+      "case 'W009-R06-GB' lacks a passing correctness result",
+      "case 'W009-R06-GB' route must be optimized or reference"
+    ],
+    "ok": false
+  },
+  "inventory": "R06-inventory.json",
+  "coverage": "R06-coverage.json",
+  "scope": "FULL six-case original inventory; no correct/compile/optimized-route qualification; auditor rejects false correctness and unsupported/unattempted routes",
+  "command": "python ~/.agents/skills/triton-guarded-kernel/scripts/audit_contract.py experiments/optimization-wave009/R06-coverage.json --inventory experiments/optimization-wave009/R06-inventory.json --json"
+}

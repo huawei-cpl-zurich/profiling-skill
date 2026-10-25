@@ -1,0 +1,122 @@
+{
+  "wave": 8,
+  "approval": "Standing user approval waves003\u2013022; datafirst optionalmodeldemonstrationsdeferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "snapshot_digest": "d4d58dabf81053a641187974ab638ccc7217607524a4080b86f02eeb592678ce",
+  "query": "c4b83c49cd88401a86f27c8a303a605c",
+  "source_receipts": "proposal.md/triton-leads.json/triton-tests-license.json/utils-query1.json +priorinventory fullpin; preserveMIT/thirdparty/Huawei/LinkedIn/vLLM notices, no rawlibrary traversal.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T02",
+  "task": "optimization-w008-rms-backward-rows",
+  "title": "Batch rows within the blocked RMSNorm backward kernel",
+  "source_files": [
+    "source__src__triton_ascend_kernels__norm__rms_norm.py",
+    "utils-helper.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W008-T02-01",
+      "role": "gallery",
+      "seed": 80201,
+      "parameters": {
+        "rows": 1024,
+        "D": 64,
+        "offset": 1,
+        "eps": 1e-06
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospectiveonly; retain slower/equal/uncertain/unsupported/noop outcomes, no retuning based ondata."
+    },
+    {
+      "case_id": "W008-T02-02",
+      "role": "gallery",
+      "seed": 80202,
+      "parameters": {
+        "rows": 33,
+        "D": 64,
+        "offset": 1,
+        "eps": 1e-06
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospectiveonly; retain slower/equal/uncertain/unsupported/noop outcomes, no retuning based ondata."
+    },
+    {
+      "case_id": "W008-T02-03",
+      "role": "heldout",
+      "seed": 80203,
+      "parameters": {
+        "rows": 4096,
+        "D": 128,
+        "offset": 1,
+        "eps": 1e-06
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospectiveonly; retain slower/equal/uncertain/unsupported/noop outcomes, no retuning based ondata."
+    },
+    {
+      "case_id": "W008-T02-04",
+      "role": "heldout",
+      "seed": 80204,
+      "parameters": {
+        "rows": 256,
+        "D": 1024,
+        "offset": 1,
+        "eps": 1e-06
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospectiveonly; retain slower/equal/uncertain/unsupported/noop outcomes, no retuning based ondata."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W008-T02-GA",
+      "role": "guard",
+      "seed": 80291,
+      "parameters": {
+        "rows": 33,
+        "D": 65,
+        "offset": 1,
+        "eps": 1e-06,
+        "zero_cancellation_poison_tail": true
+      },
+      "expected": "OddDmaskandBR4lastrow: firstXrow0, paired\u00b1.25cancellationrows, validcachedrstd finite, GPUhalooutsidevalidRSTDviewmayholdNaN toproveCOMMONmaskedother0. AllvalidDX/DWfinite/correct; no inactive-rowNaNpollution,0captures."
+    },
+    {
+      "case_id": "W008-T02-GB",
+      "role": "guard",
+      "seed": 80292,
+      "parameters": {
+        "rows": 3,
+        "D": 2048,
+        "offset": 0,
+        "eps": 1e-06
+      },
+      "expected": "AbovefastD1024 AFTEREXACTBR1source-stylefallback sameasbefore; resourcequalifycommonD2048(notunproven8192),0captures. Unsupportedwide>2048/alias/invaliddtypehostrejectNONFROZENtests beforecache."
+    }
+  ],
+  "contract": {
+    "scope_interface": "Provided-SAVEDSTAT backwardAPIcomponent, NOTfullforward/backwardtrainingtiming: contiguousFP32 X/dY[rows,D],W[D],savedRSTD[rows] INPUT, privateoutDX/DW; rows1..4096,D1..2048(BLOCK_SIZE=nextpow2D),Gemmacasting_mode1,offset0or1,epsfixed1e-6. X/dY/W[-1,1], inputRSTDprovidedbycasegenerationCPUFP64rsqrt(meanX\u00b2+eps)castFP32; no extraGPUforward orinput-dependentnormalization hiddeninprepare. Originalsourcebackward ACCEPTSRSTDargument; labelprovidedstatsnotfalseunmodifiedGPUforwardcacheclaim.",
+    "before": "Sameactualpublicdispatched _block_rms_norm_backward_kernel BLOCK_ROW1,gridactualAIVcores. Samefloat32casting/multiply/reductionorder perrow, eachprogrampartialDW[Ncores,D]. Sourcewrapperignoresrow_mode; no claimunusedserialkernelpublicdispatch.",
+    "after": "ONLYBLOCK_ROW4 whenD<=1024 elseEXACTBR1fallback. Samegrid/rowpartition startpid*BR stepNcores*BR, masksoutputs, SAMEfinalDWreductiontree andzeroDXinitialization. Common sourceRSTDload maskedother=0 BOTHbeforemath(requiredtailNaNsafety), allotherload/storeflags same; notoptimized-onlycorrectnessrepair.",
+    "common_prepared_API": "Fullpreparedbackwarddevicecomputationincludes sourcezeros_likeDX EVERYAPI +blockedgradient+finalDWsum EACHside. ExplicitportableTritonzeroandfinalsum faithfulCOMMONimplementations ofsourceTorchzeros/sum areallowedtofixexactkernelidentities; discloseNOTunmodifiedvendorbackendtiming. Sourcepartials overwrittenallprograms inclinactivezeros, no hiddenpartialprep. Outputsallocatedprepare/reusedboth, total3kernelsifexplicithelpers, nodropinitonlycandidate.",
+    "oracle": "ONEindependentCPUFP64providerpercase: computeidealr64once,inputr32=castFP32. Primarygiven-state derivative m=dY*(W+offset),dX=r32*m-r32^3*X*mean(mX),dW=sum_rows(dY*X*r32), expectedbothfloat32orfloat64consistent. Alsocanretainidealr64full-RMSderivative/errorusingSAMEsharedm/mean, no secondGPUforward; labelcomponentvsidealstate precision. FixedDXatol1e-4rtol1e-5,DWatol2e-4rtol2e-5, finite/dtype/shape/tuplearity/canaries/immutable/nonalias. CrossvariantDWtreeDIFFERENTsoNOTpairedbitguarantee, actualerrorstracked. AllzeroX/rstd1000finite, correctderivativeafterEPS.",
+    "queries_resource": "Pinnedutils get_npu_vectorcore_num currentlogicaldevice\u2192driverprops[num_vectorcore], verifyactual40notCube20guess. Actualcompile/resource/.textgateALLfrozencasesbeforemath; ifunsupportedreportexactphase/resource notshrinkcases/loosentolerance. Fallbackthreshold1024 commonDmax2048frozenbeforecode, notproposeddomain8192whichisunqualified.",
+    "claims": "NewBACKWARDoperatorapplication zeroautomaticnovelty; per-rowmemory/sharedW/layouthardwarethroughputmayimprove while smallMactiveprogramsfall33\u21929 causingcost. Sourcefinalsumportedcommon, nofullRMStrainingorordinarylatencyclaims; totalSPANandsummedwork/PMU/gaps retained."
+  },
+  "source_files_manifest": [
+    {
+      "path": "source__src__triton_ascend_kernels__norm__rms_norm.py",
+      "sha256": "c50b342f6d45522091aadd5163908454195b13c60cd5ccc743eba7add116cddd"
+    },
+    {
+      "path": "utils-helper.py",
+      "sha256": "62246bfddba73e17de3f954823749a13c4f5dfe45bac66bf442a242b06eba23d"
+    }
+  ]
+}

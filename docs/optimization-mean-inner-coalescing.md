@@ -14,9 +14,16 @@ This component compares one prepared FP32 middle-axis reduction over logical
 output. The candidate executes one `[1024,8]` rectangle per eight adjacent K
 lanes, reduces only axis0, and retains serial 1024-element chunk accumulation
 and final division. Common flags are stage1, multibufferFalse, fusionFalse.
-The source's Apache2 per-file and Huawei/vLLM notices and repository MIT and
-third-party notices are retained. This is an operator application, with no
-new-mechanism claim.
+The imported `mean_inner_source.py` and derived `mean_inner_kernels.py`
+carry Apache-2.0 SPDX identifiers; their original Huawei/vLLM copyright
+notices remain. The [complete Apache 2.0 license](../examples/optimization-library/triton/mean_inner_LICENSE-APACHE)
+includes all nine sections and its appendix. The separately retained
+[upstream repository MIT notice](../examples/optimization-library/triton/mean_inner_LICENSE)
+does not relicense those Apache-2.0 files. The
+[third-party notice excerpt](../examples/optimization-library/triton/mean_inner_THIRD_PARTY_NOTICE)
+is explicitly labeled as the filtered upstream excerpt, which ends mid-section;
+the complete Apache license is supplied separately. This is an operator
+application, with no new-mechanism claim.
 
 Candidate dispatch requires K>1 and actual input K stride1. K1 and logical MNK
 views of MKN backing use the original source kernel in both arms. Guard views

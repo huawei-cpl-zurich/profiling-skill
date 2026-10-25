@@ -1,3 +1,14 @@
+RETAINED UPSTREAM THIRD-PARTY NOTICE EXCERPT
+
+The original filtered upstream notice excerpt is preserved verbatim below,
+including its truncated Apache section 4(d). It is attribution material,
+not a complete license copy. See mean_inner_LICENSE-APACHE for the complete
+Apache License 2.0 governing mean_inner_source.py and mean_inner_kernels.py.
+See mean_inner_LICENSE for the separate upstream repository MIT notice;
+that repository notice does not relicense the Apache-2.0 files.
+
+--- Begin retained upstream excerpt ---
+
 THIRD PARTY OPEN SOURCE SOFTWARE NOTICE
 Please note we provide an open source software notice for the third party open source software along with this software and/or this software component contributed by Huawei (in the following just “this SOFTWARE”). The open source software licenses are granted by the respective right holders.
 

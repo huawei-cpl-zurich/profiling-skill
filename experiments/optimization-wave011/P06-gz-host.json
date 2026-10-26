@@ -1,0 +1,72 @@
+{
+  "schema": "prospective-host-migration-v1",
+  "study": "W011-P06",
+  "original_contract_sha256": "39fbe7789ae23f158c6b8bb7c84efe4562c7e11314b5bef7a79ea8f3ff032ea3",
+  "user_steering": "Use gz-a3 and gz-a3-2 exclusively; no further BZ work",
+  "selected_target": "gz-a3-2",
+  "runtime": "py312-torch",
+  "physical_device": 0,
+  "logical_device": 0,
+  "environment_probe_handle": "remote:gz-a3-2:job:43efdf4b-194f-4157-a9e8-3dc130d762a6",
+  "environment_evidence_sha256": "f7a1b35131586b0aab1ccf03c2614483887c3c5dc7e84a401d53eadb21905064",
+  "observed_board_name": "Ascend910 9362 V1",
+  "packages": {
+    "torch": "2.10.0+cpu",
+    "torch-npu": "2.10.0.post4",
+    "triton": "3.5.0",
+    "triton-ascend": "3.2.2"
+  },
+  "imported": {
+    "torch": "2.10.0+cpu",
+    "torch_npu": "2.10.0.post4",
+    "triton": "3.2.0"
+  },
+  "python": "3.12.13",
+  "CANN": "9.1.0",
+  "tool_executable_sha256": {
+    "msprof": "75541a2535f1dc9b39484b833b0454a002d0eabd68d7673006f52cb00e73dc82",
+    "bishengir-compile": "4f5b28a5dd3b64724299c8ef220f4c27e02668237b93fe2aab04675d32ca2f62",
+    "hivmc": "d7ff8fd34f20535c9d4ad3d19855c52ab71ea1eaba7b5109a1f16dcd7e3bd3d1",
+    "bisheng": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a",
+    "ccec": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+  },
+  "physical_mapping": "NPU0 chip0 logic0 phy0, bounded mapped health OK/NA/HBM4%/util0/noProcess/ECC0; probe exclusive lease released on exit",
+  "source_math_case_tolerance_changes": false,
+  "prepared_grid": [
+    1,
+    8
+  ],
+  "actual_core_counts": "Not inferred; record actual driver properties before first scientific CPU expected payload",
+  "previous_BZ_scientific_counts": {
+    "compile": 0,
+    "CPUoracle": 0,
+    "correctness": 0,
+    "profile": 0
+  },
+  "previous_BZ_health_only_handle": "remote:bz-a3-2:job:20261026T012544Z-7e2cc41f0172",
+  "previous_BZ_health_result": "failed exit2 before Python script body/no scientific work; no retry",
+  "new_target_counts_before_receipt": {
+    "compile": 0,
+    "CPUoracle": 0,
+    "correctness": 0,
+    "profile": 0
+  },
+  "source_bindings": {
+    "examples/optimization-library/triton/gdn_output/LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+    "examples/optimization-library/triton/gdn_output/LICENSE-MIT": "e3e715e6d251c826acf0fbbce5971bc71f3616ab99f7a1c290ce10964bfed86e",
+    "examples/optimization-library/triton/gdn_output/SOURCE-Third_Party_Open_Source_Software_Notice": "99d2a9d965eba1e90e0a69ca844822ef22eaf146ec832c5e62433edf8000569c",
+    "examples/optimization-library/triton/gdn_output/gdn_output.py": "1ffe3f589624bc14a25d903508a5bf4e175a5fa0701e6fe71dd9b886db24cd3a",
+    "examples/optimization-library/triton/gdn_output/gdn_output_codegen.py": "546ed733ed517da53d11d621ee92d1e14b4ffde70e44627fab875909c85d6de5",
+    "examples/optimization-library/triton/gdn_output/gdn_output_contract.py": "7f578aa93fedc05305859f9dd3ceddf7b71b4c85c129124ea437ef7eba0ac015",
+    "examples/optimization-library/triton/gdn_output/gdn_output_generated.py": "1bd7d04ca5e23f2e2ea4abc50ad0131f6f4264659b30161e8715438a88d37a7f",
+    "examples/optimization-library/triton/gdn_output/gdn_output_helper.py": "9336d7d90467ca8dc76eafea69aebab09585c5d794cd7242ab3d126463d3b9e1",
+    "examples/optimization-library/triton/gdn_output/vendor/src/triton_ascend_kernels/attention/fla/__init__.py": "98f4bcf0a56256a1c124e5488b4753a571ed9c91b5ca7cd7f32e2f761ea411ee",
+    "examples/optimization-library/triton/gdn_output/vendor/src/triton_ascend_kernels/attention/fla/chunk.py": "b1b7c8017bff4e7d3d431b280b6cf6583de1b0c920c8f67d278fec1015d35ea6",
+    "examples/optimization-library/triton/gdn_output/vendor/src/triton_ascend_kernels/attention/fla/chunk_delta_h.py": "a88f9553012347723405562086303ce54e42ebed7ee5ff55696be49cced633f1",
+    "examples/optimization-library/triton/gdn_output/vendor/src/triton_ascend_kernels/attention/fla/chunk_o.py": "1a8acca0106d52b51b4c2e7b104738cc6bd3169a4c1724f15323c8bc02627bc1",
+    "examples/optimization-library/triton/gdn_output/vendor/src/triton_ascend_kernels/attention/fla/utils.py": "448abca3130f30b94d2dd1f90271e6616e635790973da3cf6a48701907125f3a",
+    "examples/optimization-library/triton/gdn_output/vendor/tests/attention/test_chunk_gated_delta_rule_fwd.py": "b78b5c50f0a7af4099e9d6b9662b3af9cdc2160c6b173ae335e5f9ddd81a22d7",
+    "examples/optimization-library/triton/gdn_output/vendor-manifest.json": "d7c3c187e400dce6d6932d051030705eb9edeaf96a86482e0ad7fbd31b4095db"
+  },
+  "freeze_utc": "2026-10-26T01:31:02.857100+00:00"
+}

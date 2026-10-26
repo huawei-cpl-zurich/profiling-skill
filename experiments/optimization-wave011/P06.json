@@ -1,0 +1,183 @@
+{
+  "study_id": "W011-P06",
+  "task": "optimization-w011-gdn-output-fusion",
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "query_id": "fdc4f358bc174023a0557b89c87a7eb8",
+  "source_citation": "ref://profiling-skill/triton-ascend/perf-analysis/repos/optimization-wave1-triton-kernels-scope-7acb9c40a6ca#src/triton_ascend_kernels/attention/fla/chunk_o.py",
+  "sources": {
+    "src/triton_ascend_kernels/attention/fla/chunk_o.py": "1a8acca0106d52b51b4c2e7b104738cc6bd3169a4c1724f15323c8bc02627bc1",
+    "src/triton_ascend_kernels/attention/fla/utils.py": "448abca3130f30b94d2dd1f90271e6616e635790973da3cf6a48701907125f3a",
+    "src/triton_ascend_kernels/attention/fla/chunk_delta_h.py": "a88f9553012347723405562086303ce54e42ebed7ee5ff55696be49cced633f1",
+    "tests/attention/test_chunk_gated_delta_rule_fwd.py": "b78b5c50f0a7af4099e9d6b9662b3af9cdc2160c6b173ae335e5f9ddd81a22d7"
+  },
+  "open_miss": "66528e96848abc52dc01b8e6b416504a",
+  "novelty": 0,
+  "admitted_domain": "Prepared output COMPONENT only B1 singlepositivepackedcu[0,T],T1..2048,H=Hg8,K=V128,BT64,nonnullheadmajorF32g. q/k/correctedv FP16[1,T,8,128], precomputedhFP16[1,ceilT64,8,128,128], cuI64[0,T]/chunkoffsetsI64[0,ceilT64], denseimmutable-owned/nonalias with128Bhalos. No fullGDN/recurrence/inverse/wrappercopy/indexcreation claim; generalB/groupedheads/multisequence/dense paths rejected before backend/cache/transfers.",
+  "before": "Educational3chargedkernels: same source QH+exp(g)*scale->F32statebuffer; same source QK+safe_exp+inclusivecausal+F16scorecast->dotV*scale->F32localbuffer; finalsourceF32sum->F16output. Both intermediates andfinalrequiredoutput recalculated everyAPI, all3charged, nofreepreparation.",
+  "after": "Original pinned chunk_fwd_kernel_o devicebody; rename only/expose existingconstexpr heuristic values, same helper safe_exp body. Source has3 F16dot/F32accum stages; preserves scorecastF16 before second dot, separately scaledF32terms thenadd/outputF16.",
+  "common_config": {
+    "BT": 64,
+    "BK": 128,
+    "BV": 128,
+    "num_warps": 4,
+    "num_stages": 2,
+    "enable_fp_fusion": false,
+    "IS_VARLEN": true,
+    "USE_G": true,
+    "scale": 0.5,
+    "grid": [
+      1,
+      8
+    ],
+    "autotune": false,
+    "common_deviation": "Explicit enable_fp_fusion=False for defined separateF32multiply/add boundaries; source body/typed math unchanged, sourcewrapperdefault isnot claimed sameflag."
+  },
+  "prepared_scope": "Allq/k/correctedV/precomputedH/headmajorg/cu/chunkoffsets arecommon componentinputs, buffers/metadata/H2D allocatedoutsidebothAPIs; no advertisedfullwrapper/pipelineperformance. EveryAPI computesALLstate/local/output math, reusesprivateoutput/scratch, noallocation/resetrequired becauseeveryvalidcell overwritten. Fullcapturedeviceguard includes events/profiler/sync/analysis/PipeUtilization. No inspection duringprofiles.",
+  "fixture": "CPUtorch.Generator seed; q,k,v,h inthatorder randint[-4,4]/32 ->F16; independentlynonzeroeachchunkstate. g[h,t]=-(t%64+1)*(h+1)/1024 F32; cu[0,T],offsets[0,ceilT64].128Btypedcanaries=1000. IndependentF16outputprivate/nonalias; unsupportedaliases/layouts/dtypes/autograd rejected.",
+  "oracle": "Independent CPUFP64 products overrepresentedinput QH/QK thenF32; F32exp(g) andF32diff, safe_exp exp(where(diff<=0,diff,-inf)) thenF32multiply andinclusive>=mask; attentionF16cast BEFOREindependentFP64scorehalf@Vhalf->F32; state expF32multiply then separatelyscaleF32, local separatelyscaleF32, F32sum->F16. Firstdots exactlydyadicboundK*4*4=2048<2^24; finalscore/exp/reduction approximations fixedtolerance. Primaryfinite/iscloseatol2e-4,rtol2e-3 vsindependenttypedFP64oracle ANDpairedoutput; allbits/zerosignsecondary. CPUoraclepayloadsonce/case cachedsource/specbound; no laterregeneration.",
+  "tolerances": {
+    "atol": 0.0002,
+    "rtol": 0.002,
+    "paired_atol": 0.0002,
+    "paired_rtol": 0.002
+  },
+  "physical_proof": "Q/K at((localt*8+h)*128+d),V/O same;state at((chunk*8+h)*128+k)*128+v, g=h*T+localt, q/k/v/o actualvalidtrueaccesses t<T andfeature<128; h fullchunkowned before read. CuI64boundsconvertedI32 T<=2048; chunkoffset0/NT I64. Falsemaskedpointerarithmetic boundedint32; no derefoutsideownedvaliddata/halos. Noatomic/mutation, fulloutputwrite. BothFP32scratch[T,8,128] fullywrittenbeforecombine; 128Bhalos all.",
+  "resource_policy": "Source64x128Q/K/H/FP32O/A tilelive data; preserveoriginalcommon4warps2stages/BK128BV128/fpFusionFalse. All12 inputonly compiler acceptance/typedIR/ELFcode/physicalmetadata screens BEFORE firstCPUexpected. No resource-report/ISAdecoderfabricatedgate, automatic scratch unknown ifnotreported. FailureSTOP withoutshapes/flags/tolsretune.",
+  "protocol": "All12inputonlycompilecells (before3/after1=24componentcells) BEFORE6onceCPUoracles before12oncecorrectness checks BEFORE80completeAPIprofilecalls8captures/4mainpairs;guards0profiles. C600watchdog beforeNPUimports/init/H2D +correctness/profiletimeouts/durablephases/counters, selectedhealthyidleBZ2physical0/maskedlogical0/lease+BOTHHOSTexports, no warmup/autotune/extratimings/profileIO/outlierdrop/replay/reset; stopfirstnumeric/driver/acquisitionfailure andobservesamehandle.",
+  "predictions": {
+    "benefit": "Main03/04 expect lowermean completeprofiledoperationspan andtaskSUM byreusingQ/statecontext andavoidingtwoF32materializations/twolaunches; profiler before3vsafter1chargedtasks. NotphysicalHBM/occupancyproof.",
+    "cost": "Main01/02 riskprobes possiblelittlegain/regression fromlive64x128tile/loop/resourcecost; notrequiredslowdowns, neverretune toforcecost. Retainall10samples/SUM/union/gap/SPAN/rawPMUs andsource/compiler/deviceELFidentities."
+  },
+  "cases": [
+    {
+      "case_id": "W011-P06-01",
+      "role": "cost",
+      "seed": 110601,
+      "parameters": {
+        "B": 1,
+        "T": 6,
+        "H": 8,
+        "Hg": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "packed": true,
+        "sequence_count": 1,
+        "cu_seqlens": [
+          0,
+          6
+        ],
+        "scale": 0.5
+      }
+    },
+    {
+      "case_id": "W011-P06-02",
+      "role": "cost",
+      "seed": 110602,
+      "parameters": {
+        "B": 1,
+        "T": 64,
+        "H": 8,
+        "Hg": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "packed": true,
+        "sequence_count": 1,
+        "cu_seqlens": [
+          0,
+          64
+        ],
+        "scale": 0.5
+      }
+    },
+    {
+      "case_id": "W011-P06-03",
+      "role": "benefit",
+      "seed": 110603,
+      "parameters": {
+        "B": 1,
+        "T": 128,
+        "H": 8,
+        "Hg": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "packed": true,
+        "sequence_count": 1,
+        "cu_seqlens": [
+          0,
+          128
+        ],
+        "scale": 0.5
+      }
+    },
+    {
+      "case_id": "W011-P06-04",
+      "role": "benefit",
+      "seed": 110604,
+      "parameters": {
+        "B": 1,
+        "T": 2048,
+        "H": 8,
+        "Hg": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "packed": true,
+        "sequence_count": 1,
+        "cu_seqlens": [
+          0,
+          2048
+        ],
+        "scale": 0.5
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W011-P06-GA",
+      "role": "guard",
+      "seed": 110691,
+      "parameters": {
+        "B": 1,
+        "T": 33,
+        "H": 8,
+        "Hg": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "packed": true,
+        "sequence_count": 1,
+        "cu_seqlens": [
+          0,
+          33
+        ],
+        "scale": 0.5
+      }
+    },
+    {
+      "case_id": "W011-P06-GB",
+      "role": "guard",
+      "seed": 110692,
+      "parameters": {
+        "B": 1,
+        "T": 127,
+        "H": 8,
+        "Hg": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "packed": true,
+        "sequence_count": 1,
+        "cu_seqlens": [
+          0,
+          127
+        ],
+        "scale": 0.5
+      }
+    }
+  ],
+  "root_admission": "Root explicitly approved finite boundedpreparedcomponent/domain/config/oracle/tolerance/sourceclosure BEFOREfreeze/code/math; no further permissionwait.",
+  "freeze_utc": "2026-10-26T01:21:02.555757+00:00"
+}

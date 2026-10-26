@@ -1,0 +1,2859 @@
+{
+  "schema_version": "optimization-study-negative-v1",
+  "study_id": "W011-P07",
+  "task": "optimization-w011-rope-backward-ownership",
+  "status": "UNQUALIFIED-COMPILER-UB-CAPACITY",
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "source_citation": "ref://profiling-skill/triton-ascend/perf-analysis/repos/optimization-wave1-mindspeed-scope-4efe2b675c2d#mindspeed_ops/arch32/triton/inplace_rope.py",
+  "new_mechanism_claim": false,
+  "matrix": {
+    "study_id": "W011-P07",
+    "task": "optimization-w011-rope-backward-ownership",
+    "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+    "source_sha256": "5c624475719a0cc619d42fdbcda2f54928da35a0af899510339bcf1b2f658430",
+    "source_citation": "ref://profiling-skill/triton-ascend/perf-analysis/repos/optimization-wave1-mindspeed-scope-4efe2b675c2d#mindspeed_ops/arch32/triton/inplace_rope.py",
+    "query": "7c13a9d5884f467bb412bc20960c5b2f",
+    "source_helpers": "Explicit block_rows avoids host is_arch35 default; original API/utils retained as reference context",
+    "upstream_standalone_NPU_test": "NOT_ESTABLISHED; new bounded prepared-component qualification only",
+    "new_mechanism_credit": 0,
+    "domain": "Dense prepared saved-pre-rotation backward component only; F16dy/x_rope andF32cos/sin, B1..2/S1..128/Hpower2up-to256/halfpow2up-to32/nopepositive64multipleupto192",
+    "physical": "All inputs distinct CPU contiguous tensors with exact shapes; all values finite dyadic q/16 integerq[-4,4], no-autograd. F16dy/x_saved/F32cos/sin. Private full dx F16[B,S,H,D], dcos/dsinF32[B,S,half],128B aligned views with128Bcanaries; everybyte overwritten eachAPI or originalprefixcopied. Storage-strides exact; shapes reject beforecache/backend. Coeffs arbitrary dyadic parameters, not required unitcircle.",
+    "cases": [
+      {
+        "case_id": "W011-P07-01",
+        "role": "cost",
+        "seed": 110701,
+        "parameters": {
+          "B": 1,
+          "S": 1,
+          "H": 8,
+          "half": 32,
+          "nope_dim": 64
+        }
+      },
+      {
+        "case_id": "W011-P07-02",
+        "role": "cost",
+        "seed": 110702,
+        "parameters": {
+          "B": 1,
+          "S": 64,
+          "H": 64,
+          "half": 32,
+          "nope_dim": 64
+        }
+      },
+      {
+        "case_id": "W011-P07-03",
+        "role": "benefit",
+        "seed": 110703,
+        "parameters": {
+          "B": 1,
+          "S": 64,
+          "H": 128,
+          "half": 16,
+          "nope_dim": 64
+        }
+      },
+      {
+        "case_id": "W011-P07-04",
+        "role": "benefit",
+        "seed": 110704,
+        "parameters": {
+          "B": 2,
+          "S": 128,
+          "H": 256,
+          "half": 16,
+          "nope_dim": 64
+        }
+      }
+    ],
+    "guards": [
+      {
+        "case_id": "W011-P07-G1",
+        "role": "guard",
+        "seed": 110791,
+        "parameters": {
+          "B": 1,
+          "S": 3,
+          "H": 32,
+          "half": 8,
+          "nope_dim": 128
+        }
+      },
+      {
+        "case_id": "W011-P07-G2",
+        "role": "guard",
+        "seed": 110792,
+        "parameters": {
+          "B": 2,
+          "S": 5,
+          "H": 128,
+          "half": 16,
+          "nope_dim": 192
+        }
+      }
+    ],
+    "before": "Exact source backward explicitBRmin(H,64)+charged zero bothcoeffgrads everyAPI",
+    "after": "Same source derivative atomic_add->store withBRH owns fullcoefficient group; nozero needed, all3outputs/prefix fullywritten",
+    "fixed_flags": {
+      "num_warps": 4,
+      "num_stages": 2,
+      "enable_fp_fusion": false
+    },
+    "prepared_boundary": "All3outputs on everyAPI. before one zero kernel writes bothFP32coeffgrads each call then exactsourceatomicbackward; after nozero andfullHoverwrite derivative. Allocations/initialcopies/sourceJITcompilation outside both, coefficientzero remains chargedbefore. NO forwardrotation/autograd/saving cost claimed; x_rope is saved PRErotation providedinput. Bothoutputstensorsreused; no hostIO/inspection/profile.",
+    "index_certificate": "H%BR0 andtotal%BR0; blocks aligned headgroups andBRdividesH, no crosscoeffgroup. FullHpower2 enables tl.arange. NOPEloop64 each nooverrun. Sourceallinputfullstorage andprivate3outputs contiguouscanaryguarded.",
+    "oracle_certificate": "allinputq[-4,4]/16; products numerator<=16/256, pair<=32/256; H<=256sum numerator<=8192<2^24 exactlyrepresentableF32, dxF16exact. IndependentCPUFP64 formulas/casts; nonzeroexact/numericzerosprimary,signsecondary.",
+    "oracle": "IndependentCPUFP64 formulas on represented inputs: prefixdy copied; dxe=de*c+do*s;dxo=-de*s+do*c;dcos=sumH(de*e+do*o);dsin=sumH(-de*o+do*e); outputF16dx/F32dc/ds. Everyintermediate exactdyadic withinbound; exactnumeric/finite primary, nonzeroFP32/F16bits exact; zero-sign secondary. CPUcachedonce percase.",
+    "resource_certificate": "BLOCK_ROWSafter=H up to256; halfup-to32 but combinationsonlyfrozencases. Sourceprefix64load/store block andF32dy/x/reductionlivearrays scale withH. Standard compileracceptance+typedactualELFcontrast+rawmetadata/staticbounds+oncecorrectness. No unsupportedmanualUB/scratchclaim; automatic scratch UNKNOWN ifunreported. All12input-onlycells before first scientificCPUexpected.",
+    "predictions": {
+      "benefit": "Cases03/04 expect lower completeprofiledSPAN andtaskSUM by removing per-callcoefficientzero andpartialheadatomics; expectbefore2tasks/API after1; staticcodeatomicsafterabsent, measuredtraffic/occupancy/roofline notinferred. FullHlivearrays mayspill/reduceoccupancy anderasebenefit.",
+      "cost": "Cases01/02 smallH/noatomiccontention controls maygainlittle/regress due source/fullH resources andlaunchwork. Riskprobes notpromisedslowdowns; no retuning afterdata."
+    },
+    "protocol": "All12input-onlycompile/typedsource/ELF/ABI/resources gates BEFORE6onceCPUcachepayloads; all12correctonce before80profileAPIs8captures4mainpairs10perarm;guards0. No warmups/autotune/ordinarytiming/profileIO/outlierdrop/replay. FatalSTOPsource/driver/numeric/acquisitionfailure; preserve allattemptcounts/cache/artifacts; no reset/blindretry. ExplicitCPU/NPUtaskcorrelations required, no timestampjoin. C600startup/run+validate/profile, counters/phasesbeforeNPUimports/init/moves. Fullprepared-deviceallocation/run/validate/captureevents/sync/analysis guards+PipeUtilization.",
+    "root_admission": "Rootexplicitapprovedfiniteboundedcontract beforefreeze/code/math; no furtherpermissions needed",
+    "freeze_utc": "2026-10-26T01:23:40.846029+00:00"
+  },
+  "matrix_sha256": "425e2c3f4975d15cb9904ad1177a057340682ab0772c1900b5da3e1b6d7e2bf3",
+  "target": "gz-a3",
+  "runtime": "py311-torch",
+  "physical_die": 0,
+  "logical_device": 0,
+  "actual_product": "Ascend910B4-1/Ascend910B_V1",
+  "actual_cores": {
+    "Cube": 20,
+    "Vector": 40
+  },
+  "collection_handle": "remote:gz-a3:job:b028b70d-41e8-4940-b9c8-ca1d06cebd47",
+  "collection_terminal": {
+    "state": "failed",
+    "exit": 1
+  },
+  "counts": {
+    "compile_case_arm_cells_planned": 12,
+    "compile_case_arm_cells_passed": 7,
+    "compile_case_arm_cells_failed": 1,
+    "compile_case_arm_cells_unattempted": 4,
+    "compiled_logical_component_artifacts": 11,
+    "scientific_CPU_payloads": 0,
+    "correctness_calls": 0,
+    "correctness_passes": 0,
+    "profile_API_calls": 0,
+    "qualified_captures": 0,
+    "qualified_pairs": 0,
+    "warmups": 0,
+    "replays": 0,
+    "device_resets": 0
+  },
+  "failure": {
+    "case_id": "W011-P07-04",
+    "arm": "after",
+    "parameters": {
+      "B": 2,
+      "S": 128,
+      "H": 256,
+      "half": 16,
+      "nope_dim": 64
+    },
+    "exception_type": "MLIRCompilationError",
+    "classification": "compiler resource-capacity failure; not infrastructure or numerical failure",
+    "raw_error": "ub overflow, requires 2491392 bits while 1572864 bits available",
+    "requested_bits": 2491392,
+    "available_bits": 1572864,
+    "requested_bytes": 311424,
+    "available_bytes": 196608,
+    "compiler_automatic_fallback": "Compiler itself disabled code-motion and auto-multi-buffer after overflow; compilation still failed. No user/source/config retuning.",
+    "failed_source_kernel": "rope_backward_owned",
+    "inference": "Whole-matrix gate stopped before scientific CPU expected generation or any correctness/profile kernel. Smaller shapes compiled only, no numerical/performance claim for them."
+  },
+  "compile_cells": [
+    {
+      "case_id": "W011-P07-01",
+      "arm": "before",
+      "spec": {
+        "case_id": "W011-P07-01",
+        "role": "cost",
+        "seed": 110701,
+        "parameters": {
+          "B": 1,
+          "S": 1,
+          "H": 8,
+          "half": 32,
+          "nope_dim": 64
+        }
+      },
+      "correctness_counter": 0,
+      "raw_phase": {
+        "phase": "compiled-types-resources-screened-not-run"
+      },
+      "status": "passed-input-only",
+      "proof": {
+        "identity": [
+          {
+            "hash": "dac4c32d220763fef86974b101b881a7e43ce8665e0491a55c3547c175be2d94",
+            "sha256": "f1b9cc259ac51ba9d4bd7462602e7998145da159c0a701b701c14a0aa5af7c0f",
+            "format": "Triton-Ascend-npubin",
+            "identity_source": "compiled executable npubin",
+            "name": "rope_backward_zero",
+            "binaries": {
+              "ttir": "5b5f2cfbacd3dcffc2ae91c2bc46974e7c72465921676d676e6ea9b40e0a3828",
+              "ttadapter": "c0d37fd2585554e53ae369a29b2afe7493b07d98c5473b75af1d34a4931f1087",
+              "npubin": "f1b9cc259ac51ba9d4bd7462602e7998145da159c0a701b701c14a0aa5af7c0f"
+            }
+          },
+          {
+            "hash": "38ce4e4828062d5ff892d7de20f8cd3ce687d5b7a4c96ac2ebf6d6bc6bdab8a7",
+            "sha256": "609f24a6774d9cddee6cae9f52317a2deac8167177dea484239dd08bb42df99d",
+            "format": "Triton-Ascend-npubin",
+            "identity_source": "compiled executable npubin",
+            "name": "rope_backward_atomic",
+            "binaries": {
+              "ttir": "22b90a79ab46ef46872ad89199c0a7ec3ae6648ae1f5316ae25fbafac64c94fd",
+              "ttadapter": "b745c63d53625d807892f4b88b5886bf6b58e94992c0e1c3d1b7fac9132a05d2",
+              "npubin": "609f24a6774d9cddee6cae9f52317a2deac8167177dea484239dd08bb42df99d"
+            }
+          }
+        ],
+        "metadata": {
+          "arm": "before",
+          "prepared_device": "npu:0",
+          "route": "reference",
+          "component": "complete saved-pre-rotation backward dx/dcos/dsin",
+          "flags": {
+            "num_warps": 4,
+            "num_stages": 2,
+            "enable_fp_fusion": false
+          },
+          "BLOCK_ROWS": 8,
+          "BLOCK_NOPE": 64,
+          "grids": [
+            [
+              1
+            ],
+            [
+              1
+            ]
+          ],
+          "device_kernel_calls": 0,
+          "physical": {
+            "dy": {
+              "shape": [
+                1,
+                1,
+                8,
+                128
+              ],
+              "stride": [
+                1024,
+                1024,
+                128,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 2304,
+              "format": 2
+            },
+            "x_rope": {
+              "shape": [
+                1,
+                1,
+                8,
+                64
+              ],
+              "stride": [
+                512,
+                512,
+                64,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 1280,
+              "format": 2
+            },
+            "cos": {
+              "shape": [
+                1,
+                1,
+                32
+              ],
+              "stride": [
+                32,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 384,
+              "format": 2
+            },
+            "sin": {
+              "shape": [
+                1,
+                1,
+                32
+              ],
+              "stride": [
+                32,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 384,
+              "format": 2
+            },
+            "dx": {
+              "shape": [
+                1,
+                1,
+                8,
+                128
+              ],
+              "stride": [
+                1024,
+                1024,
+                128,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 2304,
+              "format": 2
+            },
+            "dcos": {
+              "shape": [
+                1,
+                1,
+                32
+              ],
+              "stride": [
+                32,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 384,
+              "format": 2
+            },
+            "dsin": {
+              "shape": [
+                1,
+                1,
+                32
+              ],
+              "stride": [
+                32,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 384,
+              "format": 2
+            }
+          },
+          "reused_outputs": true,
+          "scope": "before charged coefficientzero+atomicbackward, afterownedoverwrite; all dx/prefix work; setup/allocations outside APIs; no profileIO",
+          "compile_only_probe": true
+        },
+        "proof": [
+          {
+            "types": {
+              "name": "rope_backward_zero",
+              "ordered_pointer_types": [
+                "f32",
+                "f32"
+              ],
+              "atomics_IR": [],
+              "no_dot": true,
+              "ttir_sha256": "5b5f2cfbacd3dcffc2ae91c2bc46974e7c72465921676d676e6ea9b40e0a3828"
+            },
+            "ELF": {
+              "full_sha256": "f1b9cc259ac51ba9d4bd7462602e7998145da159c0a701b701c14a0aa5af7c0f",
+              "text": [
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 340,
+                  "info": 0,
+                  "sha256": "2dbf0f9de63b0fe0504f640fcc489b593b37d5a8c88b9ed38522583560775ff9"
+                }
+              ],
+              "sections": [
+                {
+                  "index": 0,
+                  "name": "",
+                  "type": 0,
+                  "flags": 0,
+                  "bytes": 0,
+                  "info": 0,
+                  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                },
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 340,
+                  "info": 0,
+                  "sha256": "2dbf0f9de63b0fe0504f640fcc489b593b37d5a8c88b9ed38522583560775ff9"
+                },
+                {
+                  "index": 2,
+                  "name": ".ascend.stack.size.record",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 8,
+                  "info": 0,
+                  "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+                },
+                {
+                  "index": 3,
+                  "name": "__CCE_KernelArgSize",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 4,
+                  "info": 0,
+                  "sha256": "6fea016a651b6460fdd05e8073e5114413e814d86781e4dc4e8c3592dc851128"
+                },
+                {
+                  "index": 4,
+                  "name": ".comment",
+                  "type": 1,
+                  "flags": 48,
+                  "bytes": 107,
+                  "info": 0,
+                  "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+                },
+                {
+                  "index": 5,
+                  "name": ".symtab",
+                  "type": 2,
+                  "flags": 0,
+                  "bytes": 1296,
+                  "info": 52,
+                  "sha256": "60c37b39c66c2ab0586447852abf1fd6b99dbc250acbb5babbd8073491d3f2fe"
+                },
+                {
+                  "index": 6,
+                  "name": ".shstrtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 88,
+                  "info": 0,
+                  "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+                },
+                {
+                  "index": 7,
+                  "name": ".strtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 344,
+                  "info": 0,
+                  "sha256": "24d49e220332621f148af77f5bb89a297765f89be1d9daa9c69cce0e070680ef"
+                }
+              ],
+              "relocations": []
+            }
+          },
+          {
+            "types": {
+              "name": "rope_backward_atomic",
+              "ordered_pointer_types": [
+                "f16",
+                "f16",
+                "f32",
+                "f32",
+                "f16",
+                "f32",
+                "f32"
+              ],
+              "atomics_IR": [
+                "%58 = tt.atomic_rmw fadd, acq_rel, gpu, %57, %53, %cst : (tensor<32x!tt.ptr<f32>>, tensor<32xf32>, tensor<32xi1>) -> tensor<32xf32> loc(#loc61)",
+                "%62 = tt.atomic_rmw fadd, acq_rel, gpu, %61, %54, %cst : (tensor<32x!tt.ptr<f32>>, tensor<32xf32>, tensor<32xi1>) -> tensor<32xf32> loc(#loc64)"
+              ],
+              "no_dot": true,
+              "ttir_sha256": "22b90a79ab46ef46872ad89199c0a7ec3ae6648ae1f5316ae25fbafac64c94fd"
+            },
+            "ELF": {
+              "full_sha256": "609f24a6774d9cddee6cae9f52317a2deac8167177dea484239dd08bb42df99d",
+              "text": [
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 3352,
+                  "info": 0,
+                  "sha256": "65c49b8e08a5f95ab08a27a231e8180e69476ce98a872a373c96aea935f7d1aa"
+                }
+              ],
+              "sections": [
+                {
+                  "index": 0,
+                  "name": "",
+                  "type": 0,
+                  "flags": 0,
+                  "bytes": 0,
+                  "info": 0,
+                  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                },
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 3352,
+                  "info": 0,
+                  "sha256": "65c49b8e08a5f95ab08a27a231e8180e69476ce98a872a373c96aea935f7d1aa"
+                },
+                {
+                  "index": 2,
+                  "name": ".ascend.stack.size.record",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 8,
+                  "info": 0,
+                  "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+                },
+                {
+                  "index": 3,
+                  "name": "__CCE_KernelArgSize",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 4,
+                  "info": 0,
+                  "sha256": "aea75a928024d366bad46f910a92af49893567b615044b87f2387858ed37d149"
+                },
+                {
+                  "index": 4,
+                  "name": ".comment",
+                  "type": 1,
+                  "flags": 48,
+                  "bytes": 107,
+                  "info": 0,
+                  "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+                },
+                {
+                  "index": 5,
+                  "name": ".symtab",
+                  "type": 2,
+                  "flags": 0,
+                  "bytes": 1296,
+                  "info": 52,
+                  "sha256": "1eb115656d1fd43cf5de74e198db095f012fc82435ae4dc3db5839d304baa78a"
+                },
+                {
+                  "index": 6,
+                  "name": ".shstrtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 88,
+                  "info": 0,
+                  "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+                },
+                {
+                  "index": 7,
+                  "name": ".strtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 350,
+                  "info": 0,
+                  "sha256": "78b9ac011380a5384225f20f999c49ed5f1f69e3c727cf3e0385b74fac74b27c"
+                }
+              ],
+              "relocations": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W011-P07-01",
+      "arm": "after",
+      "spec": {
+        "case_id": "W011-P07-01",
+        "role": "cost",
+        "seed": 110701,
+        "parameters": {
+          "B": 1,
+          "S": 1,
+          "H": 8,
+          "half": 32,
+          "nope_dim": 64
+        }
+      },
+      "correctness_counter": 0,
+      "raw_phase": {
+        "phase": "compiled-types-resources-screened-not-run"
+      },
+      "status": "passed-input-only",
+      "proof": {
+        "identity": [
+          {
+            "hash": "208f51ed88cecaa16963175f2e772f48281ce7451a1776668fc564b20dac9697",
+            "sha256": "69ef3762d542c5f5c51bcfed44e4831f0d37822bbe5eceba9566ff532bb9b397",
+            "format": "Triton-Ascend-npubin",
+            "identity_source": "compiled executable npubin",
+            "name": "rope_backward_owned",
+            "binaries": {
+              "ttir": "2123fd0fa116dfa832059d8af87c0df3f2bb5fa25abc0b95f669ffcdc33f7164",
+              "ttadapter": "ee477d9cdefe91f22899aa0d54c83300fd4efcd9b49236c5bfcbe83b1ff7d5fe",
+              "npubin": "69ef3762d542c5f5c51bcfed44e4831f0d37822bbe5eceba9566ff532bb9b397"
+            }
+          }
+        ],
+        "metadata": {
+          "arm": "after",
+          "prepared_device": "npu:0",
+          "route": "optimized",
+          "component": "complete saved-pre-rotation backward dx/dcos/dsin",
+          "flags": {
+            "num_warps": 4,
+            "num_stages": 2,
+            "enable_fp_fusion": false
+          },
+          "BLOCK_ROWS": 8,
+          "BLOCK_NOPE": 64,
+          "grids": [
+            [
+              1
+            ]
+          ],
+          "device_kernel_calls": 0,
+          "physical": {
+            "dy": {
+              "shape": [
+                1,
+                1,
+                8,
+                128
+              ],
+              "stride": [
+                1024,
+                1024,
+                128,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 2304,
+              "format": 2
+            },
+            "x_rope": {
+              "shape": [
+                1,
+                1,
+                8,
+                64
+              ],
+              "stride": [
+                512,
+                512,
+                64,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 1280,
+              "format": 2
+            },
+            "cos": {
+              "shape": [
+                1,
+                1,
+                32
+              ],
+              "stride": [
+                32,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 384,
+              "format": 2
+            },
+            "sin": {
+              "shape": [
+                1,
+                1,
+                32
+              ],
+              "stride": [
+                32,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 384,
+              "format": 2
+            },
+            "dx": {
+              "shape": [
+                1,
+                1,
+                8,
+                128
+              ],
+              "stride": [
+                1024,
+                1024,
+                128,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 2304,
+              "format": 2
+            },
+            "dcos": {
+              "shape": [
+                1,
+                1,
+                32
+              ],
+              "stride": [
+                32,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 384,
+              "format": 2
+            },
+            "dsin": {
+              "shape": [
+                1,
+                1,
+                32
+              ],
+              "stride": [
+                32,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 384,
+              "format": 2
+            }
+          },
+          "reused_outputs": true,
+          "scope": "before charged coefficientzero+atomicbackward, afterownedoverwrite; all dx/prefix work; setup/allocations outside APIs; no profileIO",
+          "compile_only_probe": true
+        },
+        "proof": [
+          {
+            "types": {
+              "name": "rope_backward_owned",
+              "ordered_pointer_types": [
+                "f16",
+                "f16",
+                "f32",
+                "f32",
+                "f16",
+                "f32",
+                "f32"
+              ],
+              "atomics_IR": [],
+              "no_dot": true,
+              "ttir_sha256": "2123fd0fa116dfa832059d8af87c0df3f2bb5fa25abc0b95f669ffcdc33f7164"
+            },
+            "ELF": {
+              "full_sha256": "69ef3762d542c5f5c51bcfed44e4831f0d37822bbe5eceba9566ff532bb9b397",
+              "text": [
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 3436,
+                  "info": 0,
+                  "sha256": "61a0aba6a4b7c43120ba9503cfb2da8b829d1b2b9619eafc2e2c54ae7a9367dd"
+                }
+              ],
+              "sections": [
+                {
+                  "index": 0,
+                  "name": "",
+                  "type": 0,
+                  "flags": 0,
+                  "bytes": 0,
+                  "info": 0,
+                  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                },
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 3436,
+                  "info": 0,
+                  "sha256": "61a0aba6a4b7c43120ba9503cfb2da8b829d1b2b9619eafc2e2c54ae7a9367dd"
+                },
+                {
+                  "index": 2,
+                  "name": ".ascend.stack.size.record",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 8,
+                  "info": 0,
+                  "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+                },
+                {
+                  "index": 3,
+                  "name": "__CCE_KernelArgSize",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 4,
+                  "info": 0,
+                  "sha256": "aea75a928024d366bad46f910a92af49893567b615044b87f2387858ed37d149"
+                },
+                {
+                  "index": 4,
+                  "name": ".comment",
+                  "type": 1,
+                  "flags": 48,
+                  "bytes": 107,
+                  "info": 0,
+                  "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+                },
+                {
+                  "index": 5,
+                  "name": ".symtab",
+                  "type": 2,
+                  "flags": 0,
+                  "bytes": 1296,
+                  "info": 52,
+                  "sha256": "c15909befe4661ef05a5be58f256fb78fe8319b40266f34bf2c10659f7deec4a"
+                },
+                {
+                  "index": 6,
+                  "name": ".shstrtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 88,
+                  "info": 0,
+                  "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+                },
+                {
+                  "index": 7,
+                  "name": ".strtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 347,
+                  "info": 0,
+                  "sha256": "7519d9c14c4ece2898cb179a748ea3504ad916be139c7a526cd5a6236efb570a"
+                }
+              ],
+              "relocations": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W011-P07-02",
+      "arm": "before",
+      "spec": {
+        "case_id": "W011-P07-02",
+        "role": "cost",
+        "seed": 110702,
+        "parameters": {
+          "B": 1,
+          "S": 64,
+          "H": 64,
+          "half": 32,
+          "nope_dim": 64
+        }
+      },
+      "correctness_counter": 0,
+      "raw_phase": {
+        "phase": "compiled-types-resources-screened-not-run"
+      },
+      "status": "passed-input-only",
+      "proof": {
+        "identity": [
+          {
+            "hash": "bd32cfd9409bee348b53daff9bab9452edb4c8a505b73acf5645b30a57046c40",
+            "sha256": "1d7b1a8f95ad95da846a34b03f504fbfcfb3249ee0ca31c334299fb08dae3bb6",
+            "format": "Triton-Ascend-npubin",
+            "identity_source": "compiled executable npubin",
+            "name": "rope_backward_zero",
+            "binaries": {
+              "ttir": "492d38d68d61e1104425520c48a1ae210887548b89e76e3ed95101a3bc45b55a",
+              "ttadapter": "3ea12154d91f4d383349850ec958fd4be194bd2a1b0f2a39dc07ddbb0e9db314",
+              "npubin": "1d7b1a8f95ad95da846a34b03f504fbfcfb3249ee0ca31c334299fb08dae3bb6"
+            }
+          },
+          {
+            "hash": "9e7455ebc89e54274802aa26af50938f8ff324f0e9a7498f3d804d1f3b2689ce",
+            "sha256": "b4705feed69fc6fcf417ef03b8592eb9e7f8bb2c1960fe8a90068c020c8dc82e",
+            "format": "Triton-Ascend-npubin",
+            "identity_source": "compiled executable npubin",
+            "name": "rope_backward_atomic",
+            "binaries": {
+              "ttir": "440c3db3c9a93b26a63565dcc11dc27b01989149ab97612ebf48c20a14c4d8e4",
+              "ttadapter": "8da19d806711d7555d14b5554f83df524aa310af4ea61dffd6a8a67630d4c063",
+              "npubin": "b4705feed69fc6fcf417ef03b8592eb9e7f8bb2c1960fe8a90068c020c8dc82e"
+            }
+          }
+        ],
+        "metadata": {
+          "arm": "before",
+          "prepared_device": "npu:0",
+          "route": "reference",
+          "component": "complete saved-pre-rotation backward dx/dcos/dsin",
+          "flags": {
+            "num_warps": 4,
+            "num_stages": 2,
+            "enable_fp_fusion": false
+          },
+          "BLOCK_ROWS": 64,
+          "BLOCK_NOPE": 64,
+          "grids": [
+            [
+              8
+            ],
+            [
+              64
+            ]
+          ],
+          "device_kernel_calls": 0,
+          "physical": {
+            "dy": {
+              "shape": [
+                1,
+                64,
+                64,
+                128
+              ],
+              "stride": [
+                524288,
+                8192,
+                128,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 1048832,
+              "format": 2
+            },
+            "x_rope": {
+              "shape": [
+                1,
+                64,
+                64,
+                64
+              ],
+              "stride": [
+                262144,
+                4096,
+                64,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 524544,
+              "format": 2
+            },
+            "cos": {
+              "shape": [
+                1,
+                64,
+                32
+              ],
+              "stride": [
+                2048,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 8448,
+              "format": 2
+            },
+            "sin": {
+              "shape": [
+                1,
+                64,
+                32
+              ],
+              "stride": [
+                2048,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 8448,
+              "format": 2
+            },
+            "dx": {
+              "shape": [
+                1,
+                64,
+                64,
+                128
+              ],
+              "stride": [
+                524288,
+                8192,
+                128,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 1048832,
+              "format": 2
+            },
+            "dcos": {
+              "shape": [
+                1,
+                64,
+                32
+              ],
+              "stride": [
+                2048,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 8448,
+              "format": 2
+            },
+            "dsin": {
+              "shape": [
+                1,
+                64,
+                32
+              ],
+              "stride": [
+                2048,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 8448,
+              "format": 2
+            }
+          },
+          "reused_outputs": true,
+          "scope": "before charged coefficientzero+atomicbackward, afterownedoverwrite; all dx/prefix work; setup/allocations outside APIs; no profileIO",
+          "compile_only_probe": true
+        },
+        "proof": [
+          {
+            "types": {
+              "name": "rope_backward_zero",
+              "ordered_pointer_types": [
+                "f32",
+                "f32"
+              ],
+              "atomics_IR": [],
+              "no_dot": true,
+              "ttir_sha256": "492d38d68d61e1104425520c48a1ae210887548b89e76e3ed95101a3bc45b55a"
+            },
+            "ELF": {
+              "full_sha256": "1d7b1a8f95ad95da846a34b03f504fbfcfb3249ee0ca31c334299fb08dae3bb6",
+              "text": [
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 340,
+                  "info": 0,
+                  "sha256": "57ed2106baa18d1e004f51d636a1f77ef0ff9298670c46fb55bfb2573eacf718"
+                }
+              ],
+              "sections": [
+                {
+                  "index": 0,
+                  "name": "",
+                  "type": 0,
+                  "flags": 0,
+                  "bytes": 0,
+                  "info": 0,
+                  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                },
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 340,
+                  "info": 0,
+                  "sha256": "57ed2106baa18d1e004f51d636a1f77ef0ff9298670c46fb55bfb2573eacf718"
+                },
+                {
+                  "index": 2,
+                  "name": ".ascend.stack.size.record",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 8,
+                  "info": 0,
+                  "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+                },
+                {
+                  "index": 3,
+                  "name": "__CCE_KernelArgSize",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 4,
+                  "info": 0,
+                  "sha256": "6fea016a651b6460fdd05e8073e5114413e814d86781e4dc4e8c3592dc851128"
+                },
+                {
+                  "index": 4,
+                  "name": ".comment",
+                  "type": 1,
+                  "flags": 48,
+                  "bytes": 107,
+                  "info": 0,
+                  "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+                },
+                {
+                  "index": 5,
+                  "name": ".symtab",
+                  "type": 2,
+                  "flags": 0,
+                  "bytes": 1296,
+                  "info": 52,
+                  "sha256": "60c37b39c66c2ab0586447852abf1fd6b99dbc250acbb5babbd8073491d3f2fe"
+                },
+                {
+                  "index": 6,
+                  "name": ".shstrtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 88,
+                  "info": 0,
+                  "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+                },
+                {
+                  "index": 7,
+                  "name": ".strtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 344,
+                  "info": 0,
+                  "sha256": "24d49e220332621f148af77f5bb89a297765f89be1d9daa9c69cce0e070680ef"
+                }
+              ],
+              "relocations": []
+            }
+          },
+          {
+            "types": {
+              "name": "rope_backward_atomic",
+              "ordered_pointer_types": [
+                "f16",
+                "f16",
+                "f32",
+                "f32",
+                "f16",
+                "f32",
+                "f32"
+              ],
+              "atomics_IR": [
+                "%60 = tt.atomic_rmw fadd, acq_rel, gpu, %59, %55, %cst : (tensor<32x!tt.ptr<f32>>, tensor<32xf32>, tensor<32xi1>) -> tensor<32xf32> loc(#loc63)",
+                "%64 = tt.atomic_rmw fadd, acq_rel, gpu, %63, %56, %cst : (tensor<32x!tt.ptr<f32>>, tensor<32xf32>, tensor<32xi1>) -> tensor<32xf32> loc(#loc66)"
+              ],
+              "no_dot": true,
+              "ttir_sha256": "440c3db3c9a93b26a63565dcc11dc27b01989149ab97612ebf48c20a14c4d8e4"
+            },
+            "ELF": {
+              "full_sha256": "b4705feed69fc6fcf417ef03b8592eb9e7f8bb2c1960fe8a90068c020c8dc82e",
+              "text": [
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 3272,
+                  "info": 0,
+                  "sha256": "0099491e3b07f8ae27632cff93a1fd000ff8d74b805be824a3371aa5a299a2b4"
+                }
+              ],
+              "sections": [
+                {
+                  "index": 0,
+                  "name": "",
+                  "type": 0,
+                  "flags": 0,
+                  "bytes": 0,
+                  "info": 0,
+                  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                },
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 3272,
+                  "info": 0,
+                  "sha256": "0099491e3b07f8ae27632cff93a1fd000ff8d74b805be824a3371aa5a299a2b4"
+                },
+                {
+                  "index": 2,
+                  "name": ".ascend.stack.size.record",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 8,
+                  "info": 0,
+                  "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+                },
+                {
+                  "index": 3,
+                  "name": "__CCE_KernelArgSize",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 4,
+                  "info": 0,
+                  "sha256": "aea75a928024d366bad46f910a92af49893567b615044b87f2387858ed37d149"
+                },
+                {
+                  "index": 4,
+                  "name": ".comment",
+                  "type": 1,
+                  "flags": 48,
+                  "bytes": 107,
+                  "info": 0,
+                  "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+                },
+                {
+                  "index": 5,
+                  "name": ".symtab",
+                  "type": 2,
+                  "flags": 0,
+                  "bytes": 1296,
+                  "info": 52,
+                  "sha256": "c76a527f67c897fec613359ec7b977634df2ae66ac635519157237d9be458b8c"
+                },
+                {
+                  "index": 6,
+                  "name": ".shstrtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 88,
+                  "info": 0,
+                  "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+                },
+                {
+                  "index": 7,
+                  "name": ".strtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 350,
+                  "info": 0,
+                  "sha256": "78b9ac011380a5384225f20f999c49ed5f1f69e3c727cf3e0385b74fac74b27c"
+                }
+              ],
+              "relocations": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W011-P07-02",
+      "arm": "after",
+      "spec": {
+        "case_id": "W011-P07-02",
+        "role": "cost",
+        "seed": 110702,
+        "parameters": {
+          "B": 1,
+          "S": 64,
+          "H": 64,
+          "half": 32,
+          "nope_dim": 64
+        }
+      },
+      "correctness_counter": 0,
+      "raw_phase": {
+        "phase": "compiled-types-resources-screened-not-run"
+      },
+      "status": "passed-input-only",
+      "proof": {
+        "identity": [
+          {
+            "hash": "d1fac21e39ab418d99e2c28299377ff1cb8861b02198bb5c37b868b75a061aa2",
+            "sha256": "dae2c940b1a90c28b324347d691728a984d9028e3a0d234122bdb8ce2fcb694d",
+            "format": "Triton-Ascend-npubin",
+            "identity_source": "compiled executable npubin",
+            "name": "rope_backward_owned",
+            "binaries": {
+              "ttir": "8437e8c70c17a6124587e707ddfd69c6cc8e6cb053210942e3c676d0c95c7a68",
+              "ttadapter": "1c44e7f3530cec809aba4a963cdcf443ac22b82a4edcb2b1b9cd4beaac782376",
+              "npubin": "dae2c940b1a90c28b324347d691728a984d9028e3a0d234122bdb8ce2fcb694d"
+            }
+          }
+        ],
+        "metadata": {
+          "arm": "after",
+          "prepared_device": "npu:0",
+          "route": "optimized",
+          "component": "complete saved-pre-rotation backward dx/dcos/dsin",
+          "flags": {
+            "num_warps": 4,
+            "num_stages": 2,
+            "enable_fp_fusion": false
+          },
+          "BLOCK_ROWS": 64,
+          "BLOCK_NOPE": 64,
+          "grids": [
+            [
+              64
+            ]
+          ],
+          "device_kernel_calls": 0,
+          "physical": {
+            "dy": {
+              "shape": [
+                1,
+                64,
+                64,
+                128
+              ],
+              "stride": [
+                524288,
+                8192,
+                128,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 1048832,
+              "format": 2
+            },
+            "x_rope": {
+              "shape": [
+                1,
+                64,
+                64,
+                64
+              ],
+              "stride": [
+                262144,
+                4096,
+                64,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 524544,
+              "format": 2
+            },
+            "cos": {
+              "shape": [
+                1,
+                64,
+                32
+              ],
+              "stride": [
+                2048,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 8448,
+              "format": 2
+            },
+            "sin": {
+              "shape": [
+                1,
+                64,
+                32
+              ],
+              "stride": [
+                2048,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 8448,
+              "format": 2
+            },
+            "dx": {
+              "shape": [
+                1,
+                64,
+                64,
+                128
+              ],
+              "stride": [
+                524288,
+                8192,
+                128,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 1048832,
+              "format": 2
+            },
+            "dcos": {
+              "shape": [
+                1,
+                64,
+                32
+              ],
+              "stride": [
+                2048,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 8448,
+              "format": 2
+            },
+            "dsin": {
+              "shape": [
+                1,
+                64,
+                32
+              ],
+              "stride": [
+                2048,
+                32,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 8448,
+              "format": 2
+            }
+          },
+          "reused_outputs": true,
+          "scope": "before charged coefficientzero+atomicbackward, afterownedoverwrite; all dx/prefix work; setup/allocations outside APIs; no profileIO",
+          "compile_only_probe": true
+        },
+        "proof": [
+          {
+            "types": {
+              "name": "rope_backward_owned",
+              "ordered_pointer_types": [
+                "f16",
+                "f16",
+                "f32",
+                "f32",
+                "f16",
+                "f32",
+                "f32"
+              ],
+              "atomics_IR": [],
+              "no_dot": true,
+              "ttir_sha256": "8437e8c70c17a6124587e707ddfd69c6cc8e6cb053210942e3c676d0c95c7a68"
+            },
+            "ELF": {
+              "full_sha256": "dae2c940b1a90c28b324347d691728a984d9028e3a0d234122bdb8ce2fcb694d",
+              "text": [
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 3324,
+                  "info": 0,
+                  "sha256": "ee94dbc187c784d1bb4c7b94ebcbf0a381f31a08d65bb78df18ee66ab7bbb041"
+                }
+              ],
+              "sections": [
+                {
+                  "index": 0,
+                  "name": "",
+                  "type": 0,
+                  "flags": 0,
+                  "bytes": 0,
+                  "info": 0,
+                  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                },
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 3324,
+                  "info": 0,
+                  "sha256": "ee94dbc187c784d1bb4c7b94ebcbf0a381f31a08d65bb78df18ee66ab7bbb041"
+                },
+                {
+                  "index": 2,
+                  "name": ".ascend.stack.size.record",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 8,
+                  "info": 0,
+                  "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+                },
+                {
+                  "index": 3,
+                  "name": "__CCE_KernelArgSize",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 4,
+                  "info": 0,
+                  "sha256": "aea75a928024d366bad46f910a92af49893567b615044b87f2387858ed37d149"
+                },
+                {
+                  "index": 4,
+                  "name": ".comment",
+                  "type": 1,
+                  "flags": 48,
+                  "bytes": 107,
+                  "info": 0,
+                  "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+                },
+                {
+                  "index": 5,
+                  "name": ".symtab",
+                  "type": 2,
+                  "flags": 0,
+                  "bytes": 1296,
+                  "info": 52,
+                  "sha256": "b76772ec38264ce73b9861554fd566780be74d8b23e1497cdd78b7f32e30454c"
+                },
+                {
+                  "index": 6,
+                  "name": ".shstrtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 88,
+                  "info": 0,
+                  "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+                },
+                {
+                  "index": 7,
+                  "name": ".strtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 347,
+                  "info": 0,
+                  "sha256": "7519d9c14c4ece2898cb179a748ea3504ad916be139c7a526cd5a6236efb570a"
+                }
+              ],
+              "relocations": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W011-P07-03",
+      "arm": "before",
+      "spec": {
+        "case_id": "W011-P07-03",
+        "role": "benefit",
+        "seed": 110703,
+        "parameters": {
+          "B": 1,
+          "S": 64,
+          "H": 128,
+          "half": 16,
+          "nope_dim": 64
+        }
+      },
+      "correctness_counter": 0,
+      "raw_phase": {
+        "phase": "compiled-types-resources-screened-not-run"
+      },
+      "status": "passed-input-only",
+      "proof": {
+        "identity": [
+          {
+            "hash": "8b26e4554824ae22a30cbe4ec5970562936f3fb3023f026c82f0e5a53d0b0960",
+            "sha256": "bfc86d18afd8fc870b1c085daa002f9b2c206605609b8110a2dce0d486d4a3c6",
+            "format": "Triton-Ascend-npubin",
+            "identity_source": "compiled executable npubin",
+            "name": "rope_backward_zero",
+            "binaries": {
+              "ttir": "0bfb4619a37c0a240422bfc92ed34bffd670b77754c4e81d35b90a96f83f5c6a",
+              "ttadapter": "b748ddbd0bc2e34a64b0491873a5f5638a5f72833ac79b9b6b4a283178024a7c",
+              "npubin": "bfc86d18afd8fc870b1c085daa002f9b2c206605609b8110a2dce0d486d4a3c6"
+            }
+          },
+          {
+            "hash": "3ab27a3bfc98fda7b6a3c7587e30f0ccf95807d60b91ee7f18b82c45f6e34ddd",
+            "sha256": "7f97cb7f65b31a0fb4940b961c97427d672725006f77af1c4369764db176c384",
+            "format": "Triton-Ascend-npubin",
+            "identity_source": "compiled executable npubin",
+            "name": "rope_backward_atomic",
+            "binaries": {
+              "ttir": "4552a7273664977a7c4b49d5f99a95e0404091de9b4013b4a0828840e596eecf",
+              "ttadapter": "554b764cb82ab17d396333c8592a58cf72fdaabc506c2d2021ae9d359b4aaeec",
+              "npubin": "7f97cb7f65b31a0fb4940b961c97427d672725006f77af1c4369764db176c384"
+            }
+          }
+        ],
+        "metadata": {
+          "arm": "before",
+          "prepared_device": "npu:0",
+          "route": "reference",
+          "component": "complete saved-pre-rotation backward dx/dcos/dsin",
+          "flags": {
+            "num_warps": 4,
+            "num_stages": 2,
+            "enable_fp_fusion": false
+          },
+          "BLOCK_ROWS": 64,
+          "BLOCK_NOPE": 64,
+          "grids": [
+            [
+              4
+            ],
+            [
+              128
+            ]
+          ],
+          "device_kernel_calls": 0,
+          "physical": {
+            "dy": {
+              "shape": [
+                1,
+                64,
+                128,
+                96
+              ],
+              "stride": [
+                786432,
+                12288,
+                96,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 1573120,
+              "format": 2
+            },
+            "x_rope": {
+              "shape": [
+                1,
+                64,
+                128,
+                32
+              ],
+              "stride": [
+                262144,
+                4096,
+                32,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 524544,
+              "format": 2
+            },
+            "cos": {
+              "shape": [
+                1,
+                64,
+                16
+              ],
+              "stride": [
+                1024,
+                16,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 4352,
+              "format": 2
+            },
+            "sin": {
+              "shape": [
+                1,
+                64,
+                16
+              ],
+              "stride": [
+                1024,
+                16,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 4352,
+              "format": 2
+            },
+            "dx": {
+              "shape": [
+                1,
+                64,
+                128,
+                96
+              ],
+              "stride": [
+                786432,
+                12288,
+                96,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 1573120,
+              "format": 2
+            },
+            "dcos": {
+              "shape": [
+                1,
+                64,
+                16
+              ],
+              "stride": [
+                1024,
+                16,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 4352,
+              "format": 2
+            },
+            "dsin": {
+              "shape": [
+                1,
+                64,
+                16
+              ],
+              "stride": [
+                1024,
+                16,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 4352,
+              "format": 2
+            }
+          },
+          "reused_outputs": true,
+          "scope": "before charged coefficientzero+atomicbackward, afterownedoverwrite; all dx/prefix work; setup/allocations outside APIs; no profileIO",
+          "compile_only_probe": true
+        },
+        "proof": [
+          {
+            "types": {
+              "name": "rope_backward_zero",
+              "ordered_pointer_types": [
+                "f32",
+                "f32"
+              ],
+              "atomics_IR": [],
+              "no_dot": true,
+              "ttir_sha256": "0bfb4619a37c0a240422bfc92ed34bffd670b77754c4e81d35b90a96f83f5c6a"
+            },
+            "ELF": {
+              "full_sha256": "bfc86d18afd8fc870b1c085daa002f9b2c206605609b8110a2dce0d486d4a3c6",
+              "text": [
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 340,
+                  "info": 0,
+                  "sha256": "eebbcc752f24749e70a1ef1dc4dda8dd66674a82908bd0f9c038a07e6ece2210"
+                }
+              ],
+              "sections": [
+                {
+                  "index": 0,
+                  "name": "",
+                  "type": 0,
+                  "flags": 0,
+                  "bytes": 0,
+                  "info": 0,
+                  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                },
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 340,
+                  "info": 0,
+                  "sha256": "eebbcc752f24749e70a1ef1dc4dda8dd66674a82908bd0f9c038a07e6ece2210"
+                },
+                {
+                  "index": 2,
+                  "name": ".ascend.stack.size.record",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 8,
+                  "info": 0,
+                  "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+                },
+                {
+                  "index": 3,
+                  "name": "__CCE_KernelArgSize",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 4,
+                  "info": 0,
+                  "sha256": "6fea016a651b6460fdd05e8073e5114413e814d86781e4dc4e8c3592dc851128"
+                },
+                {
+                  "index": 4,
+                  "name": ".comment",
+                  "type": 1,
+                  "flags": 48,
+                  "bytes": 107,
+                  "info": 0,
+                  "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+                },
+                {
+                  "index": 5,
+                  "name": ".symtab",
+                  "type": 2,
+                  "flags": 0,
+                  "bytes": 1296,
+                  "info": 52,
+                  "sha256": "60c37b39c66c2ab0586447852abf1fd6b99dbc250acbb5babbd8073491d3f2fe"
+                },
+                {
+                  "index": 6,
+                  "name": ".shstrtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 88,
+                  "info": 0,
+                  "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+                },
+                {
+                  "index": 7,
+                  "name": ".strtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 344,
+                  "info": 0,
+                  "sha256": "24d49e220332621f148af77f5bb89a297765f89be1d9daa9c69cce0e070680ef"
+                }
+              ],
+              "relocations": []
+            }
+          },
+          {
+            "types": {
+              "name": "rope_backward_atomic",
+              "ordered_pointer_types": [
+                "f16",
+                "f16",
+                "f32",
+                "f32",
+                "f16",
+                "f32",
+                "f32"
+              ],
+              "atomics_IR": [
+                "%60 = tt.atomic_rmw fadd, acq_rel, gpu, %59, %55, %cst : (tensor<16x!tt.ptr<f32>>, tensor<16xf32>, tensor<16xi1>) -> tensor<16xf32> loc(#loc63)",
+                "%64 = tt.atomic_rmw fadd, acq_rel, gpu, %63, %56, %cst : (tensor<16x!tt.ptr<f32>>, tensor<16xf32>, tensor<16xi1>) -> tensor<16xf32> loc(#loc66)"
+              ],
+              "no_dot": true,
+              "ttir_sha256": "4552a7273664977a7c4b49d5f99a95e0404091de9b4013b4a0828840e596eecf"
+            },
+            "ELF": {
+              "full_sha256": "7f97cb7f65b31a0fb4940b961c97427d672725006f77af1c4369764db176c384",
+              "text": [
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 3428,
+                  "info": 0,
+                  "sha256": "94faf88a5db6b7af2fb63277b53fe1bb4f44069e9aca1af6adc0584df7ab0939"
+                }
+              ],
+              "sections": [
+                {
+                  "index": 0,
+                  "name": "",
+                  "type": 0,
+                  "flags": 0,
+                  "bytes": 0,
+                  "info": 0,
+                  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                },
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 3428,
+                  "info": 0,
+                  "sha256": "94faf88a5db6b7af2fb63277b53fe1bb4f44069e9aca1af6adc0584df7ab0939"
+                },
+                {
+                  "index": 2,
+                  "name": ".ascend.stack.size.record",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 8,
+                  "info": 0,
+                  "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+                },
+                {
+                  "index": 3,
+                  "name": "__CCE_KernelArgSize",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 4,
+                  "info": 0,
+                  "sha256": "aea75a928024d366bad46f910a92af49893567b615044b87f2387858ed37d149"
+                },
+                {
+                  "index": 4,
+                  "name": ".comment",
+                  "type": 1,
+                  "flags": 48,
+                  "bytes": 107,
+                  "info": 0,
+                  "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+                },
+                {
+                  "index": 5,
+                  "name": ".symtab",
+                  "type": 2,
+                  "flags": 0,
+                  "bytes": 1296,
+                  "info": 52,
+                  "sha256": "9cd52a5ac00764c77a053b915851e03086714a97a9a1729a1aa17bf4d091c78e"
+                },
+                {
+                  "index": 6,
+                  "name": ".shstrtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 88,
+                  "info": 0,
+                  "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+                },
+                {
+                  "index": 7,
+                  "name": ".strtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 350,
+                  "info": 0,
+                  "sha256": "78b9ac011380a5384225f20f999c49ed5f1f69e3c727cf3e0385b74fac74b27c"
+                }
+              ],
+              "relocations": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W011-P07-03",
+      "arm": "after",
+      "spec": {
+        "case_id": "W011-P07-03",
+        "role": "benefit",
+        "seed": 110703,
+        "parameters": {
+          "B": 1,
+          "S": 64,
+          "H": 128,
+          "half": 16,
+          "nope_dim": 64
+        }
+      },
+      "correctness_counter": 0,
+      "raw_phase": {
+        "phase": "compiled-types-resources-screened-not-run"
+      },
+      "status": "passed-input-only",
+      "proof": {
+        "identity": [
+          {
+            "hash": "b1875b40726058f17b7cad9aa6656e8efcf652f501f1fce100dabee18e2ec550",
+            "sha256": "cc6ab82ca66fcb0ad33098c7d13c835b9f64915b4a3430c02f287d780d7c9c1f",
+            "format": "Triton-Ascend-npubin",
+            "identity_source": "compiled executable npubin",
+            "name": "rope_backward_owned",
+            "binaries": {
+              "ttir": "e44b7c2822ab878f2410f6b0510f368bd61c16896d986052c2b0d1200e4d1d5d",
+              "ttadapter": "b60ae76ea9e3b758ce697d7b2134c78d11107a20faab62ee01518e5209373444",
+              "npubin": "cc6ab82ca66fcb0ad33098c7d13c835b9f64915b4a3430c02f287d780d7c9c1f"
+            }
+          }
+        ],
+        "metadata": {
+          "arm": "after",
+          "prepared_device": "npu:0",
+          "route": "optimized",
+          "component": "complete saved-pre-rotation backward dx/dcos/dsin",
+          "flags": {
+            "num_warps": 4,
+            "num_stages": 2,
+            "enable_fp_fusion": false
+          },
+          "BLOCK_ROWS": 128,
+          "BLOCK_NOPE": 64,
+          "grids": [
+            [
+              64
+            ]
+          ],
+          "device_kernel_calls": 0,
+          "physical": {
+            "dy": {
+              "shape": [
+                1,
+                64,
+                128,
+                96
+              ],
+              "stride": [
+                786432,
+                12288,
+                96,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 1573120,
+              "format": 2
+            },
+            "x_rope": {
+              "shape": [
+                1,
+                64,
+                128,
+                32
+              ],
+              "stride": [
+                262144,
+                4096,
+                32,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 524544,
+              "format": 2
+            },
+            "cos": {
+              "shape": [
+                1,
+                64,
+                16
+              ],
+              "stride": [
+                1024,
+                16,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 4352,
+              "format": 2
+            },
+            "sin": {
+              "shape": [
+                1,
+                64,
+                16
+              ],
+              "stride": [
+                1024,
+                16,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 4352,
+              "format": 2
+            },
+            "dx": {
+              "shape": [
+                1,
+                64,
+                128,
+                96
+              ],
+              "stride": [
+                786432,
+                12288,
+                96,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 1573120,
+              "format": 2
+            },
+            "dcos": {
+              "shape": [
+                1,
+                64,
+                16
+              ],
+              "stride": [
+                1024,
+                16,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 4352,
+              "format": 2
+            },
+            "dsin": {
+              "shape": [
+                1,
+                64,
+                16
+              ],
+              "stride": [
+                1024,
+                16,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 4352,
+              "format": 2
+            }
+          },
+          "reused_outputs": true,
+          "scope": "before charged coefficientzero+atomicbackward, afterownedoverwrite; all dx/prefix work; setup/allocations outside APIs; no profileIO",
+          "compile_only_probe": true
+        },
+        "proof": [
+          {
+            "types": {
+              "name": "rope_backward_owned",
+              "ordered_pointer_types": [
+                "f16",
+                "f16",
+                "f32",
+                "f32",
+                "f16",
+                "f32",
+                "f32"
+              ],
+              "atomics_IR": [],
+              "no_dot": true,
+              "ttir_sha256": "e44b7c2822ab878f2410f6b0510f368bd61c16896d986052c2b0d1200e4d1d5d"
+            },
+            "ELF": {
+              "full_sha256": "cc6ab82ca66fcb0ad33098c7d13c835b9f64915b4a3430c02f287d780d7c9c1f",
+              "text": [
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 3328,
+                  "info": 0,
+                  "sha256": "cc067568d76d603aae9d094c6b4290dc26f38e9be86ff5f6b6d8d0f0b0a5bceb"
+                }
+              ],
+              "sections": [
+                {
+                  "index": 0,
+                  "name": "",
+                  "type": 0,
+                  "flags": 0,
+                  "bytes": 0,
+                  "info": 0,
+                  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                },
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 3328,
+                  "info": 0,
+                  "sha256": "cc067568d76d603aae9d094c6b4290dc26f38e9be86ff5f6b6d8d0f0b0a5bceb"
+                },
+                {
+                  "index": 2,
+                  "name": ".ascend.stack.size.record",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 8,
+                  "info": 0,
+                  "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+                },
+                {
+                  "index": 3,
+                  "name": "__CCE_KernelArgSize",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 4,
+                  "info": 0,
+                  "sha256": "aea75a928024d366bad46f910a92af49893567b615044b87f2387858ed37d149"
+                },
+                {
+                  "index": 4,
+                  "name": ".comment",
+                  "type": 1,
+                  "flags": 48,
+                  "bytes": 107,
+                  "info": 0,
+                  "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+                },
+                {
+                  "index": 5,
+                  "name": ".symtab",
+                  "type": 2,
+                  "flags": 0,
+                  "bytes": 1296,
+                  "info": 52,
+                  "sha256": "5c8cf7e6cc953f8d581c85e3a1bfa1ecb9e307f7a1049b91b828bdd5865b0bed"
+                },
+                {
+                  "index": 6,
+                  "name": ".shstrtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 88,
+                  "info": 0,
+                  "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+                },
+                {
+                  "index": 7,
+                  "name": ".strtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 347,
+                  "info": 0,
+                  "sha256": "7519d9c14c4ece2898cb179a748ea3504ad916be139c7a526cd5a6236efb570a"
+                }
+              ],
+              "relocations": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W011-P07-04",
+      "arm": "before",
+      "spec": {
+        "case_id": "W011-P07-04",
+        "role": "benefit",
+        "seed": 110704,
+        "parameters": {
+          "B": 2,
+          "S": 128,
+          "H": 256,
+          "half": 16,
+          "nope_dim": 64
+        }
+      },
+      "correctness_counter": 0,
+      "raw_phase": {
+        "phase": "compiled-types-resources-screened-not-run"
+      },
+      "status": "passed-input-only",
+      "proof": {
+        "identity": [
+          {
+            "hash": "092da3057cf12d645d8546358e9e60c5c68171f7b1b276ea28d8db9435710c47",
+            "sha256": "97b92ca5a8fbc31d1e7117ab86d8b1468f402c7dfc8f97a9429173309b147007",
+            "format": "Triton-Ascend-npubin",
+            "identity_source": "compiled executable npubin",
+            "name": "rope_backward_zero",
+            "binaries": {
+              "ttir": "f1fa80bf8298fbf0eed1636b11ce8541d9d675b4d4b9c9d8b78c6b7b87be06c9",
+              "ttadapter": "9871acee217f11110b4252866ace71df89655d0fc53a53d4da241d73d24aa5ba",
+              "npubin": "97b92ca5a8fbc31d1e7117ab86d8b1468f402c7dfc8f97a9429173309b147007"
+            }
+          },
+          {
+            "hash": "3ab27a3bfc98fda7b6a3c7587e30f0ccf95807d60b91ee7f18b82c45f6e34ddd",
+            "sha256": "7f97cb7f65b31a0fb4940b961c97427d672725006f77af1c4369764db176c384",
+            "format": "Triton-Ascend-npubin",
+            "identity_source": "compiled executable npubin",
+            "name": "rope_backward_atomic",
+            "binaries": {
+              "ttir": "4552a7273664977a7c4b49d5f99a95e0404091de9b4013b4a0828840e596eecf",
+              "ttadapter": "554b764cb82ab17d396333c8592a58cf72fdaabc506c2d2021ae9d359b4aaeec",
+              "npubin": "7f97cb7f65b31a0fb4940b961c97427d672725006f77af1c4369764db176c384"
+            }
+          }
+        ],
+        "metadata": {
+          "arm": "before",
+          "prepared_device": "npu:0",
+          "route": "reference",
+          "component": "complete saved-pre-rotation backward dx/dcos/dsin",
+          "flags": {
+            "num_warps": 4,
+            "num_stages": 2,
+            "enable_fp_fusion": false
+          },
+          "BLOCK_ROWS": 64,
+          "BLOCK_NOPE": 64,
+          "grids": [
+            [
+              16
+            ],
+            [
+              1024
+            ]
+          ],
+          "device_kernel_calls": 0,
+          "physical": {
+            "dy": {
+              "shape": [
+                2,
+                128,
+                256,
+                96
+              ],
+              "stride": [
+                3145728,
+                24576,
+                96,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 12583168,
+              "format": 2
+            },
+            "x_rope": {
+              "shape": [
+                2,
+                128,
+                256,
+                32
+              ],
+              "stride": [
+                1048576,
+                8192,
+                32,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 4194560,
+              "format": 2
+            },
+            "cos": {
+              "shape": [
+                2,
+                128,
+                16
+              ],
+              "stride": [
+                2048,
+                16,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 16640,
+              "format": 2
+            },
+            "sin": {
+              "shape": [
+                2,
+                128,
+                16
+              ],
+              "stride": [
+                2048,
+                16,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 16640,
+              "format": 2
+            },
+            "dx": {
+              "shape": [
+                2,
+                128,
+                256,
+                96
+              ],
+              "stride": [
+                3145728,
+                24576,
+                96,
+                1
+              ],
+              "storage_offset": 64,
+              "storage_bytes": 12583168,
+              "format": 2
+            },
+            "dcos": {
+              "shape": [
+                2,
+                128,
+                16
+              ],
+              "stride": [
+                2048,
+                16,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 16640,
+              "format": 2
+            },
+            "dsin": {
+              "shape": [
+                2,
+                128,
+                16
+              ],
+              "stride": [
+                2048,
+                16,
+                1
+              ],
+              "storage_offset": 32,
+              "storage_bytes": 16640,
+              "format": 2
+            }
+          },
+          "reused_outputs": true,
+          "scope": "before charged coefficientzero+atomicbackward, afterownedoverwrite; all dx/prefix work; setup/allocations outside APIs; no profileIO",
+          "compile_only_probe": true
+        },
+        "proof": [
+          {
+            "types": {
+              "name": "rope_backward_zero",
+              "ordered_pointer_types": [
+                "f32",
+                "f32"
+              ],
+              "atomics_IR": [],
+              "no_dot": true,
+              "ttir_sha256": "f1fa80bf8298fbf0eed1636b11ce8541d9d675b4d4b9c9d8b78c6b7b87be06c9"
+            },
+            "ELF": {
+              "full_sha256": "97b92ca5a8fbc31d1e7117ab86d8b1468f402c7dfc8f97a9429173309b147007",
+              "text": [
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 340,
+                  "info": 0,
+                  "sha256": "f90587f26f0b9f02e820ea4a3628e1e0a91fa4f424e1b1f3d7113c05f04be574"
+                }
+              ],
+              "sections": [
+                {
+                  "index": 0,
+                  "name": "",
+                  "type": 0,
+                  "flags": 0,
+                  "bytes": 0,
+                  "info": 0,
+                  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                },
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 340,
+                  "info": 0,
+                  "sha256": "f90587f26f0b9f02e820ea4a3628e1e0a91fa4f424e1b1f3d7113c05f04be574"
+                },
+                {
+                  "index": 2,
+                  "name": ".ascend.stack.size.record",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 8,
+                  "info": 0,
+                  "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+                },
+                {
+                  "index": 3,
+                  "name": "__CCE_KernelArgSize",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 4,
+                  "info": 0,
+                  "sha256": "6fea016a651b6460fdd05e8073e5114413e814d86781e4dc4e8c3592dc851128"
+                },
+                {
+                  "index": 4,
+                  "name": ".comment",
+                  "type": 1,
+                  "flags": 48,
+                  "bytes": 107,
+                  "info": 0,
+                  "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+                },
+                {
+                  "index": 5,
+                  "name": ".symtab",
+                  "type": 2,
+                  "flags": 0,
+                  "bytes": 1296,
+                  "info": 52,
+                  "sha256": "60c37b39c66c2ab0586447852abf1fd6b99dbc250acbb5babbd8073491d3f2fe"
+                },
+                {
+                  "index": 6,
+                  "name": ".shstrtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 88,
+                  "info": 0,
+                  "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+                },
+                {
+                  "index": 7,
+                  "name": ".strtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 344,
+                  "info": 0,
+                  "sha256": "24d49e220332621f148af77f5bb89a297765f89be1d9daa9c69cce0e070680ef"
+                }
+              ],
+              "relocations": []
+            }
+          },
+          {
+            "types": {
+              "name": "rope_backward_atomic",
+              "ordered_pointer_types": [
+                "f16",
+                "f16",
+                "f32",
+                "f32",
+                "f16",
+                "f32",
+                "f32"
+              ],
+              "atomics_IR": [
+                "%60 = tt.atomic_rmw fadd, acq_rel, gpu, %59, %55, %cst : (tensor<16x!tt.ptr<f32>>, tensor<16xf32>, tensor<16xi1>) -> tensor<16xf32> loc(#loc63)",
+                "%64 = tt.atomic_rmw fadd, acq_rel, gpu, %63, %56, %cst : (tensor<16x!tt.ptr<f32>>, tensor<16xf32>, tensor<16xi1>) -> tensor<16xf32> loc(#loc66)"
+              ],
+              "no_dot": true,
+              "ttir_sha256": "4552a7273664977a7c4b49d5f99a95e0404091de9b4013b4a0828840e596eecf"
+            },
+            "ELF": {
+              "full_sha256": "7f97cb7f65b31a0fb4940b961c97427d672725006f77af1c4369764db176c384",
+              "text": [
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 3428,
+                  "info": 0,
+                  "sha256": "94faf88a5db6b7af2fb63277b53fe1bb4f44069e9aca1af6adc0584df7ab0939"
+                }
+              ],
+              "sections": [
+                {
+                  "index": 0,
+                  "name": "",
+                  "type": 0,
+                  "flags": 0,
+                  "bytes": 0,
+                  "info": 0,
+                  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                },
+                {
+                  "index": 1,
+                  "name": ".text",
+                  "type": 1,
+                  "flags": 6,
+                  "bytes": 3428,
+                  "info": 0,
+                  "sha256": "94faf88a5db6b7af2fb63277b53fe1bb4f44069e9aca1af6adc0584df7ab0939"
+                },
+                {
+                  "index": 2,
+                  "name": ".ascend.stack.size.record",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 8,
+                  "info": 0,
+                  "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+                },
+                {
+                  "index": 3,
+                  "name": "__CCE_KernelArgSize",
+                  "type": 7,
+                  "flags": 0,
+                  "bytes": 4,
+                  "info": 0,
+                  "sha256": "aea75a928024d366bad46f910a92af49893567b615044b87f2387858ed37d149"
+                },
+                {
+                  "index": 4,
+                  "name": ".comment",
+                  "type": 1,
+                  "flags": 48,
+                  "bytes": 107,
+                  "info": 0,
+                  "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+                },
+                {
+                  "index": 5,
+                  "name": ".symtab",
+                  "type": 2,
+                  "flags": 0,
+                  "bytes": 1296,
+                  "info": 52,
+                  "sha256": "9cd52a5ac00764c77a053b915851e03086714a97a9a1729a1aa17bf4d091c78e"
+                },
+                {
+                  "index": 6,
+                  "name": ".shstrtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 88,
+                  "info": 0,
+                  "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+                },
+                {
+                  "index": 7,
+                  "name": ".strtab",
+                  "type": 3,
+                  "flags": 0,
+                  "bytes": 350,
+                  "info": 0,
+                  "sha256": "78b9ac011380a5384225f20f999c49ed5f1f69e3c727cf3e0385b74fac74b27c"
+                }
+              ],
+              "relocations": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W011-P07-04",
+      "arm": "after",
+      "spec": {
+        "case_id": "W011-P07-04",
+        "role": "benefit",
+        "seed": 110704,
+        "parameters": {
+          "B": 2,
+          "S": 128,
+          "H": 256,
+          "half": 16,
+          "nope_dim": 64
+        }
+      },
+      "correctness_counter": 0,
+      "raw_phase": {
+        "phase": "not-compiled-not-run"
+      },
+      "status": "failed-UB-capacity"
+    },
+    {
+      "case_id": "W011-P07-G1",
+      "arm": "before",
+      "spec": {
+        "case_id": "W011-P07-G1",
+        "role": "guard",
+        "seed": 110791,
+        "parameters": {
+          "B": 1,
+          "S": 3,
+          "H": 32,
+          "half": 8,
+          "nope_dim": 128
+        }
+      },
+      "correctness_counter": 0,
+      "raw_phase": {
+        "phase": "not-compiled-not-run"
+      },
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W011-P07-G1",
+      "arm": "after",
+      "spec": {
+        "case_id": "W011-P07-G1",
+        "role": "guard",
+        "seed": 110791,
+        "parameters": {
+          "B": 1,
+          "S": 3,
+          "H": 32,
+          "half": 8,
+          "nope_dim": 128
+        }
+      },
+      "correctness_counter": 0,
+      "raw_phase": {
+        "phase": "not-compiled-not-run"
+      },
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W011-P07-G2",
+      "arm": "before",
+      "spec": {
+        "case_id": "W011-P07-G2",
+        "role": "guard",
+        "seed": 110792,
+        "parameters": {
+          "B": 2,
+          "S": 5,
+          "H": 128,
+          "half": 16,
+          "nope_dim": 192
+        }
+      },
+      "correctness_counter": 0,
+      "raw_phase": {
+        "phase": "not-compiled-not-run"
+      },
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W011-P07-G2",
+      "arm": "after",
+      "spec": {
+        "case_id": "W011-P07-G2",
+        "role": "guard",
+        "seed": 110792,
+        "parameters": {
+          "B": 2,
+          "S": 5,
+          "H": 128,
+          "half": 16,
+          "nope_dim": 192
+        }
+      },
+      "correctness_counter": 0,
+      "raw_phase": {
+        "phase": "not-compiled-not-run"
+      },
+      "status": "unattempted"
+    }
+  ],
+  "math_source_proof": {
+    "original_sha256": "5c624475719a0cc619d42fdbcda2f54928da35a0af899510339bcf1b2f658430",
+    "fixed_sha256": "ef4b997819b579895890e7a1a915df39244279176719d50aa074f7e8e6f9e6d5",
+    "arguments_and_body_AST_equal": true,
+    "change": "atomic source arguments/body exact; owned derivative ONLY atomic_add to store, launch BR fullH; before coefficientzero charged EACHAPI"
+  },
+  "performance": {
+    "status": "unavailable",
+    "speedups": null,
+    "PMUs": null,
+    "roofline": null
+  },
+  "scope": "All3outputs on everyAPI. before one zero kernel writes bothFP32coeffgrads each call then exactsourceatomicbackward; after nozero andfullHoverwrite derivative. Allocations/initialcopies/sourceJITcompilation outside both, coefficientzero remains chargedbefore. NO forwardrotation/autograd/saving cost claimed; x_rope is saved PRErotation providedinput. Bothoutputstensorsreused; no hostIO/inspection/profile.",
+  "release": {
+    "handle": "remote:gz-a3:job:72ed2c42-887d-45da-82f2-8346dd152244",
+    "receipt_sha256": "ed01a66abf729261d97570d4314bda0f48475e5e024674b07fd38fafb4b79fac",
+    "status": "compile-failed-no-science-device-released",
+    "owned_live": 0,
+    "die_and_both_exports_released": true,
+    "health": [
+      {
+        "command": [
+          "npu-smi",
+          "info",
+          "-t",
+          "health",
+          "-i",
+          "0",
+          "-c",
+          "0"
+        ],
+        "exit": 0,
+        "stdout": "\tHealth Status                  : OK\n\tError Code                     : NA\n\tError Information              : NA\n",
+        "stderr": ""
+      },
+      {
+        "command": [
+          "npu-smi",
+          "info",
+          "-t",
+          "usages",
+          "-i",
+          "0",
+          "-c",
+          "0"
+        ],
+        "exit": 0,
+        "stdout": "\tDDR Capacity(MB)               : 0\n\tDDR Usage Rate(%)              : 0\n\tDDR Hugepages Total(page)      : 0\n\tDDR Hugepages Usage Rate(%)    : 0\n\tHBM Capacity(MB)               : 65536\n\tHBM Usage Rate(%)              : 5\n\tAicore Usage Rate(%)           : 0\n\tAivector Usage Rate(%)         : 0\n\tAicpu Usage Rate(%)            : 0\n\tCtrlcpu Usage Rate(%)          : 1\n\tDDR Bandwidth Usage Rate(%)    : 0\n\tHBM Bandwidth Usage Rate(%)    : 0\n",
+        "stderr": ""
+      },
+      {
+        "command": [
+          "npu-smi",
+          "info",
+          "-t",
+          "memory",
+          "-i",
+          "0",
+          "-c",
+          "0"
+        ],
+        "exit": 0,
+        "stdout": "\tDDR Capacity(MB)               : 0\n\tDDR Clock Speed(MHz)           : 0\n\tHBM Capacity(MB)               : 65536\n\tHBM Clock Speed(MHz)           : 1600\n\tHBM Temperature(C)             : 41\n\tHBM Manufacturer ID            : 0x57\n",
+        "stderr": ""
+      },
+      {
+        "command": [
+          "npu-smi",
+          "info",
+          "-t",
+          "proc-mem",
+          "-i",
+          "0",
+          "-c",
+          "0"
+        ],
+        "exit": 0,
+        "stdout": "\tNo process in device.\n",
+        "stderr": ""
+      },
+      {
+        "command": [
+          "npu-smi",
+          "info",
+          "-t",
+          "board",
+          "-i",
+          "0",
+          "-c",
+          "0"
+        ],
+        "exit": 0,
+        "stdout": "\tNPU ID                         : 0\n\tChip ID                        : 0\n\tChip Type                      : Ascend\n\tChip Name                      : 910B4-1\n\tChip Version                   : V1\n\tBoard ID                       : 0x38\n\tPCB ID                         : NA\n\tBOM ID                         : 1\n\tVDie ID                        : 30E6F66C 0060CC76 5C79CA93 87D28485 104301E3\n\tNDie ID                        : 00000000 00000000 00000000 00000000 00000000\n\tChip Position ID               : 0\n\tPCIe Bus Info                  : 0000:C1:00.0\n\tFirmware Version               : 7.7.0.1.231\n",
+        "stderr": ""
+      },
+      {
+        "command": [
+          "npu-smi",
+          "info",
+          "-t",
+          "ecc",
+          "-i",
+          "0",
+          "-c",
+          "0"
+        ],
+        "exit": 0,
+        "stdout": "\tHBM Single Bit Error Count               : 0\n\tHBM Double Bit Error Count               : 0\n\tHBM Single Bit Aggregate Total Err Cnt   : 0\n\tHBM Double Bit Aggregate Total Err Cnt   : 0\n\tHBM Single Bit Isolated Pages Count      : 0\n\tHBM Double Bit Isolated Pages Count      : 0\n\tHBM Single Bit Next-Isolated Pages Count : 0\n\tHBM Double Bit Next-Isolated Pages Count : 0\n",
+        "stderr": ""
+      }
+    ]
+  },
+  "artifact": {
+    "archive_handle": "remote:gz-a3:job:4acf7ef0-0839-497e-90df-99a42cce0ecc",
+    "archive_sha256": "3a1eede927703d5319563dd1f9b560b50233ac66f874833fd119a16862c9baaa",
+    "archive_bytes": 354972,
+    "verified_files": 169,
+    "diagnostics_file": "P07-compile-diagnostics.json.gz",
+    "diagnostics_sha256": "621b16568c5bd9e7d3e6d9178c4dacbd2219aa1f031879d19f0cb43cb09d8127"
+  },
+  "validation": {
+    "pre-science_A3_CPU_tests": 5,
+    "publication_A3_CPU_only_tests": 6,
+    "publication_gate": {
+      "handle": "remote:gz-a3:job:0200b920-6755-4d5a-afa7-1010efd3768a",
+      "exit": 0,
+      "result": {
+        "status": "pass",
+        "tests": 6,
+        "real_backend_imports": 0,
+        "real_compile": 0,
+        "npu_forwards": 0,
+        "frozen_oracles": 0,
+        "profiles": 0,
+        "scope": "CPU-only public quarantine/lifecycle functional gate; no scientific replay"
+      }
+    },
+    "public_quarantine_receipt": "P07-public-quarantine.json",
+    "quarantine_receipt_sha256": "3ef2573e8230a5095cf04f925cfdea2adea56b0c65eeae201d0a3385eb815207"
+  },
+  "limitations": [
+    "No scientific outputs checked and no runtime performance samples; compilepass is notcorrectnessproof.",
+    "No claim ownership/atomics optimization generally fails; fullH256 case fails this frozen compiler/resource contract.",
+    "Saved PRErotation x_rope is supplied, no fullpublicautograd/forward-savingcost claim.",
+    "Source before partialheadgroups atomic and after fullH directstores differ live arrays; compiler actualUB error supports this resource tradeoff only.",
+    "No source/shape/flags retune or bypass afterfailure; no model/actor advantage or physicaltraffic/occupancy/roofline claims."
+  ]
+}

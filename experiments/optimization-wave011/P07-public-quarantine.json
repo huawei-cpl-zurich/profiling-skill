@@ -1,0 +1,63 @@
+{
+  "status": "public-numeric-quarantined",
+  "scope": "PublicAdapter/modulefixture/factory prepare/validate/capture/defaultprobe reject beforeprovider/backend/cache/moves. Explicitinspect_compile=True supports no-run compileinspection only; private measured adapter retained for CPUmocks, not advertised as supported numeric bypass.",
+  "source_bindings": {
+    "examples/optimization-library/triton/rope_backward/rope_backward.py": {
+      "measured_sha256": "d5aa5d61792f7f84ec9a8d52ad7af2d1667bc2688863953ceb9e609feb2a01f3",
+      "publication_sha256": "8a69e90489e7371a92df35fbda8cc10ebe6412c01791037eddd016bc4645f022",
+      "unchanged": false
+    },
+    "examples/optimization-library/triton/rope_backward/inplace_rope.original.py": {
+      "measured_sha256": "5c624475719a0cc619d42fdbcda2f54928da35a0af899510339bcf1b2f658430",
+      "publication_sha256": "5c624475719a0cc619d42fdbcda2f54928da35a0af899510339bcf1b2f658430",
+      "unchanged": true
+    },
+    "examples/optimization-library/triton/rope_backward/inplace_rope_api.original.py": {
+      "measured_sha256": "413b95dd23cb9f8d08b56aeb64b85c9964fc38b7bdc6172a04b6216433b4f6bd",
+      "publication_sha256": "413b95dd23cb9f8d08b56aeb64b85c9964fc38b7bdc6172a04b6216433b4f6bd",
+      "unchanged": true
+    },
+    "examples/optimization-library/triton/rope_backward/mindspeed_utils.original.py": {
+      "measured_sha256": "0666734daddd2ded414f5f9fea9737bb757431e9fa050f74d62ffba724cc1933",
+      "publication_sha256": "0666734daddd2ded414f5f9fea9737bb757431e9fa050f74d62ffba724cc1933",
+      "unchanged": true
+    },
+    "examples/optimization-library/triton/rope_backward/rope_backward_kernels.py": {
+      "measured_sha256": "ef4b997819b579895890e7a1a915df39244279176719d50aa074f7e8e6f9e6d5",
+      "publication_sha256": "ef4b997819b579895890e7a1a915df39244279176719d50aa074f7e8e6f9e6d5",
+      "unchanged": true
+    },
+    "examples/optimization-library/triton/rope_backward/LICENSE": {
+      "measured_sha256": "bf917707c1e0ffdfe653d63aebc188a48f738f3faad9acc188c346d3618694af",
+      "publication_sha256": "bf917707c1e0ffdfe653d63aebc188a48f738f3faad9acc188c346d3618694af",
+      "unchanged": true
+    },
+    "examples/optimization-library/triton/rope_backward/rope_backward_contract.py": {
+      "measured_sha256": "5da30bccfc264198e60c64ffc4c4eaf99faa6c0ac2fd29b74708a5e489f9ab60",
+      "publication_sha256": "5da30bccfc264198e60c64ffc4c4eaf99faa6c0ac2fd29b74708a5e489f9ab60",
+      "unchanged": true
+    }
+  },
+  "source_kernel_contract_unchanged": true,
+  "changes": "Measured Adapter renamedprivate; publicAdapter+modulemake_case failclosed afterglobalmatrixfailedqualification. Exact kernels/provider/frozenmatrix unchanged; no science replay.",
+  "CPU_only_gate": {
+    "handle": "remote:gz-a3:job:0200b920-6755-4d5a-afa7-1010efd3768a",
+    "exit": 0,
+    "result": {
+      "status": "pass",
+      "tests": 6,
+      "real_backend_imports": 0,
+      "real_compile": 0,
+      "npu_forwards": 0,
+      "frozen_oracles": 0,
+      "profiles": 0,
+      "scope": "CPU-only public quarantine/lifecycle functional gate; no scientific replay"
+    }
+  },
+  "prior_CPU_gate": {
+    "handle": "remote:gz-a3:job:0c22a5a8-f168-4c14-82ab-4d23638d1764",
+    "exit": 1,
+    "reason": "Torch auto-load attempted blockedbackendimport before tests; CPUgate v2 explicitly disables TORCH_DEVICE_BACKEND_AUTOLOAD. Noactualbackend/compile/NPU/oracles/profiles."
+  },
+  "no_additional_scientific_calls": true
+}

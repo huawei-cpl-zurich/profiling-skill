@@ -1,0 +1,108 @@
+{
+  "study_id": "W011-P07",
+  "task": "optimization-w011-rope-backward-ownership",
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "source_sha256": "5c624475719a0cc619d42fdbcda2f54928da35a0af899510339bcf1b2f658430",
+  "source_citation": "ref://profiling-skill/triton-ascend/perf-analysis/repos/optimization-wave1-mindspeed-scope-4efe2b675c2d#mindspeed_ops/arch32/triton/inplace_rope.py",
+  "query": "7c13a9d5884f467bb412bc20960c5b2f",
+  "source_helpers": "Explicit block_rows avoids host is_arch35 default; original API/utils retained as reference context",
+  "upstream_standalone_NPU_test": "NOT_ESTABLISHED; new bounded prepared-component qualification only",
+  "new_mechanism_credit": 0,
+  "domain": "Dense prepared saved-pre-rotation backward component only; F16dy/x_rope andF32cos/sin, B1..2/S1..128/Hpower2up-to256/halfpow2up-to32/nopepositive64multipleupto192",
+  "physical": "All inputs distinct CPU contiguous tensors with exact shapes; all values finite dyadic q/16 integerq[-4,4], no-autograd. F16dy/x_saved/F32cos/sin. Private full dx F16[B,S,H,D], dcos/dsinF32[B,S,half],128B aligned views with128Bcanaries; everybyte overwritten eachAPI or originalprefixcopied. Storage-strides exact; shapes reject beforecache/backend. Coeffs arbitrary dyadic parameters, not required unitcircle.",
+  "cases": [
+    {
+      "case_id": "W011-P07-01",
+      "role": "cost",
+      "seed": 110701,
+      "parameters": {
+        "B": 1,
+        "S": 1,
+        "H": 8,
+        "half": 32,
+        "nope_dim": 64
+      }
+    },
+    {
+      "case_id": "W011-P07-02",
+      "role": "cost",
+      "seed": 110702,
+      "parameters": {
+        "B": 1,
+        "S": 64,
+        "H": 64,
+        "half": 32,
+        "nope_dim": 64
+      }
+    },
+    {
+      "case_id": "W011-P07-03",
+      "role": "benefit",
+      "seed": 110703,
+      "parameters": {
+        "B": 1,
+        "S": 64,
+        "H": 128,
+        "half": 16,
+        "nope_dim": 64
+      }
+    },
+    {
+      "case_id": "W011-P07-04",
+      "role": "benefit",
+      "seed": 110704,
+      "parameters": {
+        "B": 2,
+        "S": 128,
+        "H": 256,
+        "half": 16,
+        "nope_dim": 64
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W011-P07-G1",
+      "role": "guard",
+      "seed": 110791,
+      "parameters": {
+        "B": 1,
+        "S": 3,
+        "H": 32,
+        "half": 8,
+        "nope_dim": 128
+      }
+    },
+    {
+      "case_id": "W011-P07-G2",
+      "role": "guard",
+      "seed": 110792,
+      "parameters": {
+        "B": 2,
+        "S": 5,
+        "H": 128,
+        "half": 16,
+        "nope_dim": 192
+      }
+    }
+  ],
+  "before": "Exact source backward explicitBRmin(H,64)+charged zero bothcoeffgrads everyAPI",
+  "after": "Same source derivative atomic_add->store withBRH owns fullcoefficient group; nozero needed, all3outputs/prefix fullywritten",
+  "fixed_flags": {
+    "num_warps": 4,
+    "num_stages": 2,
+    "enable_fp_fusion": false
+  },
+  "prepared_boundary": "All3outputs on everyAPI. before one zero kernel writes bothFP32coeffgrads each call then exactsourceatomicbackward; after nozero andfullHoverwrite derivative. Allocations/initialcopies/sourceJITcompilation outside both, coefficientzero remains chargedbefore. NO forwardrotation/autograd/saving cost claimed; x_rope is saved PRErotation providedinput. Bothoutputstensorsreused; no hostIO/inspection/profile.",
+  "index_certificate": "H%BR0 andtotal%BR0; blocks aligned headgroups andBRdividesH, no crosscoeffgroup. FullHpower2 enables tl.arange. NOPEloop64 each nooverrun. Sourceallinputfullstorage andprivate3outputs contiguouscanaryguarded.",
+  "oracle_certificate": "allinputq[-4,4]/16; products numerator<=16/256, pair<=32/256; H<=256sum numerator<=8192<2^24 exactlyrepresentableF32, dxF16exact. IndependentCPUFP64 formulas/casts; nonzeroexact/numericzerosprimary,signsecondary.",
+  "oracle": "IndependentCPUFP64 formulas on represented inputs: prefixdy copied; dxe=de*c+do*s;dxo=-de*s+do*c;dcos=sumH(de*e+do*o);dsin=sumH(-de*o+do*e); outputF16dx/F32dc/ds. Everyintermediate exactdyadic withinbound; exactnumeric/finite primary, nonzeroFP32/F16bits exact; zero-sign secondary. CPUcachedonce percase.",
+  "resource_certificate": "BLOCK_ROWSafter=H up to256; halfup-to32 but combinationsonlyfrozencases. Sourceprefix64load/store block andF32dy/x/reductionlivearrays scale withH. Standard compileracceptance+typedactualELFcontrast+rawmetadata/staticbounds+oncecorrectness. No unsupportedmanualUB/scratchclaim; automatic scratch UNKNOWN ifunreported. All12input-onlycells before first scientificCPUexpected.",
+  "predictions": {
+    "benefit": "Cases03/04 expect lower completeprofiledSPAN andtaskSUM by removing per-callcoefficientzero andpartialheadatomics; expectbefore2tasks/API after1; staticcodeatomicsafterabsent, measuredtraffic/occupancy/roofline notinferred. FullHlivearrays mayspill/reduceoccupancy anderasebenefit.",
+    "cost": "Cases01/02 smallH/noatomiccontention controls maygainlittle/regress due source/fullH resources andlaunchwork. Riskprobes notpromisedslowdowns; no retuning afterdata."
+  },
+  "protocol": "All12input-onlycompile/typedsource/ELF/ABI/resources gates BEFORE6onceCPUcachepayloads; all12correctonce before80profileAPIs8captures4mainpairs10perarm;guards0. No warmups/autotune/ordinarytiming/profileIO/outlierdrop/replay. FatalSTOPsource/driver/numeric/acquisitionfailure; preserve allattemptcounts/cache/artifacts; no reset/blindretry. ExplicitCPU/NPUtaskcorrelations required, no timestampjoin. C600startup/run+validate/profile, counters/phasesbeforeNPUimports/init/moves. Fullprepared-deviceallocation/run/validate/captureevents/sync/analysis guards+PipeUtilization.",
+  "root_admission": "Rootexplicitapprovedfiniteboundedcontract beforefreeze/code/math; no furtherpermissions needed",
+  "freeze_utc": "2026-10-26T01:23:40.846029+00:00"
+}

@@ -1,0 +1,6 @@
+{
+  "vendor/LICENSE": "bf917707c1e0ffdfe653d63aebc188a48f738f3faad9acc188c346d3618694af",
+  "vendor/mindspeed_ops/api/triton/chunk_gated_delta_rule.py": "3fe4789e66ddaa39f88fdf8e843cbd28f634e029c4f0dd1adaa7535961fedb9f",
+  "vendor/mindspeed_ops/api/triton/utils.py": "8a8687a84150cccf5824fa8c42874e9d9fe7996d304c1fe7b9dd61c136b54a51",
+  "vendor/mindspeed_ops/arch32/triton/gdn/chunk_bwd_dv_local.py": "1a757526cde4467cb0282911ce31c54a0de995e88264572c04cadf4606c37ee9"
+}

@@ -1,0 +1,94 @@
+{
+  "schema": "prospective-host-migration-v1",
+  "study": "W011-P04",
+  "reason": "User directed gz-a3 ANDgz-a3-2 exclusively; canceloldBZcompileonlyjob, no furtherBZscience.",
+  "matrix_sha256": "8841edabc0b7d9974153bd6f25339fea0074856aca4e0917c053c011e1a51289",
+  "old_target": "bz-a3-1",
+  "cancelled_handle": "remote:bz-a3-1:job:20261026T012535Z-786bf5a83e11",
+  "cancelled_before_science": {
+    "completed_input_compile_cells": 6,
+    "scientific_CPU_payloads": 0,
+    "numerical_API_calls": 0,
+    "profile_API_calls": 0,
+    "captures": 0,
+    "all12_correctness_counters_zero": true
+  },
+  "old_archive": {
+    "sha256": "a4924f444c82735a11f113e9f39054427ca2eaeb5381c265e10167a4a3015d36",
+    "bytes": 709753,
+    "verified_files": 261,
+    "release_readonly_handle": "remote:bz-a3-1:job:20261026T012714Z-8d68f8c53c11",
+    "no_live_owned_PGID": true,
+    "healthy_idle": true
+  },
+  "new_target": "gz-a3",
+  "new_runtime": "py311-torch",
+  "new_target_precondition": "Explicit root/RoPE release of physical0 andhostexports BEFORE any new NPUinit/compile/math dispatch, freshbounded6health/mapping underlease.",
+  "new_hardware_gate": {
+    "required_product_contains": "910B4",
+    "required_Cube": 20,
+    "required_Vector": 40,
+    "actual_product_runtime_tools_compiler_versions_must_be_recorded_before_compile": true
+  },
+  "measurement_scope": "Newtarget-specificqualification; oldBZhasNO numerical/pairdata anddoesnotestablishGZperformance. All12cells newlycompiled/typedcode+resourcequalifiedonGZ beforeFIRST6CPUexpectedpayloads/correctness/profiles. No source/math/flags/case/rounding/tolerance changes. No cross-hostpairedratio.",
+  "unchanged_bindings": [
+    {
+      "path": "examples/optimization-library/triton/kkt_triangular/LICENSE-MIT",
+      "bytes": 1080,
+      "sha256": "e3e715e6d251c826acf0fbbce5971bc71f3616ab99f7a1c290ce10964bfed86e"
+    },
+    {
+      "path": "examples/optimization-library/triton/kkt_triangular/Third_Party_Open_Source_Software_Notice",
+      "bytes": 16942,
+      "sha256": "99d2a9d965eba1e90e0a69ca844822ef22eaf146ec832c5e62433edf8000569c"
+    },
+    {
+      "path": "examples/optimization-library/triton/kkt_triangular/kkt_codegen.py",
+      "bytes": 1700,
+      "sha256": "1da2c700b3dbb6e90f6c0f51d32361aba2fe25d733052f0339b1cb4672069ba5"
+    },
+    {
+      "path": "examples/optimization-library/triton/kkt_triangular/kkt_contract.py",
+      "bytes": 4847,
+      "sha256": "871ea5099b84883f490c99eb85edd3571e91afaebd91b5f998c72df0cbf35176"
+    },
+    {
+      "path": "examples/optimization-library/triton/kkt_triangular/kkt_generated.py",
+      "bytes": 7409,
+      "sha256": "d19b984534029d38c00915c30b725ecef498884e5be1e456b4aa0bca1faef890"
+    },
+    {
+      "path": "examples/optimization-library/triton/kkt_triangular/kkt_triangular.py",
+      "bytes": 8097,
+      "sha256": "5c45b03111e7b989bae1777e08d38cb3ec9631d3d8efab83c0c5e828a6187ee7"
+    },
+    {
+      "path": "examples/optimization-library/triton/kkt_triangular/vendor/src/triton_ascend_kernels/attention/fla/__init__.py",
+      "bytes": 801,
+      "sha256": "98f4bcf0a56256a1c124e5488b4753a571ed9c91b5ca7cd7f32e2f761ea411ee"
+    },
+    {
+      "path": "examples/optimization-library/triton/kkt_triangular/vendor/src/triton_ascend_kernels/attention/fla/chunk_scaled_dot_kkt_fla.py",
+      "bytes": 13338,
+      "sha256": "78753bdaf6ee05d786ecc2d9c7f9e027943d7bf5507b05674786501d33e872f4"
+    },
+    {
+      "path": "examples/optimization-library/triton/kkt_triangular/vendor/tests/attention/test_chunk_scaled_dot_kkt_fla.py",
+      "bytes": 2529,
+      "sha256": "26a26afaa8a4dd5c164626713aac36968000a8e3c6c19300af539c2678b4d71f"
+    },
+    {
+      "path": "examples/optimization-library/triton/kkt_triangular/vendor-manifest.json",
+      "bytes": 508,
+      "sha256": "e822af73315a4f6c8af0c2cb87063c854d4ef48a24fc69b58a5d26f5a3c6720f"
+    },
+    {
+      "path": "experiments/optimization-wave011/P04.json",
+      "bytes": 8133,
+      "sha256": "8841edabc0b7d9974153bd6f25339fea0074856aca4e0917c053c011e1a51289"
+    }
+  ],
+  "compiler_policy": "Same fixed flags and source precision. GZ activeTritondriver choosesactual targetarch automatically, actualmetadata recorded. No old24/48/9382 compilerbinaryreuse. OriginalBZpartialcode preserved, notruntimefailure.",
+  "protocol": "Original oncecorrectness/10profilecalls percase unchanged; no warmup/autotune/extra latency/profileIO/replay. Cases/expectedprovider/frozenrolelabels unchanged.",
+  "prospective_utc": "2026-10-26T01:31:21.601887+00:00"
+}

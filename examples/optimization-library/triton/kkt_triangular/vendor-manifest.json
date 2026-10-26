@@ -1,0 +1,14 @@
+[
+  {
+    "path": "vendor/src/triton_ascend_kernels/attention/fla/__init__.py",
+    "sha256": "98f4bcf0a56256a1c124e5488b4753a571ed9c91b5ca7cd7f32e2f761ea411ee"
+  },
+  {
+    "path": "vendor/src/triton_ascend_kernels/attention/fla/chunk_scaled_dot_kkt_fla.py",
+    "sha256": "78753bdaf6ee05d786ecc2d9c7f9e027943d7bf5507b05674786501d33e872f4"
+  },
+  {
+    "path": "vendor/tests/attention/test_chunk_scaled_dot_kkt_fla.py",
+    "sha256": "26a26afaa8a4dd5c164626713aac36968000a8e3c6c19300af539c2678b4d71f"
+  }
+]

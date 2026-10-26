@@ -1,0 +1,133 @@
+{
+  "study_id": "W011-P12",
+  "task": "optimization-w011-kda-da-tiling",
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "source_sha256": "f00c89a24901c3a6099c784bfc9a31d51818929216fde6cbf82e5e3c851e2573",
+  "source_citation": "ref://profiling-skill/triton-ascend/perf-analysis/repos/optimization-wave1-mindspeed-scope-4efe2b675c2d#mindspeed_ops/arch32/triton/chunk_kda_bwd.py",
+  "query": "983edc42eaad420d85b87788b548f8d7",
+  "open_miss": "eac4e22979fe8697cb565f7028588b81",
+  "novelty_credit": 0,
+  "source_selected": [
+    "chunk_kda_bwd_kernel_dA_post_right",
+    "chunk_kda_bwd_kernel_dA_post_left"
+  ],
+  "domain": "Dense prepared final dA component only; B1..2,T1..2048,H1..8,BT64or128. A F16/P F32 dense contiguous CPU[B,T,H,BT], noalias/noautograd; A diag1 strictlower q[-2,2]/256, P strictlower q[-4,4]/16, full BT columns owned for each valid row. MetadataNone dense; output privateF32same shape andprivateF32temporary,128Bcanaries andalignment. Other domains reject beforeprovider/backend/cache/moves. Not full KDAbackward or upstream standalone-test qualification.",
+  "before": "Unchanged selected original JITbodies with BM=BN=BK64; full right andleft stages charged, same fixed configs else. Larger tile deliberately64, not unsupportedfullBTmonolith.",
+  "after": "Unchanged selected original JITbodies with originalsource BDA=min(BT,32)=32; BM=BN=BK32 andboth complete stages charged.",
+  "common_config": {
+    "num_warps": 2,
+    "num_stages": 1,
+    "IS_VARLEN": false,
+    "precision": "source F16operanddot/F32accumulator; verify actual typedIR beforemath",
+    "other_flags": "source defaults preserved equally, no autotune or extra fastmath flags",
+    "grid": [
+      "ceil(T/BT)",
+      "B*H",
+      "(BT/tile)^2"
+    ]
+  },
+  "math": "Right F32tmp = dot(P.to(F16), Atranspose) accumulatedF32 with source loops; tmp storedF32. Left acc = dot(Atranspose,tmp.to(F16)), source loops; negative strictlower mask andF32store. Inputs physically paddedmissingrowszero; CPUoracle uses perchunkBT\u00d7BT paddedmatrices/cropsvalidrows, no fabricated -A@(P@A) association.",
+  "fixture": "SeededCPU torch.Generator exactintegers, generate Afullq[-2,2] thenPfullq[-4,4] in shapes[B,T,H,BT]. A strictlylower q/256 +unitdiagonal (localrow=t%BT); Pstrictlylowerq/16; allothercols0, no randomfloat/trig. Independent expectedgenerator executes onceper6scientificcases afterALL12compile gates.",
+  "oracle": "IndependentCPUFP64 denseperchunkzero-paddedmatmuls, P castF16 beforefirstdot thenF32store andF16 beforeseconddot, negative strictlower/cropvalidrows\u2192F32. Payloadcontainsoriginalinputs+expectedFP64andF32. Exactprimarynonzero bitidentity withnumericzero signsecondary; checkinputsimmutability/canaries/nonalias/fullprivateF32output/pairedbothorders.",
+  "exactness_certificate": "BT<=128: firstdot atdenom4096 has |numerator|<=256*4+127*2*4=2040<2048, so everyproduct/subsumFP32exact and firstF32tmp ALSO exactlyrepresentableF16. Seconddot atdenom1048576 numerator<=(256+127*2)*2040=1040400<2^24, everyproduct/subsumFP32exact independent32/64Ktileassociation. CPUFP64matmul exact underthese integerbounds; source maskzero sign differencessecondary.",
+  "physical_proof": "Source densebos=b*T andheadbaseh*BT,rowstrideH*BT on[A,P,tmp,out]. Source right bP shape(T,BT), transposedA shape(BT,T), bothvalidtokenm/n boundarychecks; KcoversallBTcolumns. Missing rows0 inoracle; upper/trailingcolumns0fromcausalfixtures. RightwritesALLBTcols eachvalidrow, invalidtailn contributions0. Source left reducesonlyvalidtokenrows usingbothmasks, writesallvalidrows/allBTcols with strictlowerfalse\u21920. BT64/128 divisibleboth32/64 =>completegrid, no reset/atomics/allocation/H2D/sync inside eithercomplete2stageAPI.",
+  "resource_policy": "Both tile families ordinary F16Cube/F32acc shape64or32; actualcompilerUB/shared/scratchnotassumed. All12compile+bothstageactualELF/typedcode/ABI/resource snapshots before6CPU. Compilerrejectstopnegative/publicnumericquarantine, no postfailuretile/case/flags retune. Automaticpeakunknownifunreported.",
+  "prepared_scope": "COMMON inputsalreadycomputedA/P/initialcopies, compile, privateoutput+F32tmpallocation, metadataNone preparedoutsideboth. EveryprofileAPI executesrightthenleft samecurrentACLstream, allbothstageactualAIC/AIVtaskscharged. Inputsimmutable/outputfullyoverwritten/reused, no free reset/paddingwork hidden.",
+  "cases": [
+    {
+      "case_id": "W011-P12-01",
+      "role": "cost",
+      "seed": 111201,
+      "parameters": {
+        "B": 1,
+        "T": 2048,
+        "H": 8,
+        "BT": 64,
+        "dtype_A": "float16",
+        "dtype_P": "float32",
+        "dense": true
+      }
+    },
+    {
+      "case_id": "W011-P12-02",
+      "role": "cost",
+      "seed": 111202,
+      "parameters": {
+        "B": 2,
+        "T": 512,
+        "H": 8,
+        "BT": 128,
+        "dtype_A": "float16",
+        "dtype_P": "float32",
+        "dense": true
+      }
+    },
+    {
+      "case_id": "W011-P12-03",
+      "role": "benefit",
+      "seed": 111203,
+      "parameters": {
+        "B": 1,
+        "T": 128,
+        "H": 1,
+        "BT": 128,
+        "dtype_A": "float16",
+        "dtype_P": "float32",
+        "dense": true
+      }
+    },
+    {
+      "case_id": "W011-P12-04",
+      "role": "benefit",
+      "seed": 111204,
+      "parameters": {
+        "B": 1,
+        "T": 256,
+        "H": 1,
+        "BT": 128,
+        "dtype_A": "float16",
+        "dtype_P": "float32",
+        "dense": true
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W011-P12-GA",
+      "role": "guard",
+      "seed": 111291,
+      "parameters": {
+        "B": 1,
+        "T": 33,
+        "H": 2,
+        "BT": 64,
+        "dtype_A": "float16",
+        "dtype_P": "float32",
+        "dense": true
+      }
+    },
+    {
+      "case_id": "W011-P12-GB",
+      "role": "guard",
+      "seed": 111292,
+      "parameters": {
+        "B": 2,
+        "T": 127,
+        "H": 1,
+        "BT": 128,
+        "dtype_A": "float16",
+        "dtype_P": "float32",
+        "dense": true
+      }
+    }
+  ],
+  "predictions": {
+    "benefit": "03/04 smallBH128chunk exposes16vs4 and32vs8programs/stage for32v64tile, mayimproveparallelism/meancompleteprofiledSPANandtaskSUM; notguaranteedpeak/utilization.",
+    "cost": "01/02 already256programs/stage64tile,32tile1024programs maylose due dispatch/datareuse/smallmatmuloverhead; probesnotpromisedslowdowns. Source/commonloops/resources fixed beforedata, no retune.",
+    "metrics": "RawalltaskPMU/typecounts, taskSUM/union/gap/SPAN separately. Complete2stages both, expect20tasks/capture ifoneactualtask/stage, actualmixedenginecomponentsallaccounted. No physicalHBM/roofline/occupancy/ordinarylatency/significanceclaimfromcode/diagnosticspanalone."
+  },
+  "protocol": "ALL12inputonlycompile/code/ABI/resourcecells BEFORE6CPUoraclepayloadsonce BEFOREALL12oncecorrectness BEFORE80completeAPIprofilecalls8captures4pairs/guards0. No warmup/autotune/extratimings/profileIO/outlierdrop/regeneration/replay. C600startupbeforeNPUimports/init/moves+durablephase/precreatedcounters, fullprepareddevicecontext allocation/compile/run/validate/ENTIREcaptureevents/sync/analysis andPipeUtilization. FatalSTOPpreservefailure/unattemptedcalls; noreset/retune. Source/compiler/binary/fixture/reporthashes, allraw10samples+taskattribution/no ordinaljoins, archivesverifiedeverymember andhealthyrelease/noLIVE/locksfree.",
+  "target_policy": "gz-a3 or gz-a3-2 ONLY; no BZ; awaitparentexplicitnextfreehostassignment BEFOREanyNPUoperation. Readcurrentregistryruntime/cwd/capabilities/preflight/freshboundedphysicalhealthunderlease; bothhostexports capture+analysis. Targetreceipt bindsactualsoftware/hardware beforemath ifselectedlater.",
+  "root_admission": "Parent explicitly approved bounded complete densefinaldA32vs64tile/fixturecertificate/cases in message BEFOREfreeze/code/math; no generalKDA/upstreamtest/latencyclaim.",
+  "freeze_utc": "2026-10-26T02:10:02.286072+00:00"
+}

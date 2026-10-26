@@ -1,0 +1,13 @@
+{
+  "study_id": "W011-P12",
+  "target": "gz-a3",
+  "runtime": "py311-torch",
+  "physical_device": 0,
+  "logical_device": 0,
+  "root_assignment": "Root assigned next free GZ1physical0 after KDAfirststage explicitly yielded; originalKKT release verified; fresh runtime health and device properties checked BEFOREcompiles/math incontroller",
+  "required_actual_hardware": "Ascend910B4 variant; queried20Cube40Vector, explicitgates beforemathematicalfixtures",
+  "matrix_sha256": "31bd039a9fdd2a208d6d746dac5ac8f6f7af15205d7311e06894a49c8ee48f2d",
+  "unchanged": "Exactsource bodies/fixture/domain/cases/tolerances/sourceflags unchanged; hostselectedbeforefirstscientificdata; no old science/caches to replay",
+  "target_policy": "GZ1/GZ2 only; BZ prohibited",
+  "created": "2026-10-26T02:21:39.983687+00:00"
+}

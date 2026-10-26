@@ -1,0 +1,20 @@
+{
+  "schema": "optimization-target-selection-v1",
+  "study_id": "W011-P10",
+  "target": "gz-a3-2",
+  "runtime": "py312-torch",
+  "physical_device": 0,
+  "logical_device": 0,
+  "user_constraint": "gz-a3 and gz-a3-2 EXCLUSIVELY; BZ prohibited",
+  "selection": "Currentcapabilities/preflight available; previouslyverifiedGZ2physical0releasedhealthybyPR279, runtimepy312. Thiscontroller freshhealthandactualruntime/compiler/profilerproperties beforeanymath.",
+  "required_fresh_board_identity": "NPU9362/Ascend910V1; notBZ9382 orGZ1910B4 assumptions",
+  "source_frozen_matrix_sha256": "61c4b890527a32c63ad48886d36e38cff02a1c80e9a7015040a858d7458cd410",
+  "numerical_source_case_math_tolerance_changes": false,
+  "science_before_selection": {
+    "compile": 0,
+    "scientific_CPU_expected": 0,
+    "correctness": 0,
+    "profiles": 0
+  },
+  "date_utc": "2026-10-26T02:14:28.298823+00:00"
+}

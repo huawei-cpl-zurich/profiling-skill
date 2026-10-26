@@ -1,0 +1,178 @@
+{
+  "study_id": "W011-P10",
+  "task": "optimization-w011-gdn-local-dv-fusion",
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "source_citation": "ref://profiling-skill/triton-ascend/perf-analysis/repos/optimization-wave1-mindspeed-scope-4efe2b675c2d#mindspeed_ops/arch32/triton/gdn/chunk_bwd_dv_local.py",
+  "source_query": "983edc42eaad420d85b87788b548f8d7",
+  "sources": [
+    {
+      "path": ".agent-state/runtime/optimization-wave011-research/bodies/mindspeed_ops/arch32/triton/gdn/chunk_bwd_dv_local.py",
+      "sha256": "1a757526cde4467cb0282911ce31c54a0de995e88264572c04cadf4606c37ee9",
+      "bytes": 4100
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave011-research/bodies/mindspeed_ops/api/triton/chunk_gated_delta_rule.py",
+      "sha256": "3fe4789e66ddaa39f88fdf8e843cbd28f634e029c4f0dd1adaa7535961fedb9f",
+      "bytes": 12626
+    },
+    {
+      "path": ".agent-state/runtime/optimization-wave011-research/future-source-bank/api-utils.py",
+      "sha256": "8a8687a84150cccf5824fa8c42874e9d9fe7996d304c1fe7b9dd61c136b54a51",
+      "bytes": 8135
+    }
+  ],
+  "open_miss": "eac4e22979fe8697cb565f7028588b81",
+  "upstream_standalone_test": "NOT_ESTABLISHED; new bounded prepared component qualification only",
+  "novelty_credit": 0,
+  "root_admission": "Explicit2026-10-26 rootapproval finite source contract beforefreeze/code/math;4warps2stages/fpFusionFalse commonEXTRACTIONchoice NOTsourceunspecifieddefaultparity. GZONLY.",
+  "domain": "Dense prepared local-dV ONLY; B1or2,T1..2048,H4or8,K/V64or128; F16q/k/dO exactCPUownedcontiguous [B,T,H,K/V], F32gheadmajor[B,H,T], no grad/aliases; all finite dyadic q/k/dO integer[-4,4]/32 and exact frozen gpattern; scale.5; USE_G=True/USE_G_GAMMA=False/IS_VARLEN=False; cu/indices/g_gamma None; no broader publicGDN/backward/varlen/gamma-only claim",
+  "cases": [
+    {
+      "case_id": "W011-P10-01",
+      "role": "cost",
+      "seed": 111001,
+      "parameters": {
+        "B": 1,
+        "T": 6,
+        "H": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 16,
+        "scale": 0.5,
+        "g_mode": "cumulative",
+        "dense": true,
+        "USE_G": true,
+        "USE_G_GAMMA": false
+      }
+    },
+    {
+      "case_id": "W011-P10-02",
+      "role": "cost",
+      "seed": 111002,
+      "parameters": {
+        "B": 1,
+        "T": 64,
+        "H": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "scale": 0.5,
+        "g_mode": "cumulative",
+        "dense": true,
+        "USE_G": true,
+        "USE_G_GAMMA": false
+      }
+    },
+    {
+      "case_id": "W011-P10-03",
+      "role": "benefit",
+      "seed": 111003,
+      "parameters": {
+        "B": 1,
+        "T": 128,
+        "H": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "scale": 0.5,
+        "g_mode": "cumulative",
+        "dense": true,
+        "USE_G": true,
+        "USE_G_GAMMA": false
+      }
+    },
+    {
+      "case_id": "W011-P10-04",
+      "role": "benefit",
+      "seed": 111004,
+      "parameters": {
+        "B": 1,
+        "T": 2048,
+        "H": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "scale": 0.5,
+        "g_mode": "cumulative",
+        "dense": true,
+        "USE_G": true,
+        "USE_G_GAMMA": false
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W011-P10-GA",
+      "role": "guard",
+      "seed": 111091,
+      "parameters": {
+        "B": 2,
+        "T": 33,
+        "H": 4,
+        "K": 64,
+        "V": 64,
+        "BT": 64,
+        "scale": 0.5,
+        "g_mode": "zigzag",
+        "dense": true,
+        "USE_G": true,
+        "USE_G_GAMMA": false
+      }
+    },
+    {
+      "case_id": "W011-P10-GB",
+      "role": "guard",
+      "seed": 111092,
+      "parameters": {
+        "B": 1,
+        "T": 127,
+        "H": 8,
+        "K": 128,
+        "V": 128,
+        "BT": 64,
+        "scale": 0.5,
+        "g_mode": "zigzag",
+        "dense": true,
+        "USE_G": true,
+        "USE_G_GAMMA": false
+      }
+    }
+  ],
+  "before": "Educational two charged kernels: source-derived score producer preserves K/Q loads/dot accumulation/gate/upperinclusivevalidmask/scale and F16 cast then stores complete private padded Ahalf[B,NT,H,BT,BT]; consumer loads thatAhalf, exactsource dO block/dot/store for full localdV. AllAhalf cells overwritten includingzero maskedtails before consumption. No freeprecomputation/reset required; aftereveryAPI valid dV fullyoverwritten.",
+  "after": "Byte-for-byte selected source fusedJIT body after onlyfunctionrename/heuristicconstexprexposure; signatureNonearguments explicit; originalsource/wrapper retained. One kernel computescomplete localdV.",
+  "common_config": {
+    "BT": "min(64,max(16,nextpow2(T))) exactsourcewrapperrule",
+    "BK": 128,
+    "BV": 128,
+    "grid": [
+      "ceil(T/BT)",
+      "B"
+    ],
+    "num_warps": 4,
+    "num_stages": 2,
+    "enable_fp_fusion": false,
+    "default_parity": "Not claimed; source wrapper does not specify warps/stages, explicitcommonextractionpolicy frozen now.",
+    "USE_G": true,
+    "USE_G_GAMMA": false,
+    "IS_VARLEN": false
+  },
+  "prepared_boundary": "Common validated dense inputs/headmajorg copied once/privateoutput+beforeAhalf scratch allocated once outsideboth; no sourcewrappergtranspose/allocator/H2D/metadata construction charged. Allscore/KQ/gate/scale/F16Acast/dotdO/outputcast repeatedINSIDEcompleteAPI;2kernelsvs1. No fullGDN/state-backwardgradientclaim.",
+  "math": "For chunk, A32=Khalf@Qhalf^T accumulatedF32; exp32=FP32exp(F32(g_col-g_row)); value=FP32(FP32(A32*exp32)*.5); upperinclusive row<=col ANDbothvalidtokenmask ->F16A; dV=F16(F32(Ahalf@dOhalf)). Gate ordinaryexp includingpositivevalidarguments, NOTforward safe_exp.",
+  "fixture": "q,k,dO drawn separately inthatorder via seededCPUtorch.Generator, randint[-4,4]/32 ->F16. Cumulativeg[b,h,t]=-(t%BT+1)*(h+1)/1024 F32; zigzagg[b,h,t]=((t%17)-8)*(h+1)/256 F32 (head/tokenvarying, positivevalidexpdifferences). Allprivateinput/output/scratchstorage128Balignedlogicaloffset+128Btypedcanaries.",
+  "oracle": "IndependentCPUFP64 K@Qtranspose ->F32 (firstdotexactdyadic: maxnumerator128*16=2048<2^24); typedF32exp/product/scale/causal ->F16A; CPUFP64 Ahalf@dOhalf ->F32 ->F16. Primaryfinite combinedatol2e-4+rtol2e-3 vsoracleANDpaired; exactbits andzero/sign secondary. OracleCPU onceeach6cases cachedboundtosource/spec/provider.",
+  "tolerances": {
+    "atol": 0.0002,
+    "rtol": 0.002,
+    "bit_identity": "secondary only",
+    "zero_sign": "secondary only"
+  },
+  "physical_certificate": "Denseq/k maxactualvalidindex B*T*H*K-1, dO/dV B*T*H*V-1, headmajorg B*H*T-1; sourceoffsets(b*T*H+h)*K/V andb*H*T+h*T correctdenseB2. BothTvalidmask prevents invalidscore rows/cols; K/V boundarychecked loads need actualcompiledzeropadding proof for K64/BK128 plus onceguard; preserve sourcepadding flags. Ahalfcomplete paddedtiles B*ceilTBT*H*BT*BT private,allwrites beforeconsumer, no uninitializedpads consumed. Maskedpointer arithmetic separately boundedint64/domain, no alias.",
+  "resource_policy": "SourceBTmax64/BK128/BV128; staticdeclaredtensorbounds, actualcompileracceptance andcompiledF16/F32dot/zero-paddingproof beforeCPUscience; compiler-managedscratchpool/peakUNKNOWNifnotreported. No tuning tofit aftercompilerfailure.",
+  "protocol": "FreshGZ2onlycurrentcapabilities/runtime/health/physical0lease+bothHOSTexports; C600startupbeforeNPUimports/init/moves andboundedrun/validate/profile. ALL12inputonlycompile/code/type/resources beforeFIRST6CPUonce; ALL12oncecorrect before80completepreparedAPIprofilecalls/8captures,guards0. No warmups/autotune/ordinarytiming/profileIO/outlierdrop/replays/reference-regeneration. FatalSTOPpreservefailures/unattemptedcells/SAMEdurablehandles.",
+  "predictions": {
+    "benefit": "Main03/04 expectlowerprofiledcompleteoperationspan ANDtaskSUM byavoidingmaterializedAhalf write/read andonekernellaunch; source2vs1chargedtasks. No physicalHBM/occupancy/rooflineinference.",
+    "cost": "Main01/02 riskprobes: fusionlive-tile/resources orlaunchcost maygive littlegain/regression; notpromisedslower, neverretune."
+  },
+  "evidence": "Everyraw10sample/task/PMUCSV/source/compiler/deviceELF/cachefixturehash/SUMactiveuniongapSPAN/archiveallmemberhashes/releasehealthy/noLIVE/locksfree. Correctness/performance/profileravailabilitydistinct. Fullcaptureevents/sync/analysiswithinprepareddeviceguard+explicitPipeUtilization.",
+  "freeze_utc": "2026-10-26T02:07:51.622191+00:00"
+}

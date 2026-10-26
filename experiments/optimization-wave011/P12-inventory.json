@@ -1,0 +1,30 @@
+{
+  "schema": "frozen-component-case-inventory-v1",
+  "source_contract_sha256": "31bd039a9fdd2a208d6d746dac5ac8f6f7af15205d7311e06894a49c8ee48f2d",
+  "cases": [
+    {
+      "name": "W011-P12-01",
+      "performance": true
+    },
+    {
+      "name": "W011-P12-02",
+      "performance": true
+    },
+    {
+      "name": "W011-P12-03",
+      "performance": true
+    },
+    {
+      "name": "W011-P12-04",
+      "performance": true
+    },
+    {
+      "name": "W011-P12-GA",
+      "performance": false
+    },
+    {
+      "name": "W011-P12-GB",
+      "performance": false
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "wave": 8,
+  "approval": "Standing user approval waves003\u2013022; datafirst optionalmodeldemonstrationsdeferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "snapshot_digest": "d4d58dabf81053a641187974ab638ccc7217607524a4080b86f02eeb592678ce",
+  "query": "c4b83c49cd88401a86f27c8a303a605c",
+  "source_receipts": "proposal.md/triton-leads.json/triton-tests-license.json/utils-query1.json +priorinventory fullpin; preserveMIT/thirdparty/Huawei/LinkedIn/vLLM notices, no rawlibrary traversal.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T11",
+  "task": "optimization-w008-compressor-output-zero",
+  "title": "Remove Compressor output zeroing under complete-write proof",
+  "source_files": [
+    "source__src__triton_ascend_kernels__attention__compressor.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W008-T11-01",
+      "role": "gallery",
+      "seed": 81101,
+      "parameters": {
+        "B": 1,
+        "S": 1024,
+        "ratio": 2
+      }
+    },
+    {
+      "case_id": "W008-T11-02",
+      "role": "gallery",
+      "seed": 81102,
+      "parameters": {
+        "B": 1,
+        "S": 32,
+        "ratio": 2
+      }
+    },
+    {
+      "case_id": "W008-T11-03",
+      "role": "heldout",
+      "seed": 81103,
+      "parameters": {
+        "B": 4,
+        "S": 512,
+        "ratio": 4
+      }
+    },
+    {
+      "case_id": "W008-T11-04",
+      "role": "heldout",
+      "seed": 81104,
+      "parameters": {
+        "B": 2,
+        "S": 128,
+        "ratio": 8
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W008-T11-GA",
+      "role": "guard",
+      "seed": 81191,
+      "parameters": {
+        "B": 1,
+        "S": 129,
+        "ratio": 2
+      }
+    },
+    {
+      "case_id": "W008-T11-GB",
+      "role": "guard",
+      "seed": 81192,
+      "parameters": {
+        "B": 1,
+        "S": 17,
+        "ratio": 2,
+        "packed": true
+      }
+    }
+  ],
+  "contract": {
+    "interface": "FULL prepared Compressor computation BF16X BSND[B,S,5120],W0/W1[512,5120],normweightsBF16[512],FP32privatecache[B,16,1024], BF16out exactsource returnedshape. Used_len=S,start_pos0,distinctblocktablemapping. CommonfixedBM32BN64BK128GROUP8/source<=64strategyboth, sourcepool/cacheupdate unchanged. Allocation prepared/reused both; thisstudy isolates repeatedsourceoutputZEROING kernel versus omission, not freshallocationlatency. BaselinezerooutputEVERYAPI, afteroverwritecompleteproof only; outputs maypoisononceprepare tocheck coverage, no perprofileinspection/reset.",
+    "before": "Exactpreparedfullsourceprojection(s),pool,cacheupdate AND outputzeros initializationeveryAPI. Packedexactsource outputrowcount min(total_tokens,total_tokens//ratio+B) and fullpaddingzero.",
+    "after": "Only uniformBSND B>0,S>0,used_len=S,start_pos%ratio0,S%ratio0 and positivevalidcachemetadata allreturned rows poolwritten EXACTLYONCE: outrows=S/ratio, fullgroupcounts; prove taskpartition includingtask0cleanpath,g_lo>=0,tailmasks/batchoffsets. Omit outputzeroONLY. Packed/incomplete/residual fallbackbaselinezero everyAPI; no T07fusion/T01strategy change. Allsamecachemutations, no inputalias.",
+    "oracle": "OnceCPU exactdyadicprojectioncertificate X/Wq/128q[-16,16], FP64stablepool->BF16round->FP64RMS eps1e-20->BF16output, sourcecacheexactFP32bits. Fixedoutputatol.03125rtol.015625 plus pairedoutputIEEEBF16bits sinceexactsamekernelmath; entireoutputinclunwrittenrowzero/cacheallslots tested. GA S129 returnsceil65rows,only64groups,lastrowmustzero;GBpackedS17 sourcealloc9rows,8groups,extra9throwzero. Inputs/cacheinitial bounded dyadics,no posthocfiltering. LargeS2048tokenCPUdot once cached, no repeatedoracles.",
+    "claims": "Source completewriteguard removesoneoutputzerolaunch/work, smalloutputrelativeprojectionmayneutral. Fullprofiledevice span/work/gaps, no isolatedkernel-only speedclaim or allocator/vendordefault throughput. Commonportablezero helper explicit; qualifiers allcompilebeforemath, sixcorrectcases onceeacharm then80profiles,guard0. Hostinvalid/duplicatecachemapping rejectsNONFROZENtests."
+  },
+  "source_files_manifest": [
+    {
+      "path": "source__src__triton_ascend_kernels__attention__compressor.py",
+      "sha256": "5b1d0219bedea1e56615b69305fad9d464679a2ce9d0ae1ed0beaba4e60fb4c4"
+    }
+  ],
+  "contract_version": 2,
+  "clarification": "BEFOREcode/scientificCPUfixtures: full pinned Compressor caller passes eps1e-20 (pool/decode callsites), not1e-6; both arms/oracle use source1e-20. Originalv1retainedunexecuted. T06component deliberately commonparameterized1e-6 remains unchanged and is NOT publiccallerdefault."
+}

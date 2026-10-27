@@ -1,0 +1,90 @@
+{
+  "wave": 7,
+  "approval": "Standing user approval waves003\u2013022, collect data first; optional new model evaluations deferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "snapshot_digest": "92fb5efaf51aa786cdd8d1a5869dd952486dffcdb039897d790393947a2aad54",
+  "query": "30c29d0af3324ab9b48c4c685e29a32c",
+  "source_receipts": "extension/proposal.md E07, exactMindSpeedOpssource/tests/API, fullpin4efe2b675c2d51517c3fdd14c721020b8d41e241 Apache2/perfilenotices, admission-corrections.md forrange/scope.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "E07",
+  "task": "optimization-w007-sinkhorn-partial-reducer",
+  "title": "Vectorize the deterministic Sinkhorn partial-gradient reducer",
+  "source_file": "extension/mindspeed_ops__arch32__triton__sinkhorn.py",
+  "cases": [
+    {
+      "case_id": "W007-E07-01",
+      "role": "gallery",
+      "seed": 75701,
+      "parameters": {
+        "num_blocks": 32
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospectiveonly; retainallslower/equal/uncertain/unsupported/compile-noopdata, no posthoctuning."
+    },
+    {
+      "case_id": "W007-E07-02",
+      "role": "gallery",
+      "seed": 75702,
+      "parameters": {
+        "num_blocks": 1
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospectiveonly; retainallslower/equal/uncertain/unsupported/compile-noopdata, no posthoctuning."
+    },
+    {
+      "case_id": "W007-E07-03",
+      "role": "heldout",
+      "seed": 75703,
+      "parameters": {
+        "num_blocks": 1024
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospectiveonly; retainallslower/equal/uncertain/unsupported/compile-noopdata, no posthoctuning."
+    },
+    {
+      "case_id": "W007-E07-04",
+      "role": "heldout",
+      "seed": 75704,
+      "parameters": {
+        "num_blocks": 2
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospectiveonly; retainallslower/equal/uncertain/unsupported/compile-noopdata, no posthoctuning."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W007-E07-GA",
+      "role": "guard",
+      "seed": 75791,
+      "parameters": {
+        "num_blocks": 17,
+        "cancellation_and_zeros": true
+      },
+      "expected": "Alternating\u00b11,zeros,small\u00b12^-16 components withvariedphases/cancellation; all10sums independentFP64+bound, selectednegativezerosrecordnumericnotpairedbitwise. Untouchedscale2/base8..23 sentinelbits+canariesmuststayunchanged."
+    },
+    {
+      "case_id": "W007-E07-GB",
+      "role": "guard",
+      "seed": 75792,
+      "parameters": {
+        "num_blocks": 1025
+      },
+      "expected": "Abovevectoradmission1024 botharms EXACTsame source-style scalaroneprogram fallback,0captures. Actualinputcalleroutputstate unchangedoutsidewritten2scale+8base slots; noatomics."
+    }
+  ],
+  "contract": {
+    "interface": "Exactsource deterministic_reduce_kernel COMPONENTONLY, no fullSinkhornbackward/partialproducer timings: suppliedcontiguousFP32partials_scale[N,2],partials_base[N,8], preexistingcalleroutputscale[3],base[24] initialFP32values. Npositive<=4096,vectorpathN<=1024,otherwiseEXACTsourcefallback. Allinputsnonzeroabs>=2^-20and<=1 (zerosallowed) toexcludeunderflow/overflow; randommainuniform[-1,1]clampnonzerosbelow2^-20. Outputprivatecopiesofcallerinitialbuffers preparedonceeacharm; kerneloverwritesONLYslots0,1and0..7,otherinitialslotssemanticinputsleftUNCHANGED, notfreezeroing/math. Sourcegrid(1,),hc_mult4.",
+    "oracle": "IndependentCPUFP64sumoverN ofeach2+8partialcolumns ONCE/case, CPUexpectedfull3+24includesinitialuntouchedvalues. Numericalcomponentgate percolumn |GPUfloat64-sum64| <=1e-7+(gamma_N32+gamma_N64)*sum_abs64, gamma_Np=N*u_p/(1-N*u_p),u32=2^-24,u64=2^-53. DerivationfixedBEFOREtiming includesCPUreferenceerror; no relaxedposthocgate. TargetGPUdtypeFP32/shape/arityexact,untouchedinitialslotsBITWISE andinputpartialsimmutable/canaries/nonalias. Recordactualerrors/errorboundeachcomponent, notonlypass.",
+    "before": "Exactsource-style oneprogram serialscalarloads/FP32accfor2scale then4pre/4postbase columns, exclusivefinalstores (source stride1branch). NOatomicbaseline orpartialproducer changes.",
+    "after": "ONLYreducecomponentvectorize: maskedFP32load nextpow2N rows\u00d72 and\u00d78 then tl.sumaxis0, exclusivefinalstores SAME10slots/sourcegrid1. Allinputpreparation/outputinitialstate/flags identical. ResourcequalifyN1024beforemath; no shrinkcase/tile afterfail. Fixedtreevsserialrounding DIFFERENTexpected, pairedexactbitsnotrequired.",
+    "determinism": "Scalarorderbefore/fixedvectortreeafter structuraldeterministic(noatomics). UserprotocolforbidsadditionalcorrectnessforwardorprofilingIOchecks: doNOTclaim empiricalrepeat-bitverification fromoncecheck; no extraNPUrepeats justdeterminism. Each10profileforwardsnocheck. NONFROZENCPUrepeat/referenceunitproof nothardwareevidence. Fullbackwardunitupstreamchecksinputsnot.grad soNOTgradientcorrectnessproof; ourcomponentoracle mandatory."
+  },
+  "source_sha256": "eb3cfd9b0a411154bffd6fb1a347c83920eaec28e55ee491c6d2399140c2e83f"
+}

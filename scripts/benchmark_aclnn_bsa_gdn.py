@@ -81,15 +81,12 @@ def check_outputs(actual, expected, atol, rtol):
 
 
 def gdn_options(argument_names, initial, chunk_size):
-    """Adapt only the documented state-layout rename for this same stage."""
+    """Accept the verified v26.6 legacy stage contract and output layout."""
     options = dict(initial_state=initial, output_final_state=True,
                    chunk_size=chunk_size, cu_seqlens=None)
     if "state_v_first" in argument_names:
-        options["state_v_first"] = False
-    elif "transpose_state_layout" in argument_names:
-        options.update(transpose_state_layout=False, use_exp2=False, save_new_value=True)
-    else:
-        raise RuntimeError("unsupported GDN stage schema: no recognized state layout flag")
+        raise RuntimeError("unsupported GDN state_v_first schema: chunk-major h layout is unverified")
+    options.update(transpose_state_layout=False, use_exp2=False, save_new_value=True)
     if not set(options).issubset(argument_names):
         raise RuntimeError("unsupported GDN stage schema: required options missing")
     return options

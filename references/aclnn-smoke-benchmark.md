@@ -15,10 +15,15 @@ raise an error rather than switching implementations.
 
 FLA-NPU v26.6.0 exposes this same stage through a raw-op wrapper using
 `transpose_state_layout=False`, `save_new_value=True`, and `use_exp2=False`.
-The benchmark inspects the registered stage schema and selects these options
-or the newer `state_v_first=False` spelling. Unknown schemas fail explicitly.
+The benchmark supports this legacy schema and head-major h output
+`[B,H_v,N_c,K,V]`, verified on A3. The release tag resolves to commit
+`39bbde7c55f2d9c4777a50552ae42a5e67bdc295`.
+It rejects the newer `state_v_first` schema: the public contract at commit
+[`a7c608f2e3f828779ceeec1fcf155a6e37ede83c`](https://github.com/flashserve/flash-linear-attention-npu/blob/a7c608f2e3f828779ceeec1fcf155a6e37ede83c/fla/ops/ascendc/gdn/chunk_gdn_fwd/chunk_gated_delta_rule_fwd_h/README.md)
+specifies chunk-major h `[B,N_c,H_v,K,V]`, which this benchmark has not
+validated on device. Schema inspection fails before dispatch for that interface.
 The package distribution is `flash-linear-attention-npu`; its import is
-`fla_npu`. See the [v26.6.0 public schema](https://github.com/flashserve/flash-linear-attention-npu/blob/v26.6.0/torch_custom/fla_npu/npu_custom.yaml).
+`fla_npu`. See the [pinned v26.6.0 public schema](https://github.com/flashserve/flash-linear-attention-npu/blob/39bbde7c55f2d9c4777a50552ae42a5e67bdc295/torch_custom/fla_npu/npu_custom.yaml).
 
 Run in the runtime selected through the user-wide remote-access skill, after
 selecting a healthy idle physical device. `--device` is the logical device
@@ -36,7 +41,7 @@ for every query block/head. Thus default runs cover two query/KV blocks.
 `--tokens`, `--heads`, and `--dim` configure inputs; the installed BSA binary
 must support the selected dimensions. GDN accepts dimension 128/256 and full
 chunks with `--chunk-size 64` (default) or 128. Batch is one, K=V, no grouped
-heads, no variable sequence lengths, and `state_v_first=False`.
+heads, no variable sequence lengths, and `transpose_state_layout=False`.
 
 GDN measures **ChunkGatedDeltaRuleFwdH only**, with nonzero initial state and
 small random k/w. It does not call the full fused GDN operator. The golden

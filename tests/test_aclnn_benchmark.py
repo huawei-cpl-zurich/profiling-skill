@@ -73,8 +73,8 @@ def test_gdn_chunk_start_states_and_residual_values():
 
 def test_gdn_schema_adapter_keeps_stage_contract():
     common = {"initial_state", "output_final_state", "chunk_size", "cu_seqlens"}
-    current = benchmark.gdn_options(common | {"state_v_first"}, "state", 64)
-    assert current["state_v_first"] is False and current["initial_state"] == "state"
+    with pytest.raises(RuntimeError, match="chunk-major h layout is unverified"):
+        benchmark.gdn_options(common | {"state_v_first"}, "state", 64)
     legacy = benchmark.gdn_options(common | {
         "transpose_state_layout", "use_exp2", "save_new_value"}, "state", 128)
     assert legacy["transpose_state_layout"] is False

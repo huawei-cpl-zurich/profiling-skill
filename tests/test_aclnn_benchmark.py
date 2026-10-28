@@ -69,3 +69,37 @@ def test_gdn_chunk_start_states_and_residual_values():
     assert len(checks) == 3 and all(c["max_abs_error"] == 0 for c in checks)
     with pytest.raises(AssertionError):
         benchmark.check_outputs((h + 1,), (h,), 0, 0)
+
+
+def test_gdn_schema_adapter_keeps_stage_contract():
+    common = {"initial_state", "output_final_state", "chunk_size", "cu_seqlens"}
+    current = benchmark.gdn_options(common | {"state_v_first"}, "state", 64)
+    assert current["state_v_first"] is False and current["initial_state"] == "state"
+    legacy = benchmark.gdn_options(common | {
+        "transpose_state_layout", "use_exp2", "save_new_value"}, "state", 128)
+    assert legacy["transpose_state_layout"] is False
+    assert legacy["use_exp2"] is False and legacy["save_new_value"] is True
+    assert legacy["chunk_size"] == 128
+    with pytest.raises(RuntimeError):
+        benchmark.gdn_options(common, None, 64)
+
+
+def test_incorrect_output_fails_before_warmup_or_measurement():
+    calls = []
+    def wrong():
+        calls.append(1)
+        return (torch.ones(2),)
+    with pytest.raises(AssertionError):
+        benchmark.run_checked(wrong, (torch.zeros(2),), lambda: None,
+                              lambda: pytest.fail("timing started"), 20, 10, False)
+    assert len(calls) == 1
+
+
+def test_checked_replay_preserves_launch_count():
+    calls = []
+    def correct():
+        calls.append(1)
+        return (torch.ones(2),)
+    checks, timing = benchmark.run_checked(correct, (torch.ones(2),), lambda: None,
+                                          lambda: pytest.fail("timing started"), 2, 10, True)
+    assert len(calls) == 3 and checks[0]["max_abs_error"] == 0 and timing == {}

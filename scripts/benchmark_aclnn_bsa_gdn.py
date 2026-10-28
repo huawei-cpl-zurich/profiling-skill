@@ -80,6 +80,30 @@ def check_outputs(actual, expected, atol, rtol):
     return checks
 
 
+def gdn_options(argument_names, initial, chunk_size):
+    """Adapt only the documented state-layout rename for this same stage."""
+    options = dict(initial_state=initial, output_final_state=True,
+                   chunk_size=chunk_size, cu_seqlens=None)
+    if "state_v_first" in argument_names:
+        options["state_v_first"] = False
+    elif "transpose_state_layout" in argument_names:
+        options.update(transpose_state_layout=False, use_exp2=False, save_new_value=True)
+    else:
+        raise RuntimeError("unsupported GDN stage schema: no recognized state layout flag")
+    if not set(options).issubset(argument_names):
+        raise RuntimeError("unsupported GDN stage schema: required options missing")
+    return options
+
+
+def run_checked(call, expected, synchronize, event_factory, warmup, repeats, replay):
+    if not replay:
+        checked = call()
+        synchronize()
+        check_outputs(checked, expected, atol=0.02, rtol=0.02)
+    output, timing = execute(call, synchronize, event_factory, warmup, repeats, replay)
+    return check_outputs(output, expected, atol=0.02, rtol=0.02), timing
+
+
 def build_case(args, device):
     generator = torch.Generator().manual_seed(2026)
     def rand(shape, scale=1):
@@ -109,10 +133,10 @@ def build_case(args, device):
         g = torch.zeros((1, h, t), dtype=torch.float32)
         expected = gdn_reference(k, w, u, initial, args.chunk_size)
         k, w, u, g, initial = [x.to(device) for x in (k, w, u, g, initial)]
+        schema = torch.ops.npu.npu_chunk_gated_delta_rule_fwd_h.default._schema
+        options = gdn_options({a.name for a in schema.arguments}, initial, args.chunk_size)
         def call():
-            return chunk_gated_delta_rule_fwd_h(
-                k, w, u, g=g, initial_state=initial, output_final_state=True,
-                chunk_size=args.chunk_size, cu_seqlens=None, state_v_first=False)
+            return chunk_gated_delta_rule_fwd_h(k, w, u, g=g, **options)
     return call, expected
 
 
@@ -144,13 +168,11 @@ def main():
     torch.npu.set_device(device)
     call, expected = build_case(args, device)
     with torch.inference_mode():
-        # This is the sole execution after warmups in replay mode.
-        output, timing = execute(call, torch.npu.synchronize,
-                                 lambda: torch.npu.Event(enable_timing=True),
-                                 args.warmup, args.repeats, args.replay)
-    checks = check_outputs(output, expected, atol=0.02, rtol=0.02)
+        checks, timing = run_checked(call, expected, torch.npu.synchronize,
+                                    lambda: torch.npu.Event(enable_timing=True),
+                                    args.warmup, args.repeats, args.replay)
     versions = {"torch": torch.__version__, "torch_npu": torch_npu.__version__}
-    for package in ("mindiesd", "fla-npu"):
+    for package in ("mindiesd", "flash-linear-attention-npu"):
         try:
             versions[package] = importlib.metadata.version(package)
         except importlib.metadata.PackageNotFoundError:

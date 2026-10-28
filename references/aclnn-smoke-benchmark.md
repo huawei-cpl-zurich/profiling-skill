@@ -13,6 +13,13 @@ alone does not establish that its custom operator binaries match CANN. Version
 strings are retained in the result; missing operators or incompatible binaries
 raise an error rather than switching implementations.
 
+FLA-NPU v26.6.0 exposes this same stage through a raw-op wrapper using
+`transpose_state_layout=False`, `save_new_value=True`, and `use_exp2=False`.
+The benchmark inspects the registered stage schema and selects these options
+or the newer `state_v_first=False` spelling. Unknown schemas fail explicitly.
+The package distribution is `flash-linear-attention-npu`; its import is
+`fla_npu`. See the [v26.6.0 public schema](https://github.com/flashserve/flash-linear-attention-npu/blob/v26.6.0/torch_custom/fla_npu/npu_custom.yaml).
+
 Run in the runtime selected through the user-wide remote-access skill, after
 selecting a healthy idle physical device. `--device` is the logical device
 visible to the process (normally 0 after masking):
@@ -39,8 +46,9 @@ is zero, so all gate exponentials are one. This deliberately does not test
 nonzero gate preprocessing or decay. All three outputs (h, v_new, final_state)
 are checked; BSA checks the attention output. Tolerances are atol=rtol=0.02.
 
-Timing excludes CPU golden construction and correctness transfers. Separate
-sample loops collect synchronized host wall time and NPU Event elapsed time;
+Timing excludes CPU golden construction and correctness transfers.
+Before any timing, normal mode launches and validates one correctness call.
+Separate sample loops collect synchronized host wall time and NPU Event elapsed time;
 the latter is the elapsed stream interval for the operator call, not an
 individual kernel's profiler duration. JSON retains every sample in microseconds,
 arithmetic mean and sample standard deviation (null for a single sample).
